@@ -84,11 +84,12 @@ class MentorTile extends StatelessWidget {
                           bg: const Color(0xFFE9F2FF),
                           fg: UiTokens.primaryBlue,
                         ),
-                        _chip(
-                          label: '멘티 평균 ${mentor.avgScore!.toStringAsFixed(0)}점',
-                          bg: const Color(0xFFE9F2FF),
-                          fg: UiTokens.primaryBlue,
-                        ),
+                        if (mentor.avgScore != null)
+                          _chip(
+                            label: '멘티 평균 ${mentor.avgScore!.toStringAsFixed(0)}점',
+                            bg: const Color(0xFFE9F2FF),
+                            fg: UiTokens.primaryBlue,
+                          ),
                       ],
                     ),
                   ],
