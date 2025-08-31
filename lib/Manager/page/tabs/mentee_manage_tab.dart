@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Manager/page/mentee_edit_page.dart';
+import 'package:nail/Manager/widgets/MetricCard.dart';
 import 'package:nail/Manager/widgets/sort_bottom_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Common/ui_tokens.dart';
@@ -278,7 +279,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           children: [
             // ===== 2×2 KPI 카드 =====
             SizedBox(
-              height: 280,
+              height: MediaQuery.of(context).size.height * 0.33,
               child: GridView.count(
                 crossAxisCount: 2,
                 mainAxisSpacing: 6,
@@ -286,7 +287,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                 physics: const NeverScrollableScrollPhysics(),
                 childAspectRatio: 1.35,
                 children: [
-                  _KpiCard.rich(
+                  MetricCard.rich(
                     icon: Icons.people_alt_outlined,
                     title: '총 멘티 수',
                     rich: TextSpan(
@@ -307,9 +308,9 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                       ],
                     ),
                   ),
-                  _KpiCard(icon: Icons.grade_outlined, title: '멘티 평균 점수', value: _avgScore.toStringAsFixed(0), unit: '점'),
-                  _KpiCard(icon: Icons.timer_outlined, title: '멘티 평균 교육기간', value: _avgEducationDays.toStringAsFixed(0), unit: '일'),
-                  _KpiCard(icon: Icons.priority_high_rounded, title: '주요 인물', value: '$_keyPeopleCount', unit: '명'),
+                  MetricCard.simple(icon: Icons.grade_outlined, title: '멘티 평균 점수', value: _avgScore.toStringAsFixed(0), unit: '점'),
+                  MetricCard.simple(icon: Icons.hourglass_bottom_outlined, title: '최종 평가를 기다리는 멘티', value: '18', unit: '명'),
+                  MetricCard.simple(icon: Icons.priority_high_rounded, title: '주요 인물', value: '$_keyPeopleCount', unit: '명'),
                 ],
               ),
             ),
@@ -356,6 +357,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                 );
               },
             ),
+            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -364,88 +366,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 }
 
 
-/// 공통 KPI 카드
-class _KpiCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String? value;
-  final String? unit;
-  final InlineSpan? rich;
 
-  const _KpiCard({
-    required this.icon,
-    required this.title,
-    this.value,
-    this.unit,
-  }) : rich = null;
-
-  const _KpiCard.rich({
-    required this.icon,
-    required this.title,
-    required this.rich,
-  })  : value = null,
-        unit = null;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: UiTokens.cardBorder),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [UiTokens.cardShadow],
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 2),
-          Icon(icon, color: UiTokens.primaryBlue, size: 22),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            style: const TextStyle(
-              color: UiTokens.title,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const Spacer(),
-          if (rich != null)
-            RichText(text: rich!, textAlign: TextAlign.left)
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  value ?? '',
-                  style: const TextStyle(
-                    color: UiTokens.title,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                if (unit != null) ...[
-                  const SizedBox(width: 4),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Text(
-                      unit!,
-                      style: const TextStyle(
-                        color: UiTokens.primaryBlue,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
 
 /// ===== (재활용 버전) 멘티 확장 타일 =====
 /// 프로젝트에 동일 위젯이 이미 있다면 이 클래스를 제거하고 기존 위젯을 import 하세요.

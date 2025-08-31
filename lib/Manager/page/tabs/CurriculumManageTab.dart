@@ -2,18 +2,20 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Manager/models/curriculum_item.dart';
-import 'package:nail/Manager/page/curriculum_detail_page.dart';
+import 'package:nail/Manager/page/CurriculumCreatePage.dart';
+import 'package:nail/Manager/page/CurriculumDetailPage.dart';
 import 'package:nail/Manager/widgets/curriculum_tile.dart';
 
-class EducationManageTab extends StatefulWidget {
+class CurriculumManageTab extends StatefulWidget {
   final List<CurriculumItem> items;
-  const EducationManageTab({super.key, required this.items});
+
+  const CurriculumManageTab({super.key, required this.items});
 
   @override
-  State<EducationManageTab> createState() => _EducationManageTabState();
+  State<CurriculumManageTab> createState() => _CurriculumManageTabState();
 }
 
-class _EducationManageTabState extends State<EducationManageTab> {
+class _CurriculumManageTabState extends State<CurriculumManageTab> {
   late List<CurriculumItem> _items;
 
   @override
@@ -25,14 +27,18 @@ class _EducationManageTabState extends State<EducationManageTab> {
   Future<void> _openDetail(CurriculumItem item) async {
     final res = await Navigator.of(context).push<CurriculumDetailResult>(
       MaterialPageRoute(
-        builder: (_) => CurriculumDetailPage(item: item),
+        builder:
+            (_) => CurriculumDetailPage(
+              item: item,
+              mode: CurriculumViewMode.admin,
+            ),
       ),
     );
     if (res?.deleted == true) {
       setState(() => _items.removeWhere((e) => e.id == item.id));
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('‘${item.title}’이(가) 삭제되었습니다.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('‘${item.title}’이(가) 삭제되었습니다.')));
     }
   }
 
@@ -47,9 +53,14 @@ class _EducationManageTabState extends State<EducationManageTab> {
     return Scaffold(
       backgroundColor: Colors.white,
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_mentee_add',
+        heroTag: 'fab_course_add',
         backgroundColor: UiTokens.primaryBlue,
-        onPressed: (){},
+        onPressed: () {
+          Navigator.push<CurriculumCreateResult>(
+            context,
+            MaterialPageRoute(builder: (_) => const CurriculumCreatePage(suggestedWeek: 15)),
+          );
+        },
         icon: const Icon(Icons.add_card_outlined),
         label: const Text('추가'),
       ),

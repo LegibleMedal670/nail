@@ -20,6 +20,8 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focus = FocusNode();
 
+  bool _focusArmed = false;
+
   // Shake 애니메이션
   late final AnimationController _shakeCtl =
   AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
@@ -36,9 +38,33 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
   void initState() {
     super.initState();
     _controller.addListener(() => setState(() {}));
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _focus.requestFocus();
-    });
+    // WidgetsBinding.instance.addPostFrameCallback((_) {
+    //   if (mounted) _focus.requestFocus();
+    // });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_focusArmed) return;
+    _focusArmed = true;
+
+    // 라우트 전환이 끝난 뒤 키보드 오픈
+    final anim = ModalRoute.of(context)?.animation;
+    if (anim != null) {
+      anim.addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          Future.delayed(const Duration(milliseconds: 80), () {
+            if (mounted) _focus.requestFocus();
+          });
+        }
+      });
+    } else {
+      // 애니메이션이 없다면 약간 지연 후 포커스
+      Future.delayed(const Duration(milliseconds: 120), () {
+        if (mounted) _focus.requestFocus();
+      });
+    }
   }
 
   @override
@@ -139,7 +165,7 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
                       child: TextField(
                         controller: _controller,
                         focusNode: _focus,
-                        autofocus: true,
+                        autofocus: false,
                         keyboardType: TextInputType.number,
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _submit(),

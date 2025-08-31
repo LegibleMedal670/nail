@@ -130,7 +130,7 @@ class _SelectRolePageState extends State<SelectRolePage>
               break;
               default :
                 Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (context) => MenteeMainPage()),
+                  MaterialPageRoute(builder: (context) => SelectUserPage(mode: 'Mentee')),
                 );
             }
           },

@@ -90,12 +90,12 @@ class CurriculumTile extends StatelessWidget {
                   ],
                 ),
               ),
-              // 오른쪽: 편집 아이콘
-              IconButton(
-                onPressed: onEdit,
-                icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
-                tooltip: '편집',
-              ),
+              // // 오른쪽: 편집 아이콘
+              // IconButton(
+              //   onPressed: onEdit,
+              //   icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
+              //   tooltip: '편집',
+              // ),
             ],
           ),
         ),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Manager/models/mentee.dart';
-import 'package:nail/Manager/widgets/dashboard_card.dart';
+import 'package:nail/Manager/widgets/MetricCard.dart';
 import 'package:nail/Manager/widgets/mentee_expandable_tile.dart';
 import 'package:nail/Manager/widgets/sort_bottom_sheet.dart';
 
@@ -78,58 +78,56 @@ class _ManagerDashboardTabState extends State<ManagerDashboardTab> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       child: Column(
         children: [
           // 4 카드
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-            child: SizedBox(
-              height: MediaQuery.of(context).size.height * 0.3,
-              child: GridView.count(
-                crossAxisCount: 2,
-                mainAxisSpacing: 6,
-                crossAxisSpacing: 6,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 1.5,
-                children: [
-                  DashboardCard(
-                    icon: Icons.school_outlined,
-                    iconColor: UiTokens.primaryBlue,
-                    title: '교육 완료율',
-                    value: widget.completionRate.toStringAsFixed(0),
-                    unit: '%',
-                  ),
-                  DashboardCard(
-                    icon: Icons.star_rate_rounded,
-                    iconColor: UiTokens.primaryBlue,
-                    title: '평가 평균 점수',
-                    value: widget.avgScore.toStringAsFixed(0),
-                    unit: '점',
-                  ),
-                  DashboardCard(
-                    icon: Icons.hourglass_bottom_rounded,
-                    iconColor: UiTokens.primaryBlue,
-                    title: '최종 평가를 기다리는 멘티',
-                    value: '${widget.waitingFinalReview}',
-                    unit: '명',
-                  ),
-                  DashboardCard(
-                    icon: Icons.group_outlined,
-                    iconColor: UiTokens.primaryBlue,
-                    title: '멘토 당 평균 멘티 수',
-                    value: widget.menteesPerMentor.toStringAsFixed(1),
-                    unit: '명',
-                  ),
-                ],
-              ),
+          SizedBox(
+            height: MediaQuery.of(context).size.height * 0.33,
+            child: GridView.count(
+              crossAxisCount: 2,
+              mainAxisSpacing: 6,
+              crossAxisSpacing: 6,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 1.35,
+              children: [
+                MetricCard.simple(
+                  icon: Icons.school_outlined,
+                  iconColor: UiTokens.primaryBlue,
+                  title: '교육 완료율',
+                  value: widget.completionRate.toStringAsFixed(0),
+                  unit: '%',
+                ),
+                MetricCard.simple(
+                  icon: Icons.star_rate_rounded,
+                  iconColor: UiTokens.primaryBlue,
+                  title: '평가 평균 점수',
+                  value: widget.avgScore.toStringAsFixed(0),
+                  unit: '점',
+                ),
+                MetricCard.simple(
+                  icon: Icons.hourglass_bottom_rounded,
+                  iconColor: UiTokens.primaryBlue,
+                  title: '최종 평가를 기다리는 멘티',
+                  value: '${widget.waitingFinalReview}',
+                  unit: '명',
+                ),
+                MetricCard.simple(
+                  icon: Icons.group_outlined,
+                  iconColor: UiTokens.primaryBlue,
+                  title: '멘토 당 평균 멘티 수',
+                  value: widget.menteesPerMentor.toStringAsFixed(1),
+                  unit: '명',
+                ),
+              ],
             ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
 
           // 헤더 + 정렬
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
             child: Row(
               children: [
                 const Text(
@@ -164,25 +162,22 @@ class _ManagerDashboardTabState extends State<ManagerDashboardTab> {
           ),
 
           // 리스트
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
-            child: ListView.separated(
-              itemCount: _sorted.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, i) {
-                final m = _sorted[i];
-                final expanded = identical(_expanded, m);
-                return MenteeExpandableTile(
-                  mentee: m,
-                  expanded: expanded,
-                  onToggle: () {
-                    setState(() => _expanded = expanded ? null : m);
-                  },
-                );
-              },
-            ),
+          ListView.separated(
+            itemCount: _sorted.length,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            separatorBuilder: (_, __) => const SizedBox(height: 10),
+            itemBuilder: (context, i) {
+              final m = _sorted[i];
+              final expanded = identical(_expanded, m);
+              return MenteeExpandableTile(
+                mentee: m,
+                expanded: expanded,
+                onToggle: () {
+                  setState(() => _expanded = expanded ? null : m);
+                },
+              );
+            },
           ),
           const SizedBox(height: 12),
         ],

@@ -3,7 +3,7 @@ import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Manager/models/curriculum_item.dart';
 import 'package:nail/Manager/models/mentee.dart';
 import 'package:nail/Manager/models/mentor.dart';
-import 'package:nail/Manager/page/tabs/education_manage_tab.dart';
+import 'package:nail/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Manager/page/tabs/manager_dashboard_tab.dart';
 import 'package:nail/Manager/page/tabs/mentee_manage_tab.dart';
 import 'package:nail/Manager/page/tabs/mentor_manage_tab.dart';
@@ -70,7 +70,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         mentors: kDemoMentors,
       ),
       MenteeManageTab(),
-      EducationManageTab(
+      CurriculumManageTab(
         items: [
           CurriculumItem(
             id: 'w01',

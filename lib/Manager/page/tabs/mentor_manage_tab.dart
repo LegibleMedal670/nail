@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Manager/models/mentor.dart';
+import 'package:nail/Manager/widgets/MetricCard.dart';
 import 'package:nail/Manager/widgets/mentor_tile.dart';
 import 'package:nail/Manager/widgets/sort_bottom_sheet.dart';
 import 'package:nail/Manager/page/mentor_edit_page.dart';
@@ -174,13 +175,13 @@ class _MentorManageTabState extends State<MentorManageTab> {
                 mainAxisSpacing: 6,
                 childAspectRatio: 1.3,
                 children: [
-                  _MentorKpiCard(
+                  MetricCard.simple(
                     icon: Icons.groups_2_outlined,
                     title: '총 멘토 수',
                     value: '$_totalMentors',
-                    valueAccent: '명',
+                    unit: '명',
                   ),
-                  _MentorKpiCard.rich(
+                  MetricCard.rich(
                     icon: Icons.account_tree_outlined,
                     title: '멘토 당 평균 멘티 수',
                     rich: TextSpan(
@@ -331,66 +332,3 @@ class _MentorManageTabState extends State<MentorManageTab> {
   }
 }
 
-/// 내부 KPI 카드
-class _MentorKpiCard extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String? value;
-  final String? valueAccent;
-  final InlineSpan? rich;
-
-  const _MentorKpiCard({
-    required this.icon,
-    required this.title,
-    this.value,
-    this.valueAccent,
-  }) : rich = null;
-
-  const _MentorKpiCard.rich({
-    required this.icon,
-    required this.title,
-    required this.rich,
-  })  : value = null,
-        valueAccent = null;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: UiTokens.cardBorder),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [UiTokens.cardShadow],
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 2),
-          Icon(icon, color: UiTokens.primaryBlue, size: 22),
-          const SizedBox(height: 8),
-          Text(title, style: const TextStyle(color: UiTokens.title, fontSize: 14, fontWeight: FontWeight.w700)),
-          const Spacer(),
-          if (rich != null)
-            RichText(text: rich!, textAlign: TextAlign.left)
-          else
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(value ?? '',
-                    style: const TextStyle(color: UiTokens.title, fontSize: 24, fontWeight: FontWeight.w800)),
-                if (valueAccent != null) ...[
-                  const SizedBox(width: 4),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Text(valueAccent!,
-                        style: const TextStyle(color: UiTokens.primaryBlue, fontSize: 16, fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
