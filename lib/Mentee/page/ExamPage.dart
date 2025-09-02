@@ -480,7 +480,7 @@ class _ExamResultPage extends StatelessWidget {
               children: [
                 OutlinedButton(
                   onPressed: () => Navigator.pop(context), // 닫기 -> 커리큘럼
-                  child: const Text('닫기'),
+                  child: const Text('닫기', style: TextStyle(color: UiTokens.title),),
                 ),
                 const Spacer(),
                 FilledButton(
@@ -600,6 +600,10 @@ class _ExamResultPage extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: UiTokens.primaryBlue,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
                     onPressed: () => Navigator.pop(sheetCtx),
                     child: const Text('닫기'),
                   ),
