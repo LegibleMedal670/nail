@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Common/model/ExamModel.dart';
+// // import 'package:nail/Common/model/ExamModel.dart';
 import 'package:nail/Common/ui_tokens.dart';
+import 'package:nail/Common/widget/SectionTitle.dart';
 import 'package:nail/Manager/models/curriculum_item.dart';
+import 'package:nail/Manager/page/ExamEditPage.dart';
 import 'package:nail/Manager/widgets/DiscardConfirmSheet.dart';
+import 'package:nail/Mentee/page/ExamPage.dart';
+// import 'package:nail/Common/widget/SectionTitle.dart';
+// import 'package:nail/Manager/models/curriculum_item.dart';
+// // import 'package:nail/Manager/page/ExamEditPage.dart';
+// import 'package:nail/Manager/widgets/DiscardConfirmSheet.dart';
+
 
 /// 화면 모드
 enum CurriculumViewMode { admin, mentee }
@@ -31,7 +41,7 @@ class _EditMaterial {
   String name;
   IconData icon;
   String? url;
-  _EditMaterial({required this.name, this.icon = Icons.insert_drive_file_outlined, this.url});
+  _EditMaterial({required this.name, this.icon = Icons.menu_book_outlined, this.url});
 }
 
 class CurriculumDetailPage extends StatefulWidget {
@@ -77,8 +87,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   // 자료(데모 기본 두 개)
   final List<_EditMaterial> _materials = [
-    _EditMaterial(name: '위생 체크리스트.pdf', icon: Icons.picture_as_pdf_rounded),
-    _EditMaterial(name: '시술 단계 가이드.txt'),
+    _EditMaterial(name: '위생 체크리스트'),
+    _EditMaterial(name: '시술 단계 가이드'),
   ];
 
   bool _dirty = false; // ← 변경사항 발생 시 true
@@ -363,7 +373,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                           '이 과정에 시험 포함',
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
-                        subtitle: const Text('필요 시 ON으로 전환하세요.'),
                       ),
 
                       const Divider(height: 20),
@@ -401,14 +410,23 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                               // 편집 안내 + 이동 버튼
                               FilledButton.icon(
                                 onPressed: widget.onOpenExamEditor ??
-                                        () {
+                                        () async {
                                       Navigator.pop(context);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('시험 편집 페이지로 이동 (데모)')),
+                                      final result = await Navigator.push<ExamEditResult>(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ExamEditPage(
+                                            initialQuestions: [],  // 서버에서 로드한 리스트
+                                            initialPassScore: 60,  // 예: 60
+                                          ),
+                                        ),
                                       );
+                                      if (result != null) {
+                                        // result.questions, result.passScore 저장
+                                      }
                                     },
-                                icon: const Icon(Icons.tune_rounded, size: 18),
-                                label: const Text('편집 열기'),
+                                icon: const Icon(Icons.assignment, size: 18),
+                                label: const Text('편집하기', style: TextStyle(fontWeight: FontWeight.w600),),
                                 style: FilledButton.styleFrom(
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   minimumSize: const Size(0, 0),
@@ -481,169 +499,164 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
   }
 
-
   Future<void> _editMaterialsSheet() async {
-    // 복사본으로 편집 후 저장 시 반영
     final temp = _materials
         .map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url))
         .toList();
 
     await showModalBottomSheet<void>(
       context: context,
-      isScrollControlled: true, // ← 키보드 대응
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetCtx) {
-        const double kActionBarHeight = 52;  // 저장 버튼 행 높이
-        const double kActionBarPaddingV = 16; // 위/아래 여백 합 일부
+        const double kActionBarHeight = 52;
+        const double kActionBarPaddingV = 16;
         final bottomInset = MediaQuery.of(sheetCtx).viewInsets.bottom;
 
         return GestureDetector(
-          behavior: HitTestBehavior.opaque, // ← 빈 곳 탭도 인식
-          onTap: _unfocus,                  // ← 아무데나 탭하면 포커스 해제
+          behavior: HitTestBehavior.opaque,
+          onTap: _unfocus,
           child: AnimatedPadding(
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
-            padding: EdgeInsets.only(bottom: bottomInset), // ← 키보드만큼 올리기
+            padding: EdgeInsets.only(bottom: bottomInset),
             child: DraggableScrollableSheet(
               expand: false,
               initialChildSize: 0.6,
               minChildSize: 0.4,
               maxChildSize: 0.9,
               builder: (_, controller) {
-                return SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      // 헤더
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                        child: Column(
-                          children: [
-                            _sheetGrabber(),
-                            const SizedBox(height: 8),
-                            const Text(
-                              '관련 자료 편집',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: UiTokens.title,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // 목록
-                      Expanded(
-                        child: ListView.separated(
-                          controller: controller,
-                          padding: const EdgeInsets.fromLTRB(
-                            16,
-                            0,
-                            16,
-                            // ← 액션바(버튼 행) 높이 + 여백만큼 바닥 패딩을 줘서 가려지지 않게
-                            kActionBarHeight + kActionBarPaddingV + 12,
-                          ),
-                          itemCount: temp.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
-                          itemBuilder: (_, i) {
-                            final ctl = TextEditingController(text: temp[i].name);
-                            return TextField(
-                              controller: ctl,
-                              onChanged: (v) => temp[i].name = v,
-                              onSubmitted: (_) => _unfocus(),
-                              onTapOutside: (_) => _unfocus(),
-                              scrollPadding: const EdgeInsets.only(bottom: 180), // 키보드 위로 밀기
-                              decoration: InputDecoration(
-                                labelText: '자료 이름',
-                                filled: true,
-                                fillColor: const Color(0xFFF7F9FC),
-                                prefixIcon: Icon(
-                                  temp[i].icon,
-                                  color: UiTokens.primaryBlue,
-                                ),
-                                suffixIcon: IconButton(
-                                  tooltip: '삭제',
-                                  icon: const Icon(Icons.close_rounded),
-                                  onPressed: () {
-                                    setState(() => temp.removeAt(i));
-                                  },
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 14,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Color(0xFFE6ECF3)),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Color(0xFFE6ECF3)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                    color: UiTokens.primaryBlue,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-
-                      // 액션 바(항상 시트 하단에 고정)
-                      SafeArea(
-                        top: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          child: SizedBox(
-                            height: kActionBarHeight,
-                            child: Row(
+                // ✨ 바텀시트 로컬 리빌드를 위한 StatefulBuilder
+                return StatefulBuilder(
+                  builder: (context, setInner) {
+                    return SafeArea(
+                      top: false,
+                      child: Column(
+                        children: [
+                          // 헤더
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                            child: Column(
                               children: [
-                                OutlinedButton.icon(
-                                  onPressed: () {
-                                    setState(() => temp.add(_EditMaterial(name: '새 자료')));
-                                  },
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('자료 추가'),
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(0, 0),
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                _sheetGrabber(),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '관련 자료 편집',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: UiTokens.title,
                                   ),
-                                ),
-                                const Spacer(),
-                                FilledButton(
-                                  onPressed: () {
-                                    _unfocus();
-                                    setState(() {
-                                      _materials
-                                        ..clear()
-                                        ..addAll(temp);
-                                      _dirty = true; // ← 변경됨
-                                    });
-                                    Navigator.pop(sheetCtx);
-                                  },
-                                  style: FilledButton.styleFrom(
-                                    minimumSize: const Size(0, 0),
-                                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                                  ),
-                                  child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
                                 ),
                               ],
                             ),
                           ),
-                        ),
+
+                          // 목록
+                          Expanded(
+                            child: ListView.separated(
+                              controller: controller,
+                              padding: const EdgeInsets.fromLTRB(
+                                16, 0, 16, kActionBarHeight + kActionBarPaddingV + 12,
+                              ),
+                              itemCount: temp.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (_, i) {
+                                final ctl = TextEditingController(text: temp[i].name);
+                                return TextField(
+                                  controller: ctl,
+                                  onChanged: (v) => temp[i].name = v, // 리빌드 불필요
+                                  onSubmitted: (_) => _unfocus(),
+                                  onTapOutside: (_) => _unfocus(),
+                                  scrollPadding: const EdgeInsets.only(bottom: 180),
+                                  decoration: InputDecoration(
+                                    labelText: '자료 이름',
+                                    filled: true,
+                                    fillColor: const Color(0xFFF7F9FC),
+                                    prefixIcon: Icon(temp[i].icon, color: UiTokens.primaryBlue),
+                                    suffixIcon: IconButton(
+                                      tooltip: '삭제',
+                                      icon: const Icon(Icons.close_rounded),
+                                      onPressed: () {
+                                        // ❗ 바깥 setState() 말고 setInner() 사용 + 인덱스 방어
+                                        if (i >= 0 && i < temp.length) {
+                                          setInner(() => temp.removeAt(i));
+                                        }
+                                      },
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(color: Color(0xFFE6ECF3)),
+                                    ),
+                                    enabledBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(color: Color(0xFFE6ECF3)),
+                                    ),
+                                    focusedBorder: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                      borderSide: const BorderSide(color: UiTokens.primaryBlue, width: 2),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                          // 액션 바
+                          SafeArea(
+                            top: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                              child: SizedBox(
+                                height: kActionBarHeight,
+                                child: Row(
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: () {
+                                        // ❗ 추가도 setInner()
+                                        setInner(() => temp.add(_EditMaterial(name: '새 자료')));
+                                      },
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('자료 추가'),
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(0, 0),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    FilledButton(
+                                      onPressed: () {
+                                        _unfocus();
+                                        // 저장 시에만 바깥 상태 갱신
+                                        setState(() {
+                                          _materials
+                                            ..clear()
+                                            ..addAll(temp);
+                                          _dirty = true;
+                                        });
+                                        Navigator.pop(sheetCtx);
+                                      },
+                                      style: FilledButton.styleFrom(
+                                        minimumSize: const Size(0, 0),
+                                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -809,7 +822,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionTitle('학습 목표'),
+                        const SectionTitle('학습 목표'),
                         const SizedBox(height: 8),
                         ..._splitGoals(_summary).map(_bullet),
                       ],
@@ -823,7 +836,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionTitle('시험 정보'),
+                        const SectionTitle('시험 정보'),
                         const SizedBox(height: 8),
                         if (!_requiresExam)
                           Text(
@@ -884,7 +897,47 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
-                                    onPressed: widget.onTakeExam,
+                                    onPressed: (){
+                                      // 어디 적당한 곳(예: onPressed)에서:
+                                      final demoQuestions = <ExamQuestion>[
+                                        ExamQuestion.mcq(
+                                          id: 'q_mcq_001',
+                                          prompt: '기본 케어에서 먼저 해야 하는 단계는?',
+                                          choices: ['베이스 코트', '손 소독', '탑 코트', '컬러 도포'],
+                                          correctIndex: 1, // '손 소독'
+                                        ),
+                                        ExamQuestion.short(
+                                          id: 'q_sa_001',
+                                          prompt: '젤 제거 과정을 한 단어로? (영어)',
+                                          // 채점은 소문자/트림 후 완전일치라 여러 형태 허용값을 넣어둠
+                                          answers: ['soakoff', 'soak-off', 'soak off', 'off'],
+                                        ),
+                                        ExamQuestion.ordering(
+                                          id: 'q_order_001',
+                                          prompt: '올바른 순서로 배열하세요',
+                                          ordering: ['손 소독', '큐티클 정리', '베이스 코트'], // 정답 순서
+                                        ),
+                                      ];
+
+                                      final demoExplanations = <String, String>{
+                                        'q_mcq_001': '시술 전 위생이 최우선이라 손 소독을 먼저 합니다.',
+                                        'q_sa_001': '젤 제거는 보통 Soak-off(소악오프)라고 부릅니다. 하이픈/띄어쓰기 허용.',
+                                        'q_order_001': '위생 → 케어 → 도포의 흐름: 손 소독 → 큐티클 정리 → 베이스 코트.',
+                                      };
+
+// 사용
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ExamPage(
+                                            questions: demoQuestions,
+                                            passScore: 60,
+                                            explanations: demoExplanations,
+                                          ),
+                                        ),
+                                      );
+
+                                    },
                                     style: FilledButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       minimumSize: const Size(0, 0),
@@ -908,7 +961,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const _SectionTitle('관련 자료'),
+                        const SectionTitle('관련 자료'),
                         const SizedBox(height: 8),
                         if (_materials.isEmpty)
                           Text('등록된 자료가 없습니다.',
@@ -1081,12 +1134,4 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(text, style: const TextStyle(color: UiTokens.title, fontSize: 14, fontWeight: FontWeight.w800));
-  }
-}

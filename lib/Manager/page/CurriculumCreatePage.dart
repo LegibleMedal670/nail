@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Common/model/ExamModel.dart';
 import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Manager/models/curriculum_item.dart';
+import 'package:nail/Manager/page/ExamEditPage.dart';
 import 'package:nail/Manager/widgets/DiscardConfirmSheet.dart';
 
 /// 저장 결과 (필요 시 확장 가능)
@@ -278,110 +280,195 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
 
   Future<void> _editExamSheet() async {
     bool temp = _requiresExam;
+
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
       useSafeArea: true,
       isScrollControlled: false,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (sheetCtx) {
         final bottomInset = MediaQuery.of(sheetCtx).viewInsets.bottom;
+
         return GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: _unfocus,
           child: AnimatedPadding(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
             padding: EdgeInsets.only(bottom: bottomInset),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: StatefulBuilder(
-                  builder: (context, setInner) {
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _sheetGrabber(),
-                        const SizedBox(height: 8),
-                        const Text('시험 설정',
+            child: StatefulBuilder(
+              builder: (context, setInner) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // grabber
+                      _sheetGrabber(),
+
+                      // 제목 + 상태 뱃지
+                      Row(
+                        children: [
+                          const Text(
+                            '시험 설정',
                             style: TextStyle(
-                                fontSize: 18,
+                              color: UiTokens.title,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: temp ? const Color(0xFFEFF6FF) : const Color(0xFFF5F7FA),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: temp ? const Color(0xFFBFDBFE) : const Color(0xFFE6ECF3),
+                              ),
+                            ),
+                            child: Text(
+                              temp ? '사용 중' : '미사용',
+                              style: TextStyle(
+                                color: temp ? const Color(0xFF2563EB) : UiTokens.title.withOpacity(0.6),
                                 fontWeight: FontWeight.w800,
-                                color: UiTokens.title)),
-                        const SizedBox(height: 8),
-                        SwitchListTile(
-                          value: temp,
-                          onChanged: (v) => setInner(() => temp = v),
-                          title: const Text('시험 사용'),
-                          subtitle:
-                          const Text('사용하지 않으면 해당 과정에는 시험이 없습니다'),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '통과 기준: 60점 (데모)\n문항 구성은 별도 페이지에서 설정하세요.',
-                                style: TextStyle(
-                                  color:
-                                  UiTokens.title.withOpacity(0.6),
-                                  fontWeight: FontWeight.w600,
-                                ),
+                                fontSize: 12,
                               ),
                             ),
-                            FilledButton.tonal(
-                              onPressed: () {
-                                // TODO: 시험 편집 페이지로 이동 연결
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text('시험 편집 페이지로 이동 (데모)')),
-                                );
-                              },
-                              style: FilledButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 10),
-                                minimumSize: const Size(0, 0),
-                                tapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              child: const Text('시험 정보 수정',
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w800)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        SizedBox(
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // 토글
+                      SwitchListTile.adaptive(
+                        activeColor: UiTokens.primaryBlue,
+                        contentPadding: EdgeInsets.zero,
+                        value: temp,
+                        onChanged: (v) => setInner(() => temp = v),
+                        title: const Text('이 과정에 시험 포함', style: TextStyle(fontWeight: FontWeight.w700)),
+                      ),
+
+                      const Divider(height: 20),
+
+                      // 시험 사용 중일 때 추가 블럭
+                      if (temp) ...[
+                        Container(
                           width: double.infinity,
-                          child: FilledButton(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7F9FC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE6ECF3)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(Icons.check_circle_outline, size: 18, color: UiTokens.primaryBlue),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    '통과 기준: 60점 / 100점',
+                                    style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
+                                  ),
+                                ],
+                              ),
+                              FilledButton.icon(
+                                // ← 여기서 편집 페이지로 연결
+                                onPressed: () async {
+                                  Navigator.pop(sheetCtx); // 시트 먼저 닫기
+                                  final result = await Navigator.push<ExamEditResult>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const ExamEditPage(
+                                        initialQuestions: [],   // 빈 상태
+                                        initialPassScore: 60,   // 기본값
+                                      ),
+                                    ),
+                                  );
+                                  if (!mounted) return;
+                                  if (result != null) {
+                                    setState(() {
+                                      // 문항이 1개 이상이면 사용 중으로 유지
+                                      _requiresExam = result.questions.isNotEmpty || temp;
+                                      _dirty = true;
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('시험 구성 완료: 문항 ${result.questions.length}개 · 통과 ${result.passScore}점'),
+                                      ),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.assignment, size: 18),
+                                label: const Text('편집하기', style: TextStyle(fontWeight: FontWeight.w600)),
+                                style: FilledButton.styleFrom(
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  minimumSize: const Size(0, 0),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ] else
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 16, 8, 16),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.info_outline, size: 22, color: UiTokens.actionIcon),
+                              const SizedBox(width: 8),
+                              Text(
+                                '현재 이 과정에는 시험이 없습니다.',
+                                style: TextStyle(
+                                  color: UiTokens.title.withOpacity(0.7),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 16),
+
+                      // actions
+                      Row(
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(sheetCtx),
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            child: const Text('닫기'),
+                          ),
+                          const Spacer(),
+                          FilledButton(
                             onPressed: () {
                               setState(() {
                                 _requiresExam = temp;
                                 _dirty = true;
                               });
-                              Navigator.pop(context);
+                              Navigator.pop(sheetCtx);
                             },
                             style: FilledButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
+                              backgroundColor: UiTokens.primaryBlue,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                            child: const Text('저장',
-                                style:
-                                TextStyle(fontWeight: FontWeight.w800)),
+                            child: const Text('저장'),
                           ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         );
