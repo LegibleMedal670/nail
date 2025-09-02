@@ -332,10 +332,9 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                         ),
                       ),
                       style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        foregroundColor: UiTokens.actionIcon,
+                        minimumSize: const Size(0, 0),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                     ),

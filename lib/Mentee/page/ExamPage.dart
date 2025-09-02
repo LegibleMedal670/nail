@@ -315,6 +315,7 @@ class _ExamPageState extends State<ExamPage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: LinearProgressIndicator(
+                    borderRadius: BorderRadius.circular(8),
                     value: (_page + 1) / widget.questions.length,
                     minHeight: 6,
                     backgroundColor: const Color(0xFFE6ECF3),
@@ -349,12 +350,20 @@ class _ExamPageState extends State<ExamPage> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: Row(
                       children: [
-                        OutlinedButton(
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: UiTokens.primaryBlue,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                           onPressed: _page == 0 ? null : _goPrev,
                           child: const Text('이전'),
                         ),
                         const Spacer(),
                         FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: UiTokens.primaryBlue,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                           onPressed: canProceed ? (isLast ? _submit : _goNext) : null,
                           child: Text(isLast ? '제출하기' : '다음'),
                         ),
@@ -455,13 +464,13 @@ class _ExamResultPage extends StatelessWidget {
           title: const Text('결과',
               style:
               TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
-          actions: [
-            IconButton(
-              tooltip: '닫기',
-              icon: const Icon(Icons.close, color: UiTokens.title),
-              onPressed: () => Navigator.pop(context), // 커리큘럼으로
-            ),
-          ],
+          // actions: [
+          //   IconButton(
+          //     tooltip: '닫기',
+          //     icon: const Icon(Icons.close, color: UiTokens.title),
+          //     onPressed: () => Navigator.pop(context), // 커리큘럼으로
+          //   ),
+          // ],
         ),
         bottomNavigationBar: SafeArea(
           top: false,
@@ -475,6 +484,10 @@ class _ExamResultPage extends StatelessWidget {
                 ),
                 const Spacer(),
                 FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: UiTokens.primaryBlue,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
                   onPressed: () {
                     // 재시험은 현재 결과 페이지를 교체(pushReplacement)
                     Navigator.of(context).pushReplacement(
