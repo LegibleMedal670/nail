@@ -151,7 +151,7 @@ class _ExamPageState extends State<ExamPage> {
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       child: const Text('계속 응시',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                          style: TextStyle(fontWeight: FontWeight.w800, color: UiTokens.title,)),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -670,6 +670,7 @@ class _McqView extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
             ),
             child: RadioListTile<int>(
+              activeColor: UiTokens.primaryBlue,
               value: i,
               groupValue: value,
               onChanged: onChanged,
