@@ -30,7 +30,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
         builder:
             (_) => CurriculumDetailPage(
               item: item,
-              mode: CurriculumViewMode.admin,
+              mode: CurriculumViewMode.adminEdit,
             ),
       ),
     );

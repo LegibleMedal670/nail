@@ -1,20 +1,15 @@
+// lib/Common/page/CurriculumDetailPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Common/model/ExamModel.dart';
-// // import 'package:nail/Common/model/ExamModel.dart';
 import 'package:nail/Common/ui_tokens.dart';
 import 'package:nail/Common/widget/SectionTitle.dart';
 import 'package:nail/Manager/models/curriculum_item.dart';
 import 'package:nail/Manager/page/ExamEditPage.dart';
 import 'package:nail/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Mentee/page/ExamPage.dart';
-// import 'package:nail/Common/widget/SectionTitle.dart';
-// import 'package:nail/Manager/models/curriculum_item.dart';
-// // import 'package:nail/Manager/page/ExamEditPage.dart';
-// import 'package:nail/Manager/widgets/DiscardConfirmSheet.dart';
 
-
-/// 화면 모드
-enum CurriculumViewMode { admin, mentee }
+/// 화면 모드: 관리자 편집 / 관리자 검토(멘티 진행 확인) / 멘티 수강
+enum CurriculumViewMode { adminEdit, adminReview, mentee }
 
 /// 멘티 진행/시험 상태(점수는 최고점만 유지)
 class CurriculumProgress {
@@ -47,29 +42,40 @@ class _EditMaterial {
 class CurriculumDetailPage extends StatefulWidget {
   final CurriculumItem item;
 
-  /// admin/mentee 모드
+  /// adminEdit / adminReview / mentee
   final CurriculumViewMode mode;
 
-  /// 멘티 모드에서만 사용(없으면 0% 진행/미응시로 표시)
+  /// 멘티 진행 데이터(mentee, adminReview에서 사용)
   final CurriculumProgress? progress;
 
-  /// 콜백들 (필요 시)
-  final VoidCallback? onPlay;                  // 동영상 재생
-  final Future<bool> Function()? onDeleteConfirm; // 삭제 전 확인(선택)
-  final VoidCallback? onTakeExam;              // (멘티) 시험 보기
-  final VoidCallback? onContinueWatch;         // (멘티) 시청/이어보기
-  final VoidCallback? onOpenExamEditor;        // (관리자) 시험 정보 수정 페이지로 이동
+  /// (adminReview 전용) 검토 대상 멘티명 표시용
+  final String? menteeName;
+
+  /// 콜백들
+  // 멘티 인터랙션
+  final VoidCallback? onPlay;             // 동영상 재생
+  final VoidCallback? onContinueWatch;    // (멘티) 이어보기
+  final VoidCallback? onTakeExam;         // (멘티) 시험 보기
+
+  // 관리자 편집/검토
+  final Future<bool> Function()? onDeleteConfirm; // (adminEdit) 삭제 전 확인
+  final VoidCallback? onOpenExamEditor;           // (adminEdit) 시험 편집 화면
+  final VoidCallback? onOpenExamReport;           // (adminReview) 시험 결과/리포트 열기
+  final VoidCallback? onImpersonate;              // (adminReview) 멘티로 보기
 
   const CurriculumDetailPage({
     super.key,
     required this.item,
-    this.mode = CurriculumViewMode.admin,
+    this.mode = CurriculumViewMode.adminEdit,
     this.progress,
+    this.menteeName,
     this.onPlay,
-    this.onDeleteConfirm,
-    this.onTakeExam,
     this.onContinueWatch,
+    this.onTakeExam,
+    this.onDeleteConfirm,
     this.onOpenExamEditor,
+    this.onOpenExamReport,
+    this.onImpersonate,
   });
 
   @override
@@ -93,8 +99,13 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   bool _dirty = false; // ← 변경사항 발생 시 true
   void _markDirty() => setState(() => _dirty = true);
-
   void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
+
+  bool get _isAdminEdit   => widget.mode == CurriculumViewMode.adminEdit;
+  bool get _isAdminReview => widget.mode == CurriculumViewMode.adminReview;
+  bool get _isMentee      => widget.mode == CurriculumViewMode.mentee;
+
+  CurriculumProgress get _pr => widget.progress ?? const CurriculumProgress();
 
   // UI 데모용 시험 문항 수 생성
   Map<String, int> _examCounts(CurriculumItem it) {
@@ -111,7 +122,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   // 뒤로가기 공통 처리
   Future<void> _handleBack() async {
-    if (!_dirty) {
+    if (!_dirty || !_isAdminEdit) { // 편집 모드가 아니면 경고 없이 나감
       if (mounted) Navigator.pop(context);
       return;
     }
@@ -126,8 +137,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     if (leave && mounted) Navigator.pop(context);
   }
 
-  // ====== 모달 편집기들 ======
+  // ====== 모달 편집기들 (adminEdit 전용) ======
   Future<void> _editVideoSheet() async {
+    if (!_isAdminEdit) return;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -192,6 +204,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   }
 
   Future<void> _editGoalsSheet() async {
+    if (!_isAdminEdit) return;
     final goals = _splitGoals(_summary);
     await showModalBottomSheet<void>(
       context: context,
@@ -298,6 +311,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   }
 
   Future<void> _editExamSheet() async {
+    if (!_isAdminEdit) return;
     bool temp = _requiresExam;
 
     await showModalBottomSheet<void>(
@@ -325,9 +339,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // grabber
                       _sheetGrabber(),
-                      // 제목 + 상태 뱃지
                       Row(
                         children: [
                           const Text(
@@ -340,15 +352,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                           ),
                           const Spacer(),
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: temp ? const Color(0xFFEFF6FF) : const Color(0xFFF5F7FA),
                               borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: temp ? const Color(0xFFBFDBFE) : const Color(0xFFE6ECF3),
-                              ),
+                              border: Border.all(color: temp ? const Color(0xFFBFDBFE) : const Color(0xFFE6ECF3)),
                             ),
                             child: Text(
                               temp ? '사용 중' : '미사용',
@@ -363,21 +371,16 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                       ),
                       const SizedBox(height: 12),
 
-                      // 토글
                       SwitchListTile.adaptive(
                         activeColor: UiTokens.primaryBlue,
                         contentPadding: EdgeInsets.zero,
                         value: temp,
                         onChanged: (v) => setInner(() => temp = v),
-                        title: const Text(
-                          '이 과정에 시험 포함',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                        title: const Text('이 과정에 시험 포함', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
 
                       const Divider(height: 20),
 
-                      // 간단 정보 블럭 (시험 사용 중일 때만)
                       if (temp) ...[
                         Container(
                           width: double.infinity,
@@ -389,25 +392,15 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // 통과 기준
                               Row(
                                 children: const [
-                                  Icon(Icons.check_circle_outline,
-                                      size: 18, color: UiTokens.primaryBlue),
+                                  Icon(Icons.check_circle_outline, size: 18, color: UiTokens.primaryBlue),
                                   SizedBox(width: 8),
-                                  Text(
-                                    '통과 기준: 60점 / 100점',
-                                    style: TextStyle(
-                                      color: UiTokens.title,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
+                                  Text('통과 기준: 60점 / 100점',
+                                      style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
                                 ],
                               ),
-                              const SizedBox(height: 10),
-                              // 편집 안내 + 이동 버튼
                               FilledButton.icon(
                                 onPressed: widget.onOpenExamEditor ??
                                         () async {
@@ -416,24 +409,22 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => ExamEditPage(
-                                            initialQuestions: [],  // 서버에서 로드한 리스트
-                                            initialPassScore: 60,  // 예: 60
+                                            initialQuestions: [],
+                                            initialPassScore: 60,
                                           ),
                                         ),
                                       );
                                       if (result != null) {
-                                        // result.questions, result.passScore 저장
+                                        // TODO: 저장 처리
                                       }
                                     },
                                 icon: const Icon(Icons.assignment, size: 18),
-                                label: const Text('편집하기', style: TextStyle(fontWeight: FontWeight.w600),),
+                                label: const Text('편집하기', style: TextStyle(fontWeight: FontWeight.w600)),
                                 style: FilledButton.styleFrom(
                                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                   minimumSize: const Size(0, 0),
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                                 ),
                               ),
                             ],
@@ -448,11 +439,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                               const SizedBox(width: 8),
                               Text(
                                 '현재 이 과정에는 시험이 없습니다.',
-                                style: TextStyle(
-                                  color: UiTokens.title.withOpacity(0.7),
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                ),
+                                style: TextStyle(color: UiTokens.title.withOpacity(0.7), fontWeight: FontWeight.w700, fontSize: 16),
                               ),
                             ],
                           ),
@@ -460,7 +447,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
                       const SizedBox(height: 16),
 
-                      // actions
                       Row(
                         children: [
                           OutlinedButton(
@@ -475,7 +461,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                             onPressed: () {
                               setState(() {
                                 _requiresExam = temp;
-                                _dirty = true; // 변경됨 표시
+                                _dirty = true;
                               });
                               Navigator.pop(context);
                             },
@@ -500,9 +486,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   }
 
   Future<void> _editMaterialsSheet() async {
-    final temp = _materials
-        .map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url))
-        .toList();
+    if (!_isAdminEdit) return;
+    final temp = _materials.map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url)).toList();
 
     await showModalBottomSheet<void>(
       context: context,
@@ -513,7 +498,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       ),
       builder: (sheetCtx) {
         const double kActionBarHeight = 52;
-        const double kActionBarPaddingV = 16;
         final bottomInset = MediaQuery.of(sheetCtx).viewInsets.bottom;
 
         return GestureDetector(
@@ -529,46 +513,34 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
               minChildSize: 0.4,
               maxChildSize: 0.9,
               builder: (_, controller) {
-                // ✨ 바텀시트 로컬 리빌드를 위한 StatefulBuilder
                 return StatefulBuilder(
                   builder: (context, setInner) {
                     return SafeArea(
                       top: false,
                       child: Column(
                         children: [
-                          // 헤더
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                             child: Column(
                               children: [
                                 _sheetGrabber(),
                                 const SizedBox(height: 8),
-                                const Text(
-                                  '관련 자료 편집',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: UiTokens.title,
-                                  ),
-                                ),
+                                const Text('관련 자료 편집',
+                                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: UiTokens.title)),
                               ],
                             ),
                           ),
-
-                          // 목록
                           Expanded(
                             child: ListView.separated(
                               controller: controller,
-                              padding: const EdgeInsets.fromLTRB(
-                                16, 0, 16, kActionBarHeight + kActionBarPaddingV + 12,
-                              ),
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, kActionBarHeight + 28),
                               itemCount: temp.length,
                               separatorBuilder: (_, __) => const SizedBox(height: 8),
                               itemBuilder: (_, i) {
                                 final ctl = TextEditingController(text: temp[i].name);
                                 return TextField(
                                   controller: ctl,
-                                  onChanged: (v) => temp[i].name = v, // 리빌드 불필요
+                                  onChanged: (v) => temp[i].name = v,
                                   onSubmitted: (_) => _unfocus(),
                                   onTapOutside: (_) => _unfocus(),
                                   scrollPadding: const EdgeInsets.only(bottom: 180),
@@ -581,10 +553,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       tooltip: '삭제',
                                       icon: const Icon(Icons.close_rounded),
                                       onPressed: () {
-                                        // ❗ 바깥 setState() 말고 setInner() 사용 + 인덱스 방어
-                                        if (i >= 0 && i < temp.length) {
-                                          setInner(() => temp.removeAt(i));
-                                        }
+                                        if (i >= 0 && i < temp.length) setInner(() => temp.removeAt(i));
                                       },
                                     ),
                                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
@@ -605,8 +574,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                               },
                             ),
                           ),
-
-                          // 액션 바
                           SafeArea(
                             top: false,
                             child: Padding(
@@ -616,10 +583,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 child: Row(
                                   children: [
                                     OutlinedButton.icon(
-                                      onPressed: () {
-                                        // ❗ 추가도 setInner()
-                                        setInner(() => temp.add(_EditMaterial(name: '새 자료')));
-                                      },
+                                      onPressed: () => setInner(() => temp.add(_EditMaterial(name: '새 자료'))),
                                       icon: const Icon(Icons.add),
                                       label: const Text('자료 추가'),
                                       style: OutlinedButton.styleFrom(
@@ -632,11 +596,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                     FilledButton(
                                       onPressed: () {
                                         _unfocus();
-                                        // 저장 시에만 바깥 상태 갱신
                                         setState(() {
-                                          _materials
-                                            ..clear()
-                                            ..addAll(temp);
+                                          _materials..clear()..addAll(temp);
                                           _dirty = true;
                                         });
                                         Navigator.pop(sheetCtx);
@@ -669,13 +630,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   @override
   Widget build(BuildContext context) {
     final counts = _examCounts(_item);
-    final pr = widget.progress ?? const CurriculumProgress();
-    final isAdmin = widget.mode == CurriculumViewMode.admin;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onTap: _unfocus, // 화면 아무데나 탭 → 키보드 닫기
-      child: PopScope( // ← 시스템/스와이프/뒤로 모두 가로채기
+      onTap: _unfocus,
+      child: PopScope(
         canPop: false,
         onPopInvoked: (didPop) async {
           if (didPop) return;
@@ -687,17 +646,26 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
           appBar: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
-            leading: IconButton( // ← BackButton 대신 명시제어
+            leading: IconButton(
               icon: const Icon(Icons.arrow_back, color: UiTokens.title),
               onPressed: _handleBack,
               tooltip: '뒤로가기',
             ),
-            title: Text(
-              'W${_item.week}. ${_item.title}',
-              style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'W${_item.week}. ${_item.title}',
+                    style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _modeChip(),
+              ],
             ),
             actions: [
-              if (isAdmin)
+              if (_isAdminEdit)
                 IconButton(
                   tooltip: '삭제',
                   icon: const Icon(Icons.delete_outline, color: UiTokens.actionIcon),
@@ -732,13 +700,18 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ===== 영상 섹션 (+진행바/이어보기) =====
+                  if (_isAdminReview && (widget.menteeName?.isNotEmpty ?? false)) ...[
+                    _reviewHeader(widget.menteeName!),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // ===== 영상 섹션 (+진행/배지) =====
                   _SectionCard(
                     padding: EdgeInsets.zero,
-                    onEdit: isAdmin ? _editVideoSheet : null,
+                    onEdit: _isAdminEdit ? _editVideoSheet : null,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: (_videoUrl != null) ? (widget.onPlay) : null,
+                      onTap: (_videoUrl != null && _isMentee) ? (widget.onPlay) : null,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: AspectRatio(
@@ -746,6 +719,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
+                              // 배경
                               Container(
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
@@ -765,7 +739,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   ),
                                 ),
                               ),
-                              if (_videoUrl != null)
+
+                              // mentee 모드: 중앙 Play 버튼
+                              if (_videoUrl != null && _isMentee)
                                 Center(
                                   child: Container(
                                     width: 64,
@@ -778,22 +754,21 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                     child: const Icon(Icons.play_arrow_rounded, size: 36, color: UiTokens.title),
                                   ),
                                 ),
-                              if (widget.mode == CurriculumViewMode.mentee && pr.watchedRatio > 0)
+
+                              // mentee 모드: 하단 진행바 + 이어보기
+                              if (_isMentee && _pr.watchedRatio > 0)
                                 Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
+                                  left: 0, right: 0, bottom: 0,
                                   child: LinearProgressIndicator(
                                     minHeight: 4,
-                                    value: pr.watchedRatio.clamp(0.0, 1.0),
+                                    value: _pr.watchedRatio.clamp(0.0, 1.0),
                                     backgroundColor: Colors.white.withOpacity(0.35),
                                     valueColor: const AlwaysStoppedAnimation(UiTokens.primaryBlue),
                                   ),
                                 ),
-                              if (widget.mode == CurriculumViewMode.mentee && pr.watchedRatio > 0 && pr.watchedRatio < 1)
+                              if (_isMentee && _pr.watchedRatio > 0 && _pr.watchedRatio < 1)
                                 Positioned(
-                                  right: 10,
-                                  bottom: 10,
+                                  right: 10, bottom: 10,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                     decoration: BoxDecoration(
@@ -803,10 +778,17 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       border: Border.all(color: UiTokens.cardBorder),
                                     ),
                                     child: Text(
-                                      '이어보기 ${(pr.watchedRatio * 100).round()}%',
+                                      '이어보기 ${(_pr.watchedRatio * 100).round()}%',
                                       style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800, fontSize: 12),
                                     ),
                                   ),
+                                ),
+
+                              // adminReview 모드: 우상단 시청률 뱃지(한 덩어리)
+                              if (_isAdminReview)
+                                Positioned(
+                                  right: 12, top: 12,
+                                  child: _watchRateChip(_pr.watchedRatio),
                                 ),
                             ],
                           ),
@@ -818,7 +800,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
                   // ===== 학습 목표 =====
                   _SectionCard(
-                    onEdit: isAdmin ? _editGoalsSheet : null,
+                    onEdit: _isAdminEdit ? _editGoalsSheet : null,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -830,30 +812,24 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // ===== 시험 정보 (왼쪽 텍스트 · 오른쪽 버튼) =====
+                  // ===== 시험 정보 =====
                   _SectionCard(
-                    onEdit: isAdmin ? _editExamSheet : null,
+                    onEdit: _isAdminEdit ? _editExamSheet : null,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const SectionTitle('시험 정보'),
                         const SizedBox(height: 8),
                         if (!_requiresExam)
-                          Text(
-                            '이 과정에는 시험이 없습니다.',
-                            style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700),
-                          )
+                          Text('이 과정에는 시험이 없습니다.',
+                              style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700))
                         else ...[
-                          _examRow('객관식', counts['mcq']!),
-                          const SizedBox(height: 6),
-                          _examRow('주관식', counts['sa']!),
-                          const SizedBox(height: 6),
-                          _examRow('순서 맞추기', counts['order']!),
+                          finalExamRows(counts),
                           const SizedBox(height: 10),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // 왼쪽: 통과 기준 + (멘티면) 시도/최고/통과
+                              // 왼쪽: 통과 기준 + (모드별 통계)
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -867,65 +843,58 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       ],
                                     ),
                                     const SizedBox(height: 8),
-                                    if (widget.mode == CurriculumViewMode.mentee)
+                                    if (_isMentee || _isAdminReview)
                                       Row(
                                         children: [
                                           Icon(
-                                            (widget.progress?.passed ?? false) ? Icons.verified_rounded : Icons.shield_moon_outlined,
+                                            _pr.passed ? Icons.verified_rounded : Icons.shield_moon_outlined,
                                             size: 18,
-                                            color: (widget.progress?.passed ?? false)
-                                                ? Colors.green.shade600
-                                                : UiTokens.actionIcon,
+                                            color: _pr.passed ? Colors.green.shade600 : UiTokens.actionIcon,
                                           ),
                                           const SizedBox(width: 6),
                                           Text(
-                                            '시도 ${widget.progress?.attempts ?? 0}회'
-                                                '${(widget.progress?.bestScore != null) ? ' / 최고 ${widget.progress!.bestScore}점' : ''}',
+                                            _pr.attempts == 0
+                                                ? '미응시'
+                                                : '시도 ${_pr.attempts}회'
+                                                '${(_pr.bestScore != null) ? ' / 최고 ${_pr.bestScore}점' : ''}'
+                                                '${_pr.passed ? ' / 통과' : ''}',
                                             style: TextStyle(color: UiTokens.title.withOpacity(0.75), fontWeight: FontWeight.w700),
                                           ),
-                                          if (widget.progress?.passed == true) ...[
-                                            const SizedBox(width: 6),
-                                            const Text('통과',
-                                                style: TextStyle(color: UiTokens.primaryBlue, fontWeight: FontWeight.w800)),
-                                          ],
                                         ],
                                       ),
                                   ],
                                 ),
                               ),
-                              if (widget.mode == CurriculumViewMode.mentee)
+                              // 오른쪽: 모드별 버튼
+                              if (_isMentee)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
-                                    onPressed: (){
-                                      // 어디 적당한 곳(예: onPressed)에서:
+                                    onPressed: () {
+                                      // 데모용 샘플 문항
                                       final demoQuestions = <ExamQuestion>[
                                         ExamQuestion.mcq(
                                           id: 'q_mcq_001',
                                           prompt: '기본 케어에서 먼저 해야 하는 단계는?',
                                           choices: ['베이스 코트', '손 소독', '탑 코트', '컬러 도포'],
-                                          correctIndex: 1, // '손 소독'
+                                          correctIndex: 1,
                                         ),
                                         ExamQuestion.short(
                                           id: 'q_sa_001',
                                           prompt: '젤 제거 과정을 한 단어로? (영어)',
-                                          // 채점은 소문자/트림 후 완전일치라 여러 형태 허용값을 넣어둠
                                           answers: ['soakoff', 'soak-off', 'soak off', 'off'],
                                         ),
                                         ExamQuestion.ordering(
                                           id: 'q_order_001',
                                           prompt: '올바른 순서로 배열하세요',
-                                          ordering: ['손 소독', '큐티클 정리', '베이스 코트'], // 정답 순서
+                                          ordering: ['손 소독', '큐티클 정리', '베이스 코트'],
                                         ),
                                       ];
-
                                       final demoExplanations = <String, String>{
                                         'q_mcq_001': '시술 전 위생이 최우선이라 손 소독을 먼저 합니다.',
-                                        'q_sa_001': '젤 제거는 보통 Soak-off(소악오프)라고 부릅니다. 하이픈/띄어쓰기 허용.',
-                                        'q_order_001': '위생 → 케어 → 도포의 흐름: 손 소독 → 큐티클 정리 → 베이스 코트.',
+                                        'q_sa_001': '젤 제거는 보통 Soak-off라고 부릅니다.',
+                                        'q_order_001': '위생 → 케어 → 도포의 흐름입니다.',
                                       };
-
-// 사용
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
@@ -936,7 +905,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                           ),
                                         ),
                                       );
-
                                     },
                                     style: FilledButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -946,6 +914,26 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                     ),
                                     child: const Text('시험보기', style: TextStyle(fontWeight: FontWeight.w800)),
+                                  ),
+                                )
+                              else if (_isAdminReview)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: FilledButton.tonal(
+                                    onPressed: (_pr.attempts > 0)
+                                        ? (widget.onOpenExamReport ??
+                                            () => ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('시험 결과 리포트를 표시합니다(데모).')),
+                                        ))
+                                        : null,
+                                    style: FilledButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      minimumSize: const Size(0, 0),
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      backgroundColor: UiTokens.primaryBlue,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    child: const Text('시험 결과 보기', style: TextStyle(fontWeight: FontWeight.w800)),
                                   ),
                                 ),
                             ],
@@ -958,7 +946,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
                   // ===== 관련 자료 =====
                   _SectionCard(
-                    onEdit: isAdmin ? _editMaterialsSheet : null,
+                    onEdit: _isAdminEdit ? _editMaterialsSheet : null,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -979,17 +967,19 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
                   const SizedBox(height: 24),
 
-                  // ===== 하단 CTA (멘티/관리자 공용) =====
-                  SizedBox(
+                  // ===== 하단 CTA =====
+                  _isAdminReview
+                      ? const SizedBox.shrink() // (요청) 관리자 검토 모드에선 CTA 숨김
+                      : SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: FilledButton(
-                      onPressed: _ctaOnPressed(pr),
+                      onPressed: _ctaOnPressed(),
                       style: FilledButton.styleFrom(
                         backgroundColor: UiTokens.primaryBlue,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(_ctaLabel(pr), style: const TextStyle(fontWeight: FontWeight.w800)),
+                      child: Text(_ctaLabel(), style: const TextStyle(fontWeight: FontWeight.w800)),
                     ),
                   ),
                 ],
@@ -1001,23 +991,135 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
   }
 
-  // ===== CTA 라벨/동작 =====
-  String _ctaLabel(CurriculumProgress pr) {
-    if (widget.mode == CurriculumViewMode.admin) return '수정하기';
-    if (pr.watchedRatio <= 0) return '시청하기';
-    if (pr.watchedRatio < 1) return '이어보기';
+  // ===== 작은 빌더들 =====
+  Widget _modeChip() {
+    String label;
+    Color bg, border, fg;
+    if (_isAdminEdit) {
+      label = '관리자(수정)';
+      bg = const Color(0xFFFFF7ED);
+      border = const Color(0xFFFECBA1);
+      fg = const Color(0xFF9A3412);
+    } else if (_isAdminReview) {
+      label = '관리자(검토)';
+      bg = const Color(0xFFEFF6FF);
+      border = const Color(0xFFBFDBFE);
+      fg = const Color(0xFF2563EB);
+    } else {
+      label = '멘티';
+      bg = const Color(0xFFECFDF5);
+      border = const Color(0xFFA7F3D0);
+      fg = const Color(0xFF059669);
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999), border: Border.all(color: border)),
+      child: Text(label, style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
+    );
+  }
+
+  Widget _watchRateChip(double ratio) {
+    final p = (ratio * 100).round();
+    return Container(
+      constraints: const BoxConstraints(minHeight: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '시청률 $p%',
+            style: const TextStyle(
+              color: Color(0xFF2563EB),
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 20,
+            height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF93C5FD)),
+            ),
+            child: const Icon(Icons.play_arrow_rounded, size: 14, color: Color(0xFF2563EB)),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+
+  Widget _reviewHeader(String name) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE6ECF3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.person_outline, color: UiTokens.actionIcon),
+          const SizedBox(width: 8),
+          Text(
+            '검토 대상: $name',
+            style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
+          ),
+          const Spacer(),
+          // (요청) 멘티로 보기 버튼 제거
+        ],
+      ),
+    );
+  }
+
+
+  Widget finalExamRows(Map<String, int> counts) {
+    return Column(
+      children: [
+        _examRow('객관식', counts['mcq']!),
+        const SizedBox(height: 6),
+        _examRow('주관식', counts['sa']!),
+        const SizedBox(height: 6),
+        _examRow('순서 맞추기', counts['order']!),
+      ],
+    );
+  }
+
+  String _ctaLabel() {
+    if (_isAdminEdit) return '수정하기';
+    if (_isAdminReview) return '멘티로 보기';
+    // mentee
+    if (_pr.watchedRatio <= 0) return '시청하기';
+    if (_pr.watchedRatio < 1) return '이어보기';
     return '다시보기';
   }
 
-  VoidCallback? _ctaOnPressed(CurriculumProgress pr) {
-    if (widget.mode == CurriculumViewMode.admin) {
-      // 전체 수정 진입 대신 첫 섹션(학습 목표) 편집 모달 열기 등으로 활용 가능
-      return _editGoalsSheet;
+  VoidCallback? _ctaOnPressed() {
+    if (_isAdminEdit) return _editGoalsSheet;
+    if (_isAdminReview) {
+      return widget.onImpersonate ??
+              () => ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('멘티 화면으로 전환합니다(데모).')),
+          );
     }
+    // mentee
     return widget.onContinueWatch ?? widget.onPlay;
   }
 
-  // ===== 작은 UI 유틸 =====
   static Iterable<String> _bulletsFrom(String s) => _splitGoals(s);
 
   Widget _bullet(String text) {
@@ -1061,31 +1163,24 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   }
 
   static Widget _sheetGrabber() => Container(
-    width: 44,
-    height: 4,
-    margin: const EdgeInsets.only(bottom: 10),
+    width: 44, height: 4, margin: const EdgeInsets.only(bottom: 10),
     decoration: BoxDecoration(color: const Color(0xFFE6EAF0), borderRadius: BorderRadius.circular(3)),
   );
 
   static InputDecoration _inputDeco(String label) => InputDecoration(
-    labelText: label,
-    isDense: true,
-    filled: true,
-    fillColor: const Color(0xFFF7F9FC),
+    labelText: label, isDense: true, filled: true, fillColor: const Color(0xFFF7F9FC),
     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     enabledBorder: const OutlineInputBorder(
-      borderSide: BorderSide(color: Color(0xFFE6ECF3)),
-      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: Color(0xFFE6ECF3)), borderRadius: BorderRadius.all(Radius.circular(12)),
     ),
     focusedBorder: const OutlineInputBorder(
-      borderSide: BorderSide(color: UiTokens.primaryBlue, width: 2),
-      borderRadius: BorderRadius.all(Radius.circular(12)),
+      borderSide: BorderSide(color: UiTokens.primaryBlue, width: 2), borderRadius: BorderRadius.all(Radius.circular(12)),
     ),
   );
 }
 
-/// 공통 섹션 카드 + (관리자일 때) 우상단 연필 버튼
+/// 공통 섹션 카드 + (관리자 편집일 때) 우상단 연필 버튼
 class _SectionCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -1134,5 +1229,3 @@ class _SectionCard extends StatelessWidget {
     );
   }
 }
-
-
