@@ -1,7 +1,9 @@
 
 
 import 'package:flutter/material.dart';
-import 'package:nail/Welcome/SplashScreen.dart';
+import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'env/env.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,10 +13,10 @@ Future<void> main() async {
   //       .requestTrackingAuthorization();
   // }
 
-  // await Supabase.initialize(
-  //   url: Env.supabaseURL,
-  //   anonKey: Env.supabaseAnonKey,
-  // );
+  await Supabase.initialize(
+    url: Env.supabaseURL,
+    anonKey: Env.supabaseAnonKey,
+  );
 
   // await Firebase.initializeApp(
   //   options: DefaultFirebaseOptions.currentPlatform,
@@ -70,7 +72,7 @@ class _MyAppState extends State<MyApp> {
           // FirebaseAnalyticsObserver(analytics: analytics),
         ],
         debugShowCheckedModeBanner: false,
-        title: 'Shorts',
+        title: 'EDU',
         theme: ThemeData(
           splashColor: Colors.transparent,
           highlightColor: Colors.transparent,

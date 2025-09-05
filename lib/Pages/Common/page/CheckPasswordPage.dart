@@ -1,0 +1,397 @@
+// lib/Manager/page/CheckPasswordPage.dart
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
+import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
+
+enum EntryMode { manager, mentee }
+
+class CheckPasswordPage extends StatefulWidget {
+  /// 기본은 관리자(비밀번호). 멘티 진입에는 EntryMode.mentee 로 호출하세요.
+  const CheckPasswordPage({
+    super.key,
+    this.mode = EntryMode.manager,
+  });
+
+  final EntryMode mode;
+
+  @override
+  State<CheckPasswordPage> createState() => _CheckPasswordPageState();
+}
+
+class _CheckPasswordPageState extends State<CheckPasswordPage>
+    with SingleTickerProviderStateMixin {
+  // 스타일
+  static const Color kTitleColor = Color.fromRGBO(34, 38, 49, 1);
+  static const Color kPrimaryBlue = Color.fromRGBO(47, 130, 246, 1);
+  static const Color kErrorRed = Color(0xFFE53935);
+
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focus = FocusNode();
+
+  bool _focusArmed = false;
+
+  // Shake 애니메이션
+  late final AnimationController _shakeCtl =
+  AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
+
+  String get _code => _controller.text;
+  bool get _isFilled => _code.length == 4;
+
+  // 관리자 비번 (데모)
+  static const String _adminPassword = '1234';
+
+  bool _isError = false;       // 현재 에러 상태(박스/점 색상 반영)
+  bool _showErrorText = false; // 안내 문구 노출
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() => setState(() {}));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_focusArmed) return;
+    _focusArmed = true;
+
+    // 라우트 전환이 끝난 뒤 키보드 오픈
+    final anim = ModalRoute.of(context)?.animation;
+    if (anim != null) {
+      anim.addStatusListener((status) {
+        if (status == AnimationStatus.completed && mounted) {
+          Future.delayed(const Duration(milliseconds: 80), () {
+            if (mounted) _focus.requestFocus();
+          });
+        }
+      });
+    } else {
+      Future.delayed(const Duration(milliseconds: 120), () {
+        if (mounted) _focus.requestFocus();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _shakeCtl.dispose();
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _unfocusAll() => FocusScope.of(context).unfocus();
+
+  Future<void> _failFeedback(String? errorText) async {
+    setState(() {
+      _isError = true;
+      _showErrorText = true;
+    });
+    _shakeCtl.forward(from: 0); // 흔들림
+
+    // 잠깐 유지 후 포커스
+    await Future.delayed(const Duration(milliseconds: 420));
+    if (!mounted) return;
+    _focus.requestFocus();
+
+    await Future.delayed(const Duration(milliseconds: 900));
+    if (!mounted) return;
+    setState(() {
+      _isError = false;
+      _showErrorText = false;
+    });
+  }
+
+  void _submit() {
+    if (!_isFilled) return;
+
+    if (widget.mode == EntryMode.manager) {
+      // 관리자: 비밀번호 검사
+      if (_code == _adminPassword) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const ManagerMainPage()),
+              (route) => false,
+        );
+      } else {
+        _failFeedback('비밀번호가 올바르지 않습니다');
+      }
+      return;
+    }
+
+    // 멘티: 접속 코드 → 멘티 찾기
+    final mentee = kDummyMenteeDirectory[_code];
+    if (mentee != null) {
+      // 실제 서비스에선 여기에 세션/선택 멘티 저장 또는 서버 검증 로직이 올 것
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => MenteeMainPage(
+            name: mentee.name,
+            startedAt: mentee.startedAt,
+            curriculum: [
+              CurriculumItem(id: 'w01', week: 1, title: '네일아트 기초 교육', summary: '도구 소개, 위생, 손톱 구조 이해', durationMinutes: 60, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w02', week: 2, title: '케어 기본', summary: '큐티클 정리, 파일링, 샌딩', durationMinutes: 75, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w03', week: 3, title: '베이스 코트 & 컬러 올리기', summary: '균일한 도포, 번짐 방지 요령', durationMinutes: 90, hasVideo: true,  requiresExam: true),
+              CurriculumItem(id: 'w04', week: 4, title: '마감재 사용법', summary: '탑젤/매트탑, 경화 시간', durationMinutes: 60, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w05', week: 5, title: '간단 아트 1', summary: '도트, 스트라이프, 그라데이션', durationMinutes: 80, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w06', week: 6, title: '간단 아트 2', summary: '프렌치, 마블 기초', durationMinutes: 80, hasVideo: true,  requiresExam: true),
+              CurriculumItem(id: 'w07', week: 7, title: '젤 오프 & 재시술', summary: '안전한 오프, 손상 최소화', durationMinutes: 50, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w08', week: 8, title: '손 위생/살롱 위생 표준', summary: '소독 루틴, 위생 체크리스트', durationMinutes: 45, hasVideo: false, requiresExam: false),
+              CurriculumItem(id: 'w09', week: 9, title: '고객 응대 매뉴얼', summary: '예약/상담/클레임 응대', durationMinutes: 60, hasVideo: false, requiresExam: true),
+              CurriculumItem(id: 'w10', week:10, title: '트러블 케이스', summary: '리프트/파손/알러지 예방과 대응', durationMinutes: 70, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w11', week:11, title: '젤 연장 기초', summary: '폼, 팁, 쉐입 만들기', durationMinutes: 90, hasVideo: true,  requiresExam: true),
+              CurriculumItem(id: 'w12', week:12, title: '아트 심화', summary: '스톤, 파츠, 믹스미디어', durationMinutes: 95, hasVideo: true,  requiresExam: false),
+              CurriculumItem(id: 'w13', week:13, title: '시술 시간 단축 팁', summary: '동선/세팅 최적화, 체크리스트', durationMinutes: 40, hasVideo: false, requiresExam: false),
+              CurriculumItem(id: 'w14', week:14, title: '종합 점검 & 모의평가', summary: '전 과정 복습, 취약 파트 점검', durationMinutes: 120, hasVideo: true, requiresExam: true),
+            ],
+            completedIds: {'w01', 'w02',}, // 임의 완료
+            progressRatio: {
+              'w03': 0.2, // 20% 시청 중
+            },
+          ), // 필요 시 생성자에 멘티 전달하도록 확장
+        ),
+            (route) => false,
+      );
+      // UX: 진입 안내
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${mentee.name}님으로 접속했습니다 (데모)')),
+      );
+    } else {
+      _failFeedback('코드가 올바르지 않습니다');
+    }
+  }
+
+  // ====== UI 문자열(모드별) ======
+  String get _titleText =>
+      (widget.mode == EntryMode.manager) ? '비밀번호를 입력하세요' : '접속 코드를 입력하세요';
+  String get _subtitleText =>
+      (widget.mode == EntryMode.manager) ? '4자리 숫자' : '관리자에게 받은 4자리 코드';
+  String get _errorText =>
+      (widget.mode == EntryMode.manager) ? '비밀번호가 올바르지 않습니다' : '코드가 올바르지 않습니다';
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final isMenteeMode = widget.mode == EntryMode.mentee;
+
+    return GestureDetector(
+      onTap: _unfocusAll,
+      behavior: HitTestBehavior.translucent,
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: const BackButton(color: kTitleColor),
+        ),
+        body: SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 28),
+                Text(
+                  _titleText,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: kTitleColor,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  _subtitleText,
+                  style: TextStyle(
+                    color: kTitleColor.withOpacity(0.6),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 실제 입력용 히든 필드
+                ExcludeSemantics(
+                  child: Opacity(
+                    opacity: 0.0,
+                    child: SizedBox(
+                      height: 48,
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _focus,
+                        autofocus: false,
+                        keyboardType: TextInputType.number,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) => _submit(),
+                        enableInteractiveSelection: false,
+                        maxLengthEnforcement: MaxLengthEnforcement.enforced,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        autofillHints: [
+                          if (widget.mode == EntryMode.manager)
+                            AutofillHints.password
+                          else
+                            AutofillHints.oneTimeCode,
+                        ],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
+                        ],
+                        decoration: const InputDecoration(
+                          counterText: '',
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 표시용 PIN 박스(탭 -> 히든 필드 포커스)
+                AnimatedBuilder(
+                  animation: _shakeCtl,
+                  builder: (context, child) {
+                    // -1..1 사이의 흔들림 값을 만들어 8px 진폭으로 횡이동
+                    final dx = math.sin(_shakeCtl.value * math.pi * 6) * 8;
+                    return Transform.translate(offset: Offset(dx, 0), child: child);
+                  },
+                  child: GestureDetector(
+                    onTap: () => _focus.requestFocus(),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(4, (i) {
+                        final isActive = (_code.length == i && _focus.hasFocus) ||
+                            (_code.isEmpty && i == 0 && _focus.hasFocus);
+                        final isFilled = i < _code.length;
+
+                        final borderColor = _isError
+                            ? kErrorRed
+                            : (isActive ? kPrimaryBlue : const Color(0xFFDEE4EE));
+                        final fillColor = _isError
+                            ? const Color(0xFFFFEBEE)
+                            : const Color(0xFFF5F7FB);
+                        final textColor = _isError ? kErrorRed : kTitleColor;
+
+                        return Padding(
+                          padding: EdgeInsets.only(right: i == 3 ? 0 : 12),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            width: 56,
+                            height: 56,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: fillColor,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: borderColor,
+                                width: isActive && !_isError ? 2 : 1,
+                              ),
+                            ),
+                            child: isFilled
+                                ? (isMenteeMode
+                            // 멘티 모드: 숫자 표시
+                                ? Text(
+                              _code[i],
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            )
+                            // 관리자 모드: ● 마스킹
+                                : Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: textColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ))
+                                : const SizedBox.shrink(),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+
+                // 에러 안내 텍스트
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: _showErrorText ? 1 : 0,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      _errorText,
+                      style: const TextStyle(
+                        color: kErrorRed,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 48),
+              ],
+            ),
+          ),
+        ),
+
+        // 하단 버튼: 키보드 높이에 맞춰 자연스럽게 상승
+        bottomNavigationBar: AnimatedPadding(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+          padding: EdgeInsets.only(bottom: bottomInset),
+          child: SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: SizedBox(
+              height: 50,
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _isFilled ? _submit : null,
+                style: FilledButton.styleFrom(
+                  backgroundColor: kPrimaryBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text(
+                  '확인',
+                  style: TextStyle(
+                    color: Color.fromRGBO(253, 253, 255, 1),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// ===== 데모: 접속 코드 → 멘티 매핑 =====
+/// 실제 서비스에선 서버/DB에서 검증하세요.
+class MenteeStub {
+  final String name;
+  final DateTime startedAt;
+  final String? photoUrl;
+  const MenteeStub({required this.name, required this.startedAt, this.photoUrl});
+}
+
+// 원하는 더미 데이터로 바꾸세요.
+final Map<String, MenteeStub> kDummyMenteeDirectory = <String, MenteeStub>{
+  '1111': MenteeStub(name: '한지민', startedAt: DateTime(2024, 7, 20)),
+  '2222': MenteeStub(name: '박소영', startedAt: DateTime(2024, 6, 5)),
+  '3333': MenteeStub(name: '김하늘', startedAt: DateTime(2024, 8, 1)),
+};
