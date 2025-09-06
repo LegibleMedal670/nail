@@ -136,31 +136,7 @@ class _SelectUserPageState extends State<SelectUserPage> {
       // );
 
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => MenteeMainPage(
-          name: selected.name,
-          photoUrl: selected.photoUrl,
-          startedAt: DateTime.now(),
-          curriculum: [
-            CurriculumItem(id: 'w01', week: 1, title: '네일아트 기초 교육', summary: '도구 소개, 위생, 손톱 구조 이해', durationMinutes: 60, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w02', week: 2, title: '케어 기본', summary: '큐티클 정리, 파일링, 샌딩', durationMinutes: 75, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w03', week: 3, title: '베이스 코트 & 컬러 올리기', summary: '균일한 도포, 번짐 방지 요령', durationMinutes: 90, hasVideo: true,  requiresExam: true),
-            CurriculumItem(id: 'w04', week: 4, title: '마감재 사용법', summary: '탑젤/매트탑, 경화 시간', durationMinutes: 60, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w05', week: 5, title: '간단 아트 1', summary: '도트, 스트라이프, 그라데이션', durationMinutes: 80, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w06', week: 6, title: '간단 아트 2', summary: '프렌치, 마블 기초', durationMinutes: 80, hasVideo: true,  requiresExam: true),
-            CurriculumItem(id: 'w07', week: 7, title: '젤 오프 & 재시술', summary: '안전한 오프, 손상 최소화', durationMinutes: 50, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w08', week: 8, title: '손 위생/살롱 위생 표준', summary: '소독 루틴, 위생 체크리스트', durationMinutes: 45, hasVideo: false, requiresExam: false),
-            CurriculumItem(id: 'w09', week: 9, title: '고객 응대 매뉴얼', summary: '예약/상담/클레임 응대', durationMinutes: 60, hasVideo: false, requiresExam: true),
-            CurriculumItem(id: 'w10', week:10, title: '트러블 케이스', summary: '리프트/파손/알러지 예방과 대응', durationMinutes: 70, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w11', week:11, title: '젤 연장 기초', summary: '폼, 팁, 쉐입 만들기', durationMinutes: 90, hasVideo: true,  requiresExam: true),
-            CurriculumItem(id: 'w12', week:12, title: '아트 심화', summary: '스톤, 파츠, 믹스미디어', durationMinutes: 95, hasVideo: true,  requiresExam: false),
-            CurriculumItem(id: 'w13', week:13, title: '시술 시간 단축 팁', summary: '동선/세팅 최적화, 체크리스트', durationMinutes: 40, hasVideo: false, requiresExam: false),
-            CurriculumItem(id: 'w14', week:14, title: '종합 점검 & 모의평가', summary: '전 과정 복습, 취약 파트 점검', durationMinutes: 120, hasVideo: true, requiresExam: true),
-          ],
-          completedIds: {'w01', 'w02',}, // 임의 완료
-          progressRatio: {
-            'w03': 0.2, // 20% 시청 중
-          },
-        ),),
+        MaterialPageRoute(builder: (context) => MenteeMainPage(),),
             (Route<dynamic> route) => false,
       );
     } else {

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Welcome/SplashScreen.dart';
-import 'package:nail/Providers/UserProvider.dart';
+import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'env/env.dart';
-import 'package:provider/provider.dart';
+import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Providers/CurriculumProvider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,8 +15,13 @@ Future<void> main() async {
   );
 
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => UserProvider()..hydrate(),
+    MultiProvider(
+      providers: [
+        // 사용자 상태
+        ChangeNotifierProvider(create: (_) => UserProvider()..hydrate()),
+        // 커리큘럼: 캐시 즉시 반영 + 서버 재검증(SWR) 백그라운드 수행
+        ChangeNotifierProvider(create: (_) => CurriculumProvider()..ensureLoaded()),
+      ],
       child: const MyApp(),
     ),
   );

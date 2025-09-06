@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Common/page/CheckPasswordPage.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
@@ -7,6 +6,7 @@ import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:provider/provider.dart';
 
 /// 필터
@@ -15,46 +15,19 @@ enum LessonFilter { all, incomplete }
 /// 강의 진행 상태
 enum Progress { notStarted, inProgress, done }
 
-/// 멘티 학습 홈
+/// 멘티 학습 홈 (Provider에서 유저/커리큘럼을 읽음)
 class MenteeMainPage extends StatefulWidget {
-  final String name;
-  final DateTime startedAt;
+  // 선택 주입(없으면 Provider에서/기본값으로 채움)
+  final String? name;
+  final DateTime? startedAt;
   final String? photoUrl;
-
-  /// 커리큘럼 전체
-  final List<CurriculumItem> curriculum;
-
-  /// 수강 완료한 아이템 id 집합
-  final Set<String> completedIds;
-
-  /// 진행중 강의의 진행률(0.0~1.0). 키가 없으면 '시작 전'으로 간주.
-  final Map<String, double> progressRatio;
 
   const MenteeMainPage({
     super.key,
-    required this.name,
-    required this.startedAt,
-    required this.curriculum,
+    this.name,
+    this.startedAt,
     this.photoUrl,
-    this.completedIds = const {},
-    this.progressRatio = const {},
   });
-
-  /// 데모로 빠르게 확인하고 싶으면 이 팩토리로 띄워봐.
-  factory MenteeMainPage.demo() {
-    final demo = _demoCurriculum();
-    return MenteeMainPage(
-      name: '김민지',
-      startedAt: DateTime.now().subtract(const Duration(days: 23)),
-      curriculum: demo,
-      completedIds: {'w01', 'w03', 'w05'},
-      // 임의 완료
-      progressRatio: {
-        'w02': 0.2, // 20% 시청 중
-        'w04': 0.6, // 60% 시청 중
-      },
-    );
-  }
 
   @override
   State<MenteeMainPage> createState() => _MenteeMainPageState();
@@ -64,51 +37,71 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   final _listController = ScrollController();
   LessonFilter _filter = LessonFilter.all;
 
-  /// 전체 진행률: 완료=1, 진행중=ratio, 시작전=0 의 평균
-  double get _progress {
-    final items = widget.curriculum;
-    if (items.isEmpty) return 0;
+  @override
+  void initState() {
+    super.initState();
+    // 스플래시에서 안 불러왔어도 이 화면 진입 시 1회 보장
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CurriculumProvider>().ensureLoaded();
+    });
+  }
 
+  // ---- 진행도/필터 계산 유틸 (서버 연동되면 completedIds/progressRatio 치환) ----
+  double _calcTotalProgress(
+      List<CurriculumItem> items,
+      Set<String> completedIds,
+      Map<String, double> progressRatio,
+      ) {
+    if (items.isEmpty) return 0;
     double sum = 0;
     for (final it in items) {
-      if (widget.completedIds.contains(it.id)) {
+      if (completedIds.contains(it.id)) {
         sum += 1.0;
       } else {
-        final r = widget.progressRatio[it.id];
-        if (r != null && r > 0) {
-          sum += r.clamp(0.0, 1.0);
-        }
+        final r = progressRatio[it.id];
+        if (r != null && r > 0) sum += r.clamp(0.0, 1.0);
       }
     }
     return (sum / items.length).clamp(0.0, 1.0);
   }
 
-  String get _filterLabel => _filter == LessonFilter.all ? '전체' : '미완료 강의';
-
-  List<CurriculumItem> get _filtered {
-    if (_filter == LessonFilter.all) return widget.curriculum;
-    return widget.curriculum
-        .where((e) => !widget.completedIds.contains(e.id))
-        .toList();
+  List<CurriculumItem> _applyFilter(
+      LessonFilter filter,
+      List<CurriculumItem> items,
+      Set<String> completedIds,
+      ) {
+    if (filter == LessonFilter.all) return items;
+    return items.where((e) => !completedIds.contains(e.id)).toList();
   }
 
-  /// 아이템별 상태 계산
-  Progress _progressOf(String id) {
-    if (widget.completedIds.contains(id)) return Progress.done;
-    final r = widget.progressRatio[id];
+  Progress _progressOf(
+      String id,
+      Set<String> completedIds,
+      Map<String, double> progressRatio,
+      ) {
+    if (completedIds.contains(id)) return Progress.done;
+    final r = progressRatio[id];
     if (r != null && r > 0) return Progress.inProgress;
-    return Progress.notStarted; // 서버에 기록이 전혀 없는 경우
+    return Progress.notStarted;
   }
 
-  /// 이어 학습 대상: 우선 '진행중' 중 첫 번째, 없으면 '시작전' 중 첫 번째
-  CurriculumItem? get _nextIncomplete {
-    for (final e in widget.curriculum) {
-      if (_progressOf(e.id) == Progress.inProgress) return e;
+  CurriculumItem? _nextIncomplete(
+      List<CurriculumItem> items,
+      Set<String> completedIds,
+      Map<String, double> progressRatio,
+      ) {
+    for (final e in items) {
+      if (_progressOf(e.id, completedIds, progressRatio) == Progress.inProgress) {
+        return e;
+      }
     }
-    for (final e in widget.curriculum) {
-      if (_progressOf(e.id) == Progress.notStarted) return e;
+    for (final e in items) {
+      if (_progressOf(e.id, completedIds, progressRatio) == Progress.notStarted) {
+        return e;
+      }
     }
-    return null; // 전부 완료
+    return null;
   }
 
   Future<void> _showFilterSheet() async {
@@ -118,43 +111,44 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder:
-          (_) => SortBottomSheet<LessonFilter>(
-            title: '필터',
-            current: _filter,
-            options: [
-              SortOption(
-                value: LessonFilter.all,
-                label: '전체',
-                icon: Icons.list_alt,
-              ),
-              SortOption(
-                value: LessonFilter.incomplete,
-                label: '미완료 강의',
-                icon: Icons.hourglass_bottom_rounded,
-              ),
-            ],
+      builder: (_) => SortBottomSheet<LessonFilter>(
+        title: '필터',
+        current: _filter,
+        options: const [
+          SortOption(
+            value: LessonFilter.all,
+            label: '전체',
+            icon: Icons.list_alt,
           ),
+          SortOption(
+            value: LessonFilter.incomplete,
+            label: '미완료 강의',
+            icon: Icons.hourglass_bottom_rounded,
+          ),
+        ],
+      ),
     );
     if (result != null && mounted) setState(() => _filter = result);
   }
 
-  void _continueLearning() {
-    final target = _nextIncomplete;
-    if (target == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('모든 강의를 완료했어요!')));
-      return;
-    }
-    final idx = widget.curriculum.indexOf(target);
-    // 대충 해당 카드 위치로 스크롤
+  void _scrollToItem(int index) {
     _listController.animateTo(
-      (idx * 120).toDouble(), // 카드 높이 대략치
+      (index * 120).toDouble(), // 카드 높이 대략치
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
-    // 상세 열기 대신 스낵바
+  }
+
+  void _continueLearning(List<CurriculumItem> items, Set<String> completedIds, Map<String, double> progressRatio) {
+    final target = _nextIncomplete(items, completedIds, progressRatio);
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('모든 강의를 완료했어요!')),
+      );
+      return;
+    }
+    final idx = items.indexOf(target);
+    _scrollToItem(idx);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('이어 학습: W${target.week}. ${target.title}')),
     );
@@ -162,9 +156,55 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>();
+    final cur = context.watch<CurriculumProvider>();
+
+    // ---- 유저 표시용(이름/시작일/사진). 실제 필드명에 맞춰 교체 가능 ----
+    final String displayName = widget.name ?? '멘티';
+    final DateTime startedAt = widget.startedAt ?? DateTime.now();
+    final String? photoUrl = widget.photoUrl;
+
+    // ---- 커리큘럼(서버 동기화) ----
+    final List<CurriculumItem> curriculum = cur.items;
+
+    // 진행/완료는 아직 서버X → 임시 빈값 (추후 서버 연동 시 주입)
+    final Set<String> completedIds = const <String>{};
+    final Map<String, double> progressRatio = const <String, double>{};
+
+    final double totalProgress = _calcTotalProgress(curriculum, completedIds, progressRatio);
+    final String progressPercentText = '${(totalProgress * 100).round()}%';
+    final filtered = _applyFilter(_filter, curriculum, completedIds);
     final gaugeColor = UiTokens.primaryBlue;
-    final started = _fmtDate(widget.startedAt);
-    final progressPercentText = '${(_progress * 100).round()}%';
+
+    // 로딩/에러 상태 처리
+    if (cur.loading && curriculum.isEmpty) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (cur.error != null && curriculum.isEmpty) {
+
+
+
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(cur.error!, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 10),
+              FilledButton(
+                onPressed: () => cur.refresh(force: true),
+                style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
+                child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -180,11 +220,15 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
         iconTheme: const IconThemeData(color: UiTokens.title),
         actions: [
           IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: '새로고침',
+            onPressed: () => context.read<CurriculumProvider>().refresh(force: true),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: () async {
               await context.read<UserProvider>().signOut();
               if (!context.mounted) return;
-              // 멘티는 접속코드 입력 화면으로
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const SplashScreen()),
                     (route) => false,
@@ -192,7 +236,6 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
             },
           ),
         ],
-
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -219,24 +262,17 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                           CircleAvatar(
                             radius: 26,
                             backgroundColor: Colors.grey[300],
-                            backgroundImage:
-                                widget.photoUrl != null
-                                    ? NetworkImage(widget.photoUrl!)
-                                    : null,
-                            child:
-                                widget.photoUrl == null
-                                    ? const Icon(
-                                      Icons.person,
-                                      color: Color(0xFF8C96A1),
-                                    )
-                                    : null,
+                            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                            child: photoUrl == null
+                                ? const Icon(Icons.person, color: Color(0xFF8C96A1))
+                                : null,
                           ),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                widget.name,
+                                displayName,
                                 style: const TextStyle(
                                   color: UiTokens.title,
                                   fontSize: 18,
@@ -245,7 +281,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '멘토 : 김선생',
+                                '멘토 : 김선생', // TODO: UserProvider에서 멘토명 오면 교체
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,
@@ -254,7 +290,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '시작일 : $started',
+                                '시작일 : ${_fmtDate(startedAt)}',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,
@@ -277,7 +313,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                             width: 84,
                             height: 84,
                             child: CircularProgressIndicator(
-                              value: _progress,
+                              value: totalProgress,
                               strokeWidth: 10,
                               backgroundColor: const Color(0xFFE9EEF6),
                               valueColor: AlwaysStoppedAnimation(gaugeColor),
@@ -305,7 +341,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                 width: double.infinity,
                 height: 48,
                 child: FilledButton(
-                  onPressed: _continueLearning,
+                  onPressed: () => _continueLearning(curriculum, completedIds, progressRatio),
                   style: FilledButton.styleFrom(
                     backgroundColor: UiTokens.primaryBlue,
                     shape: RoundedRectangleBorder(
@@ -313,7 +349,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                     ),
                   ),
                   child: Text(
-                    _nextIncomplete == null ? '복습하기' : '이어보기',
+                    _nextIncomplete(curriculum, completedIds, progressRatio) == null ? '복습하기' : '이어보기',
                     style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -343,7 +379,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                         size: 18,
                       ),
                       label: Text(
-                        _filterLabel,
+                        _filter == LessonFilter.all ? '전체' : '미완료 강의',
                         style: const TextStyle(
                           color: UiTokens.actionIcon,
                           fontSize: 14,
@@ -361,15 +397,15 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                 ),
               ),
 
-              // ===== 커리큘럼 목록 (기존 CurriculumTile 재사용) =====
+              // ===== 커리큘럼 목록 =====
               ListView.separated(
-                itemCount: _filtered.length,
+                itemCount: filtered.length,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (_, i) {
-                  final item = _filtered[i];
-                  final state = _progressOf(item.id);
+                  final item = filtered[i];
+                  final state = _progressOf(item.id, completedIds, progressRatio);
 
                   return Stack(
                     children: [
@@ -378,22 +414,25 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                         onTap: () {
                           Navigator.of(context).push<CurriculumDetailResult>(
                             MaterialPageRoute(
-                              builder:
-                                  (_) => CurriculumDetailPage(
-                                    item: item,
-                                    mode: CurriculumViewMode.mentee,
-                                    progress: const CurriculumProgress(watchedRatio: 0.35, attempts: 2, bestScore: 72, passed: true),
-                                    onPlay: () {},
-                                    onContinueWatch: () {},
-                                    onTakeExam: () {},
-                                  ),
+                              builder: (_) => CurriculumDetailPage(
+                                item: item,
+                                mode: CurriculumViewMode.mentee,
+                                // TODO: 여기도 실제 진행/시험 데이터 연동되면 교체
+                                progress: const CurriculumProgress(
+                                  watchedRatio: 0.0,
+                                  attempts: 0,
+                                  bestScore: 0,
+                                  passed: false,
+                                ),
+                                onPlay: () {},
+                                onContinueWatch: () {},
+                                onTakeExam: () {},
+                              ),
                             ),
                           );
                         },
-                        // (멘티 뷰) onEdit 미전달 → 편집 아이콘 비표시
                       ),
 
-                      // 상태 뱃지: notStarted면 아예 표시하지 않음
                       if (state != Progress.notStarted)
                         Positioned(
                           top: 10,
@@ -411,13 +450,11 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     );
   }
 
-  /// 상태 뱃지 (완료/수강중). '시작 전' 상태는 이 위젯을 호출하지 마세요.
+  /// 상태 뱃지 (완료/수강중). '시작 전' 상태는 호출하지 않음.
   Widget _progressBadge(Progress state) {
     final bool done = (state == Progress.done);
-
     final Color bg = done ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF);
-    final Color border =
-        done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
+    final Color border = done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
     final Color fg = done ? const Color(0xFF059669) : const Color(0xFF2563EB);
 
     return Container(
@@ -430,20 +467,10 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            done ? Icons.check_circle_rounded : Icons.timelapse,
-            size: 16,
-            color: fg,
-          ),
+          Icon(done ? Icons.check_circle_rounded : Icons.timelapse, size: 16, color: fg),
           const SizedBox(width: 6),
-          Text(
-            done ? '완료' : '수강중',
-            style: TextStyle(
-              color: fg,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          Text(done ? '완료' : '수강중',
+              style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -452,134 +479,3 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   String _fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
-
-/// ——— 데모 커리큘럼 (14주) ———
-/// 실제에선 EducationManageTab의 데이터와 동일한 걸 주입하면 됨.
-List<CurriculumItem> _demoCurriculum() => [
-  CurriculumItem(
-    id: 'w01',
-    week: 1,
-    title: '네일아트 기초 교육',
-    summary: '도구 소개, 위생, 손톱 구조 이해',
-    durationMinutes: 60,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w02',
-    week: 2,
-    title: '케어 기본',
-    summary: '큐티클 정리, 파일링, 샌딩',
-    durationMinutes: 75,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w03',
-    week: 3,
-    title: '베이스 코트 & 컬러 올리기',
-    summary: '균일한 도포, 번짐 방지 요령',
-    durationMinutes: 90,
-    hasVideo: true,
-    requiresExam: true,
-  ),
-  CurriculumItem(
-    id: 'w04',
-    week: 4,
-    title: '마감재 사용법',
-    summary: '탑젤/매트탑, 경화 시간',
-    durationMinutes: 60,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w05',
-    week: 5,
-    title: '간단 아트 1',
-    summary: '도트, 스트라이프, 그라데이션',
-    durationMinutes: 80,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w06',
-    week: 6,
-    title: '간단 아트 2',
-    summary: '프렌치, 마블 기초',
-    durationMinutes: 80,
-    hasVideo: true,
-    requiresExam: true,
-  ),
-  CurriculumItem(
-    id: 'w07',
-    week: 7,
-    title: '젤 오프 & 재시술',
-    summary: '안전한 오프, 손상 최소화',
-    durationMinutes: 50,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w08',
-    week: 8,
-    title: '손 위생/살롱 위생 표준',
-    summary: '소독 루틴, 위생 체크리스트',
-    durationMinutes: 45,
-    hasVideo: false,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w09',
-    week: 9,
-    title: '고객 응대 매뉴얼',
-    summary: '예약/상담/클레임 응대',
-    durationMinutes: 60,
-    hasVideo: false,
-    requiresExam: true,
-  ),
-  CurriculumItem(
-    id: 'w10',
-    week: 10,
-    title: '트러블 케이스',
-    summary: '리프트/파손/알러지 예방과 대응',
-    durationMinutes: 70,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w11',
-    week: 11,
-    title: '젤 연장 기초',
-    summary: '폼, 팁, 쉐입 만들기',
-    durationMinutes: 90,
-    hasVideo: true,
-    requiresExam: true,
-  ),
-  CurriculumItem(
-    id: 'w12',
-    week: 12,
-    title: '아트 심화',
-    summary: '스톤, 파츠, 믹스미디어',
-    durationMinutes: 95,
-    hasVideo: true,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w13',
-    week: 13,
-    title: '시술 시간 단축 팁',
-    summary: '동선/세팅 최적화, 체크리스트',
-    durationMinutes: 40,
-    hasVideo: false,
-    requiresExam: false,
-  ),
-  CurriculumItem(
-    id: 'w14',
-    week: 14,
-    title: '종합 점검 & 모의평가',
-    summary: '전 과정 복습, 취약 파트 점검',
-    durationMinutes: 120,
-    hasVideo: true,
-    requiresExam: true,
-  ),
-];
