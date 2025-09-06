@@ -5,6 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
+import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/SupabaseService.dart';
+import 'package:provider/provider.dart';
 
 enum EntryMode { manager, mentee }
 
@@ -105,63 +108,91 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
     });
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_isFilled) return;
 
-    if (widget.mode == EntryMode.manager) {
-      // 관리자: 비밀번호 검사
-      if (_code == _adminPassword) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const ManagerMainPage()),
-              (route) => false,
-        );
-      } else {
-        _failFeedback('비밀번호가 올바르지 않습니다');
-      }
+    final user = context.read<UserProvider>();
+    final code = _code;
+
+    final ok = await user.signInWithCode(code); // 서버 검증 + (멘티) 캐시 저장
+    if (!mounted) return;
+
+    if (!ok) {
+      await _failFeedback(widget.mode == EntryMode.mentee ? '코드가 올바르지 않습니다' : '비밀번호가 올바르지 않습니다');
       return;
     }
 
-    // 멘티: 접속 코드 → 멘티 찾기
-    final mentee = kDummyMenteeDirectory[_code];
-    if (mentee != null) {
-      // 실제 서비스에선 여기에 세션/선택 멘티 저장 또는 서버 검증 로직이 올 것
+    // 역할/모드 일치 검증
+    if (widget.mode == EntryMode.manager && !user.isAdmin) {
+      await user.signOut();
+      await _failFeedback('관리자 계정이 아닙니다');
+      return;
+    }
+    if (widget.mode == EntryMode.mentee && user.isAdmin) {
+      await user.signOut();
+      await _failFeedback('이 코드는 관리자 전용입니다');
+      return;
+    }
+
+    // 라우팅
+    if (user.isAdmin) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const ManagerMainPage()),
+            (route) => false,
+      );
+      return;
+    }
+
+    // === 멘티: Supabase에서 표시용 정보 읽어와서 전달 ===
+    try {
+      final row = await SupabaseService.instance.loginWithKey(code);
+      if (row == null) {
+        await _failFeedback('사용자 정보를 불러오지 못했습니다');
+        return;
+      }
+
+      final String name = (row['nickname'] as String?) ?? user.nickname;
+      final DateTime startedAt = row['joined_at'] != null
+          ? DateTime.parse(row['joined_at'] as String)
+          : DateTime.now();
+      final String? photoUrl = row['photo_url'] as String?;
+
+      final curriculum = <CurriculumItem>[
+        CurriculumItem(id: 'w01', week: 1,  title: '네일아트 기초 교육',       summary: '도구 소개, 위생, 손톱 구조 이해', durationMinutes: 60, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w02', week: 2,  title: '케어 기본',               summary: '큐티클 정리, 파일링, 샌딩',     durationMinutes: 75, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w03', week: 3,  title: '베이스 코트 & 컬러 올리기', summary: '균일한 도포, 번짐 방지 요령',   durationMinutes: 90, hasVideo: true,  requiresExam: true),
+        CurriculumItem(id: 'w04', week: 4,  title: '마감재 사용법',           summary: '탑젤/매트탑, 경화 시간',         durationMinutes: 60, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w05', week: 5,  title: '간단 아트 1',             summary: '도트, 스트라이프, 그라데이션',   durationMinutes: 80, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w06', week: 6,  title: '간단 아트 2',             summary: '프렌치, 마블 기초',               durationMinutes: 80, hasVideo: true,  requiresExam: true),
+        CurriculumItem(id: 'w07', week: 7,  title: '젤 오프 & 재시술',        summary: '안전한 오프, 손상 최소화',        durationMinutes: 50, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w08', week: 8,  title: '손 위생/살롱 위생 표준',   summary: '소독 루틴, 위생 체크리스트',     durationMinutes: 45, hasVideo: false, requiresExam: false),
+        CurriculumItem(id: 'w09', week: 9,  title: '고객 응대 매뉴얼',        summary: '예약/상담/클레임 응대',           durationMinutes: 60, hasVideo: false, requiresExam: true),
+        CurriculumItem(id: 'w10', week:10,  title: '트러블 케이스',            summary: '리프트/파손/알러지 예방과 대응',  durationMinutes: 70, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w11', week:11,  title: '젤 연장 기초',             summary: '폼, 팁, 쉐입 만들기',             durationMinutes: 90, hasVideo: true,  requiresExam: true),
+        CurriculumItem(id: 'w12', week:12,  title: '아트 심화',                summary: '스톤, 파츠, 믹스미디어',           durationMinutes: 95, hasVideo: true,  requiresExam: false),
+        CurriculumItem(id: 'w13', week:13,  title: '시술 시간 단축 팁',        summary: '동선/세팅 최적화, 체크리스트',     durationMinutes: 40, hasVideo: false, requiresExam: false),
+        CurriculumItem(id: 'w14', week:14,  title: '종합 점검 & 모의평가',     summary: '전 과정 복습, 취약 파트 점검',     durationMinutes:120, hasVideo: true,  requiresExam: true),
+      ];
+
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(
           builder: (_) => MenteeMainPage(
-            name: mentee.name,
-            startedAt: mentee.startedAt,
-            curriculum: [
-              CurriculumItem(id: 'w01', week: 1, title: '네일아트 기초 교육', summary: '도구 소개, 위생, 손톱 구조 이해', durationMinutes: 60, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w02', week: 2, title: '케어 기본', summary: '큐티클 정리, 파일링, 샌딩', durationMinutes: 75, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w03', week: 3, title: '베이스 코트 & 컬러 올리기', summary: '균일한 도포, 번짐 방지 요령', durationMinutes: 90, hasVideo: true,  requiresExam: true),
-              CurriculumItem(id: 'w04', week: 4, title: '마감재 사용법', summary: '탑젤/매트탑, 경화 시간', durationMinutes: 60, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w05', week: 5, title: '간단 아트 1', summary: '도트, 스트라이프, 그라데이션', durationMinutes: 80, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w06', week: 6, title: '간단 아트 2', summary: '프렌치, 마블 기초', durationMinutes: 80, hasVideo: true,  requiresExam: true),
-              CurriculumItem(id: 'w07', week: 7, title: '젤 오프 & 재시술', summary: '안전한 오프, 손상 최소화', durationMinutes: 50, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w08', week: 8, title: '손 위생/살롱 위생 표준', summary: '소독 루틴, 위생 체크리스트', durationMinutes: 45, hasVideo: false, requiresExam: false),
-              CurriculumItem(id: 'w09', week: 9, title: '고객 응대 매뉴얼', summary: '예약/상담/클레임 응대', durationMinutes: 60, hasVideo: false, requiresExam: true),
-              CurriculumItem(id: 'w10', week:10, title: '트러블 케이스', summary: '리프트/파손/알러지 예방과 대응', durationMinutes: 70, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w11', week:11, title: '젤 연장 기초', summary: '폼, 팁, 쉐입 만들기', durationMinutes: 90, hasVideo: true,  requiresExam: true),
-              CurriculumItem(id: 'w12', week:12, title: '아트 심화', summary: '스톤, 파츠, 믹스미디어', durationMinutes: 95, hasVideo: true,  requiresExam: false),
-              CurriculumItem(id: 'w13', week:13, title: '시술 시간 단축 팁', summary: '동선/세팅 최적화, 체크리스트', durationMinutes: 40, hasVideo: false, requiresExam: false),
-              CurriculumItem(id: 'w14', week:14, title: '종합 점검 & 모의평가', summary: '전 과정 복습, 취약 파트 점검', durationMinutes: 120, hasVideo: true, requiresExam: true),
-            ],
-            completedIds: {'w01', 'w02',}, // 임의 완료
-            progressRatio: {
-              'w03': 0.2, // 20% 시청 중
-            },
-          ), // 필요 시 생성자에 멘티 전달하도록 확장
+            name: name,
+            startedAt: startedAt,
+            curriculum: curriculum,
+            photoUrl: photoUrl,
+            completedIds: const {},     // TODO: 진행도 붙일 때 서버에서 채움
+            progressRatio: const {},    // TODO: 진행도 붙일 때 서버에서 채움
+          ),
         ),
             (route) => false,
       );
-      // UX: 진입 안내
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${mentee.name}님으로 접속했습니다 (데모)')),
-      );
-    } else {
-      _failFeedback('코드가 올바르지 않습니다');
+    } catch (e) {
+      await _failFeedback('사용자 정보 조회 실패: $e');
     }
   }
+
+
 
   // ====== UI 문자열(모드별) ======
   String get _titleText =>
@@ -379,19 +410,3 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
     );
   }
 }
-
-/// ===== 데모: 접속 코드 → 멘티 매핑 =====
-/// 실제 서비스에선 서버/DB에서 검증하세요.
-class MenteeStub {
-  final String name;
-  final DateTime startedAt;
-  final String? photoUrl;
-  const MenteeStub({required this.name, required this.startedAt, this.photoUrl});
-}
-
-// 원하는 더미 데이터로 바꾸세요.
-final Map<String, MenteeStub> kDummyMenteeDirectory = <String, MenteeStub>{
-  '1111': MenteeStub(name: '한지민', startedAt: DateTime(2024, 7, 20)),
-  '2222': MenteeStub(name: '박소영', startedAt: DateTime(2024, 6, 5)),
-  '3333': MenteeStub(name: '김하늘', startedAt: DateTime(2024, 8, 1)),
-};

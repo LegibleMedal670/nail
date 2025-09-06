@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
+import 'package:nail/Services/SupabaseService.dart';
 
 class MenteeEditResult {
   final MenteeEntry? mentee;
@@ -93,7 +94,9 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     final rng = Random();
     final taken = {...widget.existingCodes};
     // 편집 중이면 본인 기존 코드는 허용
-    if (widget.initial?.accessCode.isNotEmpty ?? false) taken.remove(widget.initial!.accessCode);
+    if (widget.initial?.accessCode.isNotEmpty ?? false) {
+      taken.remove(widget.initial!.accessCode);
+    }
 
     // 1000~9999에서 중복 피해서 추첨
     for (int i = 0; i < 100; i++) {
@@ -128,26 +131,62 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     }
   }
 
-  void _save() {
+  void _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final entry = MenteeEntry(
-      id: widget.initial?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      name: _name.text.trim(),
-      mentor: _mentor.text.trim().isEmpty ? '미배정' : _mentor.text.trim(),
-      startedAt: _startedAt,
-      // 공통 커리큘럼 전제: 진행 통계는 서버/자동 계산 예정 → 기본값 유지
-      progress: widget.initial?.progress ?? 0,
-      courseDone: widget.initial?.courseDone ?? 0,
-      courseTotal: widget.initial?.courseTotal ?? 0,
-      examDone: widget.initial?.examDone ?? 0,
-      examTotal: widget.initial?.examTotal ?? 0,
-      score: widget.initial?.score,
-      photoUrl: _photoUrl.text.trim().isEmpty ? null : _photoUrl.text.trim(),
-      accessCode: _accessCode.text.trim(),
-    );
+    final nickname = _name.text.trim();
+    final mentor = _mentor.text.trim().isEmpty ? null : _mentor.text.trim();
+    final photo  = _photoUrl.text.trim().isEmpty ? null : _photoUrl.text.trim();
+    final code = _accessCode.text.trim();
 
-    Navigator.of(context).pop(MenteeEditResult(mentee: entry));
+    try {
+      Map<String, dynamic> row;
+      if (widget.initial == null) {
+        // 추가: 코드가 null이면 서버가 자동 생성
+        row = await SupabaseService.instance.createMentee(
+          nickname: nickname,
+          joinedAt: _startedAt,
+          mentor: mentor,
+          photoUrl: photo,
+          loginKey: code,
+        );
+      } else {
+        // 편집
+        row = await SupabaseService.instance.updateUserMin(
+          id: widget.initial!.id,
+          nickname: nickname,
+          joinedAt: _startedAt,
+          mentor: mentor,
+          photoUrl: photo,
+          loginKey: code, // 비워두면 기존 유지
+        );
+      }
+
+      // 로컬 리스트 모델로 변환
+      final entry = MenteeEntry(
+        id: row['id'] as String,
+        name: row['nickname'] as String,
+        mentor: (row['mentor'] as String?) ?? '미배정',
+        startedAt: DateTime.parse(row['joined_at'] as String),
+        progress: widget.initial?.progress ?? 0,
+        courseDone: widget.initial?.courseDone ?? 0,
+        courseTotal: widget.initial?.courseTotal ?? 0,
+        examDone: widget.initial?.examDone ?? 0,
+        examTotal: widget.initial?.examTotal ?? 0,
+        score: widget.initial?.score,
+        photoUrl: row['photo_url'] as String?,
+        accessCode: (row['login_key'] as String?) ?? (code ?? ''), // 필요 시 표시
+      );
+
+      if (!mounted) return;
+      Navigator.of(context).pop(MenteeEditResult(mentee: entry));
+    } catch (e) {
+      // 서버가 'DUPLICATE_LOGIN_KEY' 던지면 메시지 치환
+      final msg = e.toString().contains('DUPLICATE_LOGIN_KEY')
+          ? '이미 존재하는 접속 코드입니다'
+          : '저장 실패: $e';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
   }
 
   @override
@@ -180,85 +219,88 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
           child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Column(
-              children: [
-                // 이름
-                TextFormField(
-                  controller: _name,
-                  decoration: _dec('이름', Icons.person_outline),
-                  validator: (v) => (v == null || v.trim().isEmpty) ? '이름을 입력하세요' : null,
-                ),
-                const SizedBox(height: 16),
+            child: Form( // ✅ Form 추가
+              key: _formKey,
+              child: Column(
+                children: [
+                  // 이름
+                  TextFormField(
+                    controller: _name,
+                    decoration: _dec('이름', Icons.person_outline),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? '이름을 입력하세요' : null,
+                  ),
+                  const SizedBox(height: 16),
 
-                // 담당 멘토 (옵션)
-                TextFormField(
-                  controller: _mentor,
-                  decoration: _dec('담당 멘토(없으면 비워두기)', Icons.school_outlined),
-                ),
-                const SizedBox(height: 16),
+                  // 담당 멘토 (옵션)
+                  TextFormField(
+                    controller: _mentor,
+                    decoration: _dec('담당 멘토(없으면 비워두기)', Icons.school_outlined),
+                  ),
+                  const SizedBox(height: 16),
 
-                // 시작일 (카드형 선택)
-                InkWell(
-                  onTap: _pickDate,
-                  borderRadius: BorderRadius.circular(14),
-                  child: InputDecorator(
-                    decoration: _dec('시작일', Icons.event_outlined),
-                    child: Row(
-                      children: [
-                        Text(
-                          _fmtDate(_startedAt),
-                          style: const TextStyle(
-                            color: UiTokens.title,
-                            fontWeight: FontWeight.w800,
+                  // 시작일 (카드형 선택)
+                  InkWell(
+                    onTap: _pickDate,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InputDecorator(
+                      decoration: _dec('시작일', Icons.event_outlined),
+                      child: Row(
+                        children: [
+                          Text(
+                            _fmtDate(_startedAt),
+                            style: const TextStyle(
+                              color: UiTokens.title,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
-                        ),
-                        const Spacer(),
-                        const Icon(Icons.calendar_today_outlined, color: UiTokens.actionIcon),
-                      ],
+                          const Spacer(),
+                          const Icon(Icons.calendar_today_outlined, color: UiTokens.actionIcon),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // 사진 URL (옵션)
-                TextFormField(
-                  controller: _photoUrl,
-                  decoration: _dec('사진 URL(옵션)', Icons.link_outlined),
-                ),
-                const SizedBox(height: 16),
-
-                // 접속 코드 + 랜덤생성(중복 방지)
-                TextFormField(
-                  controller: _accessCode,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(4),
-                  ],
-                  decoration: _dec('접속 코드 (4자리 숫자)', Icons.vpn_key_outlined).copyWith(
-                    suffixIcon: IconButton(
-                      tooltip: '랜덤 생성',
-                      onPressed: _fillRandomCode,
-                      icon: const Icon(Icons.casino_rounded),
-                    ),
+                  // 사진 URL (옵션)
+                  TextFormField(
+                    controller: _photoUrl,
+                    decoration: _dec('사진 URL(옵션)', Icons.link_outlined),
                   ),
-                  validator: (v) {
-                    final s = (v ?? '').trim();
-                    if (s.isEmpty) return '접속 코드를 입력하거나 랜덤 생성하세요';
-                    if (s.length != 4) return '4자리 숫자를 입력하세요';
-                    if (int.tryParse(s) == null) return '숫자만 입력하세요';
+                  const SizedBox(height: 16),
 
-                    // 중복 검사 (편집 중일 땐 본인 기존 코드는 허용)
-                    final isSameAsInitial =
-                        (widget.initial?.accessCode.isNotEmpty ?? false) &&
-                            widget.initial!.accessCode == s;
-                    if (!isSameAsInitial && widget.existingCodes.contains(s)) {
-                      return '이미 존재하는 코드입니다';
-                    }
-                    return null;
-                  },
-                ),
-              ],
+                  // 접속 코드 + 랜덤생성(중복 방지)
+                  TextFormField(
+                    controller: _accessCode,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(4),
+                    ],
+                    decoration: _dec('접속 코드 (4자리 숫자)', Icons.vpn_key_outlined).copyWith(
+                      suffixIcon: IconButton(
+                        tooltip: '랜덤 생성',
+                        onPressed: _fillRandomCode,
+                        icon: const Icon(Icons.casino_rounded),
+                      ),
+                    ),
+                    validator: (v) {
+                      final s = (v ?? '').trim();
+                      if (s.isEmpty) return '접속 코드는 필수입니다';
+                      if (s.length != 4) return '4자리 숫자를 입력하세요';
+                      if (int.tryParse(s) == null) return '숫자만 입력하세요';
+
+                      // 중복 검사 (편집 중이면 본인 기존 코드는 허용)
+                      final isSameAsInitial =
+                          (widget.initial?.accessCode.isNotEmpty ?? false) &&
+                              widget.initial!.accessCode == s;
+                      if (!isSameAsInitial && widget.existingCodes.contains(s)) {
+                        return '이미 존재하는 코드입니다';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -277,8 +319,9 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
               child: FilledButton(
                 onPressed: () {
                   _unfocusAll();
-                  // Form.validate는 FormState가 필요하므로 GlobalKey 사용
-                  if (_formKey.currentState?.validate() ?? false) _save();
+                  if (_formKey.currentState?.validate() ?? false) {
+                    _save();
+                  }
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: UiTokens.primaryBlue,
@@ -289,10 +332,6 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
             ),
           ),
         ),
-
-        // Form 바인딩 (오류 표시 활성화를 위해 Scaffold 밑에 위치)
-        // ※ TextFormField들이 이미 배치된 상태라 별도 위젯 없이도 동작하지만,
-        //   validate 호출을 위해 _formKey가 필요해 아래처럼 래핑
       ),
     );
   }
@@ -300,7 +339,6 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // _formKey는 build 전에 생성되므로 여기에서 보정할 필요 없음
   }
 
   @override

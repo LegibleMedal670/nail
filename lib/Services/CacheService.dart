@@ -4,14 +4,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 현재 정책: "관리자 제외" 멘티만 자동로그인을 위해 저장합니다.
 class CacheService {
   CacheService._();
+
   static final CacheService instance = CacheService._();
 
   // _ : 라이브러리 private
   // k : 상수(constant) 키 네이밍 컨벤션
   static const String _kLoginKey = 'login_key'; // 멘티 접속코드(=login_key)
-  static const String _kUserId   = 'user_id';
+  static const String _kUserId = 'user_id';
   static const String _kNickname = 'nickname';
-  static const String _kIsAdmin  = 'is_admin';
+  static const String _kIsAdmin = 'is_admin';
 
   /// 멘티 로그인 성공 시 세션 저장
   Future<void> saveMenteeSession({
@@ -41,12 +42,13 @@ class CacheService {
   }
 
   /// (옵션) 캐시된 간단 프로필 읽기
-  Future<({String? userId, String? nickname, bool? isAdmin})> getCachedProfile() async {
+  Future<({String? userId, String? nickname, bool? isAdmin})>
+  getCachedProfile() async {
     final sp = await SharedPreferences.getInstance();
     return (
-    userId: sp.getString(_kUserId),
-    nickname: sp.getString(_kNickname),
-    isAdmin: sp.getBool(_kIsAdmin),
+      userId: sp.getString(_kUserId),
+      nickname: sp.getString(_kNickname),
+      isAdmin: sp.getBool(_kIsAdmin),
     );
   }
 

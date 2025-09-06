@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/page/CheckPasswordPage.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:nail/Providers/UserProvider.dart';
+import 'package:provider/provider.dart';
 
 /// 필터
 enum LessonFilter { all, incomplete }
@@ -174,6 +178,21 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
         automaticallyImplyLeading: false,
         centerTitle: false,
         iconTheme: const IconThemeData(color: UiTokens.title),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: () async {
+              await context.read<UserProvider>().signOut();
+              if (!context.mounted) return;
+              // 멘티는 접속코드 입력 화면으로
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const SplashScreen()),
+                    (route) => false,
+              );
+            },
+          ),
+        ],
+
       ),
       body: SafeArea(
         child: SingleChildScrollView(

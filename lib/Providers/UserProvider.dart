@@ -32,7 +32,7 @@ class UserAccount {
 }
 
 /// 세션 컨트롤러 (ChangeNotifier 기반)
-class SessionProvider extends ChangeNotifier {
+class UserProvider extends ChangeNotifier {
   final _cache = CacheService.instance;
   final _api = SupabaseService.instance;
 

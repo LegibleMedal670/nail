@@ -1,29 +1,78 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// 서버와의 통신을 한 곳에서 관리.
-/// 화면은 저수준 RPC/쿼리를 몰라도 되고, 메서드만 호출하면 됩니다.
 class SupabaseService {
   SupabaseService._();
   static final SupabaseService instance = SupabaseService._();
 
   final SupabaseClient _sb = Supabase.instance.client;
 
-  /// 로그인: login_key로 사용자 1명 조회 (관리자/멘티 겸용)
-  /// 성공: { id, is_admin, nickname, joined_at, mentor, photo_url }
-  /// 실패: null
+  // 로그인 (login_key로 조회)
   Future<Map<String, dynamic>?> loginWithKey(String loginKey) async {
     final res = await _sb.rpc('login_with_key', params: {'p_key': loginKey});
     if (res == null) return null;
-
-    // Supabase는 단일 row도 List로 오는 경우가 있어 방어
     final rows = (res is List) ? res : [res];
     if (rows.isEmpty) return null;
-
     return Map<String, dynamic>.from(rows.first);
   }
 
-// === 확장 포인트 예시 (필요해지면 추가) ===
-// Future<void> updateVideoProgress(...) async { ... }
-// Future<Map<String, dynamic>> submitExam(...) async { ... }
-// Future<List<Map<String, dynamic>>> getExamForCurriculum(...) async { ... }
+  // (옵션) 고유 4자리 코드 생성
+  Future<String> generateUniqueLoginCode({int digits = 4}) async {
+    final res = await _sb.rpc('generate_unique_login_code', params: {'digits': digits});
+    if (res is String) return res;
+    if (res is List && res.isNotEmpty) return res.first as String;
+    throw Exception('failed to generate login code');
+  }
+
+  // 멘티 생성: p_login_key가 null이면 서버가 자동 생성
+  Future<Map<String, dynamic>> createMentee({
+    required String nickname,
+    required DateTime joinedAt,
+    String? mentor,
+    String? photoUrl,
+    String? loginKey,
+  }) async {
+    final res = await _sb.rpc('create_mentee', params: {
+      'p_nickname': nickname,
+      'p_joined': joinedAt.toIso8601String().substring(0, 10), // yyyy-mm-dd
+      'p_mentor': mentor,
+      'p_photo_url': photoUrl,
+      'p_login_key': loginKey,
+    });
+    final rows = (res is List) ? res : [res];
+    if (rows.isEmpty) throw Exception('create_mentee returned empty');
+    return Map<String, dynamic>.from(rows.first);
+  }
+
+  // 유저 최소 업데이트
+  Future<Map<String, dynamic>> updateUserMin({
+    required String id,
+    String? nickname,
+    DateTime? joinedAt,
+    String? mentor,
+    String? photoUrl,
+    String? loginKey,
+  }) async {
+    final res = await _sb.rpc('update_user_min', params: {
+      'p_id': id,
+      'p_nickname': nickname,
+      'p_joined': joinedAt == null ? null : joinedAt.toIso8601String().substring(0, 10),
+      'p_mentor': mentor,
+      'p_photo_url': photoUrl,
+      'p_login_key': loginKey,
+    });
+    final rows = (res is List) ? res : [res];
+    if (rows.isEmpty) throw Exception('update_user_min returned empty');
+    return Map<String, dynamic>.from(rows.first);
+  }
+
+  Future<void> deleteUser(String id) async {
+    await _sb.rpc('delete_user', params: {'p_id': id});
+  }
+
+  Future<List<Map<String, dynamic>>> listMentees() async {
+    final res = await _sb.rpc('list_mentees');
+    if (res == null) return [];
+    final rows = (res is List) ? res : [res];
+    return rows.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
 }
