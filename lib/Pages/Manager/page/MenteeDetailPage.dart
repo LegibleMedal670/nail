@@ -4,8 +4,6 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
-// 🔥 순환참조/타입충돌 유발하던 아래 import 제거
-// import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
 import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 

@@ -3,7 +3,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/manager_dashboard_tab.dart';
-import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
+import 'package:nail/Pages/Manager/page/tabs/MenteeManageTab.dart';
 
 class ManagerMainPage extends StatefulWidget {
   const ManagerMainPage({super.key});
