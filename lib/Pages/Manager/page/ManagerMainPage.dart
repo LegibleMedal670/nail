@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
-import 'package:nail/Pages/Manager/models/mentee.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/manager_dashboard_tab.dart';
 import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
@@ -30,17 +29,6 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   final double avgScore = 86.5;
   final int waitingFinalReview = 13;
   final int totalMentors = 18;
-
-  final List<Mentee> _mentees = [
-    Mentee(name: '김지은', mentor: '박선생', progress: 0.75, startedAt: DateTime(2024, 8, 1), courseDone: 1, courseTotal: 3, examDone: 1, examTotal: 2),
-    Mentee(name: '이민지', mentor: '최선생', progress: 0.45, startedAt: DateTime(2024, 8, 14), courseDone: 1, courseTotal: 3, examDone: 0, examTotal: 2),
-    Mentee(name: '박소영', mentor: '박선생', progress: 0.90, startedAt: DateTime(2024, 7, 20), courseDone: 3, courseTotal: 3, examDone: 1, examTotal: 2),
-    Mentee(name: '정우혁', mentor: '김선생', progress: 0.32, startedAt: DateTime(2024, 9, 2)),
-    Mentee(name: '문가영', mentor: '이선생', progress: 0.58, startedAt: DateTime(2024, 8, 22), courseDone: 2, courseTotal: 3, examDone: 0, examTotal: 2),
-    Mentee(name: '한지민', mentor: '장선생', progress: 0.12, startedAt: DateTime(2024, 9, 10)),
-    Mentee(name: '오세훈', mentor: '박선생', progress: 0.83, startedAt: DateTime(2024, 6, 30), courseDone: 3, courseTotal: 3, examDone: 1, examTotal: 2),
-    Mentee(name: '윤성호', mentor: '김선생', progress: 0.67, startedAt: DateTime(2024, 8, 7), courseDone: 2, courseTotal: 3, examDone: 1, examTotal: 2),
-  ];
 
   final List<int> menteesPerMentor = [8, 7, 5, 10, 6, 5, 9, 7, 6, 4, 8, 7, 5, 6, 9, 8, 6, 4];
   final List<int> pending7d  = [3, 5, 2, 4, 6, 3, 5];

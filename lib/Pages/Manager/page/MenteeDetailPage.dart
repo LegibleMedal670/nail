@@ -1,25 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
-import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
+// 🔥 순환참조/타입충돌 유발하던 아래 import 제거
+// import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
 import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
-import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart'; // for MenteeEntry
+import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 
 /// 필터
 enum DetailLessonFilter { all, incomplete }
 
-/// 진행 상태 (요청에 맞춰 이름/값을 동일하게 사용)
+/// 진행 상태
 enum Progress { notStarted, inProgress, done }
 
 /// 관리자용 멘티 상세 보기
-///
-/// - UI는 멘티 메인/가장 진도 빠른 멘티 UI와 동일
-/// - 가운데 주요 액션 버튼: '레포트 생성하기'
-/// - AppBar 연필 아이콘: 멘티 정보 수정(MenteeEditPage 이동)
 class MenteeDetailPage extends StatefulWidget {
-  final MenteeEntry mentee;
+  final Mentee mentee;
   final List<CurriculumItem> curriculum;
   final Set<String> completedIds;
   final Map<String, double> progressRatio;
@@ -34,17 +32,15 @@ class MenteeDetailPage extends StatefulWidget {
     this.existingCodes = const {},
   });
 
-  /// 빠른 확인용 데모 팩토리
-  factory MenteeDetailPage.demoFromEntry(MenteeEntry entry) {
-    final demo = _demoCurriculum();
+  /// 데모용 팩토리
+  factory MenteeDetailPage.demoFromEntry(Mentee entry) {
     final completed = <String>{'w01', 'w03'};
     final ratio = <String, double>{'w02': 0.35, 'w04': 0.6};
     return MenteeDetailPage(
       mentee: entry,
-      curriculum: demo,
+      curriculum: _demoCurriculum(),
       completedIds: completed,
       progressRatio: ratio,
-      existingCodes: const {},
     );
   }
 
@@ -55,7 +51,7 @@ class MenteeDetailPage extends StatefulWidget {
 class _MenteeDetailPageState extends State<MenteeDetailPage> {
   final _listController = ScrollController();
   DetailLessonFilter _filter = DetailLessonFilter.all;
-  late MenteeEntry _mentee = widget.mentee;
+  late Mentee _mentee = widget.mentee;
 
   /// 전체 진행률: 완료=1, 진행중=ratio, 시작전=0 의 평균
   double get _progress {
@@ -68,19 +64,20 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
         sum += 1.0;
       } else {
         final r = widget.progressRatio[it.id];
-        if (r != null && r > 0) {
-          sum += r.clamp(0.0, 1.0);
-        }
+        if (r != null && r > 0) sum += r.clamp(0.0, 1.0);
       }
     }
     return (sum / items.length).clamp(0.0, 1.0);
   }
 
-  String get _filterLabel => _filter == DetailLessonFilter.all ? '전체' : '미완료 강의';
+  String get _filterLabel =>
+      _filter == DetailLessonFilter.all ? '전체' : '미완료 강의';
 
   List<CurriculumItem> get _filtered {
     if (_filter == DetailLessonFilter.all) return widget.curriculum;
-    return widget.curriculum.where((e) => !widget.completedIds.contains(e.id)).toList();
+    return widget.curriculum
+        .where((e) => !widget.completedIds.contains(e.id))
+        .toList();
   }
 
   CurriculumItem? get _nextIncomplete {
@@ -104,12 +101,18 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) =>  SortBottomSheet<DetailLessonFilter>(
+      builder: (_) => SortBottomSheet<DetailLessonFilter>(
         title: '필터',
         current: _filter,
-        options: [
-          SortOption(value: DetailLessonFilter.all, label: '전체', icon: Icons.list_alt_outlined),
-          SortOption(value: DetailLessonFilter.incomplete, label: '미완료 강의만', icon: Icons.remove_done_outlined),
+        options: const [
+          SortOption(
+              value: DetailLessonFilter.all,
+              label: '전체',
+              icon: Icons.list_alt_outlined),
+          SortOption(
+              value: DetailLessonFilter.incomplete,
+              label: '미완료 강의만',
+              icon: Icons.remove_done_outlined),
         ],
       ),
     );
@@ -126,6 +129,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  /// 편집 → (삭제 시) 결과를 상위로 전달하여 리스트 탭이 재조회할 수 있게 함
   Future<void> _editMentee() async {
     final result = await Navigator.of(context).push<MenteeEditResult>(
       MaterialPageRoute(
@@ -135,27 +139,32 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
         ),
       ),
     );
+
     if (result == null) return;
+
     if (result.deleted) {
       if (!mounted) return;
-      Navigator.of(context).pop(); // 삭제 시 상세 닫기
+      // 삭제는 상세를 닫으면서 결과를 상위에 전달
+      Navigator.of(context).pop(result);
       return;
     }
+
     if (result.mentee != null) {
-      setState(() => _mentee = result.mentee!);
+      setState(() => _mentee = result.mentee!); // 페이지 내 즉시 반영
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('멘티 정보가 저장되었습니다')),
       );
+      // 수정은 상세 유지. (원하면 Navigator.pop(context, result) 로 상위에도 즉시 전달 가능)
     }
   }
 
-  // ---------- 요청하신 스타일 그대로의 배지 ----------
   Widget _progressBadge(Progress state) {
     final bool done = (state == Progress.done);
 
-    final Color bg    = done ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF);
-    final Color border= done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
-    final Color fg    = done ? const Color(0xFF059669) : const Color(0xFF2563EB);
+    final Color bg = done ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF);
+    final Color border =
+    done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
+    final Color fg = done ? const Color(0xFF059669) : const Color(0xFF2563EB);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -185,7 +194,6 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
       ),
     );
   }
-  // ---------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -196,7 +204,8 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(_mentee.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+        title:
+        Text(_mentee.name, style: const TextStyle(fontWeight: FontWeight.w800)),
         backgroundColor: Colors.white,
         foregroundColor: UiTokens.title,
         elevation: 0,
@@ -215,7 +224,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ===== 상단 프로필 + 게이지 =====
+              // 상단 프로필 + 게이지
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -226,15 +235,15 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                 padding: const EdgeInsets.all(14),
                 child: Row(
                   children: [
-                    // 왼쪽: 프로필
                     Expanded(
                       child: Row(
                         children: [
                           CircleAvatar(
                             radius: 28,
                             backgroundColor: Colors.grey[400],
-                            backgroundImage:
-                            _mentee.photoUrl != null ? NetworkImage(_mentee.photoUrl!) : null,
+                            backgroundImage: _mentee.photoUrl != null
+                                ? NetworkImage(_mentee.photoUrl!)
+                                : null,
                             child: _mentee.photoUrl == null
                                 ? const Icon(Icons.person, color: Colors.white)
                                 : null,
@@ -274,7 +283,6 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                         ],
                       ),
                     ),
-                    // 오른쪽: 원형 게이지
                     SizedBox(
                       width: 84,
                       height: 84,
@@ -308,7 +316,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
 
               const SizedBox(height: 12),
 
-              // ===== 가운데 주요 액션: 레포트 생성하기 =====
+              // 주요 액션: 레포트 생성하기
               SizedBox(
                 width: double.infinity,
                 height: 48,
@@ -316,7 +324,8 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                   onPressed: _generateReport,
                   style: FilledButton.styleFrom(
                     backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text(
                     '레포트 생성하기',
@@ -330,14 +339,19 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
 
               const SizedBox(height: 8),
 
-              // ===== 섹션 헤더 =====
+              // 헤더
               Row(
                 children: [
-                  const Text('커리큘럼', style: TextStyle(color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w700)),
+                  const Text('커리큘럼',
+                      style: TextStyle(
+                          color: UiTokens.title,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700)),
                   const Spacer(),
                   TextButton.icon(
                     onPressed: _showFilterSheet,
-                    icon: const Icon(Icons.filter_list_rounded, size: 18, color: UiTokens.actionIcon),
+                    icon: const Icon(Icons.filter_list_rounded,
+                        size: 18, color: UiTokens.actionIcon),
                     label: Text(
                       _filterLabel,
                       style: TextStyle(
@@ -346,7 +360,8 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                       ),
                     ),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
                       foregroundColor: UiTokens.actionIcon,
                       minimumSize: const Size(0, 0),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -355,7 +370,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                 ],
               ),
 
-              // ===== 커리큘럼 목록 =====
+              // 커리큘럼 목록
               ListView.separated(
                 itemCount: _filtered.length,
                 shrinkWrap: true,
@@ -376,16 +391,14 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                               builder: (_) => CurriculumDetailPage(
                                 item: item,
                                 mode: CurriculumViewMode.adminReview,
-                                progress: CurriculumProgress(
+                                progress: const CurriculumProgress(
                                   watchedRatio: 0.35,
                                   attempts: 2,
                                   bestScore: 72,
                                   passed: true,
                                 ),
                                 menteeName: _mentee.name,
-                                onOpenExamReport: () {
-                                  // 리포트 화면으로 이동 or 바텀시트
-                                },
+                                onOpenExamReport: () {},
                                 onImpersonate: () {
                                   Navigator.push(
                                     context,
@@ -393,7 +406,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                                       builder: (_) => CurriculumDetailPage(
                                         item: item,
                                         mode: CurriculumViewMode.mentee,
-                                        progress: CurriculumProgress(
+                                        progress: const CurriculumProgress(
                                           watchedRatio: 0.35,
                                           attempts: 2,
                                           bestScore: 72,
@@ -409,11 +422,9 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                               ),
                             ),
                           );
-
                         },
                       ),
 
-                      // 상태 뱃지: notStarted면 표시하지 않음
                       if (state != Progress.notStarted)
                         Positioned(
                           top: 10,
@@ -435,7 +446,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
-// ===== (데모 전용) 간단 커리큘럼 =====
+// ===== 데모 커리큘럼 =====
 List<CurriculumItem> _demoCurriculum() => const [
   CurriculumItem(
     id: 'w01',
@@ -483,5 +494,3 @@ List<CurriculumItem> _demoCurriculum() => const [
     requiresExam: false,
   ),
 ];
-
-

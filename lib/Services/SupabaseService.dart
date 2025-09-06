@@ -65,14 +65,19 @@ class SupabaseService {
     return Map<String, dynamic>.from(rows.first);
   }
 
-  Future<void> deleteUser(String id) async {
-    await _sb.rpc('delete_user', params: {'p_id': id});
-  }
-
+  /// 멘티 목록 조회 (list_mentees RPC 사용)
   Future<List<Map<String, dynamic>>> listMentees() async {
     final res = await _sb.rpc('list_mentees');
     if (res == null) return [];
     final rows = (res is List) ? res : [res];
     return rows.map((e) => Map<String, dynamic>.from(e)).toList();
   }
+
+  /// 멘티/유저 삭제 (RPC: delete_user)
+  Future<void> deleteUser({required String id}) async {
+    final res = await _sb.rpc('delete_user', params: {'p_id': id});
+    // Supabase rpc()는 성공 시 data가 null일 수 있음 → 에러면 PostgrestException이 throw됨.
+    return;
+  }
+
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart'; // for MenteeEntry
 
 /// 간단 시험 기록 모델 (서버 연동 전 데모/요약용)
@@ -13,7 +14,7 @@ class ExamRecord {
 
 /// 관리자 탭의 "멘티 요약 타일" (영상+시험 통합 UI)
 class MenteeSummaryTile extends StatelessWidget {
-  final MenteeEntry mentee;
+  final Mentee mentee;
 
   /// 전체 커리큘럼
   final List<CurriculumItem> curriculum;
@@ -38,7 +39,7 @@ class MenteeSummaryTile extends StatelessWidget {
   });
 
   /// 데모용 팩토리 (빠른 미리보기)
-  factory MenteeSummaryTile.demo(MenteeEntry mentee) {
+  factory MenteeSummaryTile.demo(Mentee mentee) {
     final demoCur = _demoCurriculum();
     return MenteeSummaryTile(
       mentee: mentee,

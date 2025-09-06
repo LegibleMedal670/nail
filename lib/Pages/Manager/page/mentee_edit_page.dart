@@ -1,19 +1,20 @@
+// lib/Pages/Manager/page/mentee_edit_page.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Manager/page/tabs/mentee_manage_tab.dart';
+import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 class MenteeEditResult {
-  final MenteeEntry? mentee;
+  final Mentee? mentee;
   final bool deleted; // (편집 모드일 때) 삭제 여부
   const MenteeEditResult({this.mentee, this.deleted = false});
 }
 
 class MenteeEditPage extends StatefulWidget {
   /// 편집이면 initial 전달, 추가면 null
-  final MenteeEntry? initial;
+  final Mentee? initial;
 
   /// 접속 코드 중복 방지용 (이미 존재하는 4자리 코드 목록)
   final Set<String> existingCodes;
@@ -89,21 +90,17 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     );
   }
 
-  // --- 접속 코드 유틸 (중복 방지) ---
+  // --- 접속 코드 유틸(랜덤 생성 기능은 요구에 따라 제거 가능) ---
   String _generate4DigitsUnique() {
     final rng = Random();
     final taken = {...widget.existingCodes};
-    // 편집 중이면 본인 기존 코드는 허용
     if (widget.initial?.accessCode.isNotEmpty ?? false) {
       taken.remove(widget.initial!.accessCode);
     }
-
-    // 1000~9999에서 중복 피해서 추첨
     for (int i = 0; i < 100; i++) {
       final c = (1000 + rng.nextInt(9000)).toString();
       if (!taken.contains(c)) return c;
     }
-    // 이론상 거의 불가능하지만, 100회 모두 실패 시 예외 케이스
     return '9999';
   }
 
@@ -114,35 +111,47 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     );
   }
 
+  // --- 삭제 (서버 연동 추가) ---
   Future<void> _delete() async {
+    if (widget.initial == null) return;
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('멘티 삭제'),
-        content: const Text('정말 삭제하시겠어요? 되돌릴 수 없어요.'),
+        content: Text('정말 “${widget.initial!.name}” 멘티를 삭제하시겠어요? 되돌릴 수 없어요.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
         ],
       ),
     );
-    if (ok == true && mounted) {
+    if (ok != true) return;
+
+    try {
+      await SupabaseService.instance.deleteUser(id: widget.initial!.id);
+      if (!mounted) return;
       Navigator.of(context).pop(const MenteeEditResult(deleted: true));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('삭제 실패: $e')),
+      );
     }
   }
 
-  void _save() async {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
     final nickname = _name.text.trim();
     final mentor = _mentor.text.trim().isEmpty ? null : _mentor.text.trim();
     final photo  = _photoUrl.text.trim().isEmpty ? null : _photoUrl.text.trim();
-    final code = _accessCode.text.trim();
+    final code   = _accessCode.text.trim().isEmpty ? null : _accessCode.text.trim();
 
     try {
       Map<String, dynamic> row;
       if (widget.initial == null) {
-        // 추가: 코드가 null이면 서버가 자동 생성
+        // 추가
         row = await SupabaseService.instance.createMentee(
           nickname: nickname,
           joinedAt: _startedAt,
@@ -162,8 +171,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
         );
       }
 
-      // 로컬 리스트 모델로 변환
-      final entry = MenteeEntry(
+      final entry = Mentee(
         id: row['id'] as String,
         name: row['nickname'] as String,
         mentor: (row['mentor'] as String?) ?? '미배정',
@@ -175,16 +183,16 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
         examTotal: widget.initial?.examTotal ?? 0,
         score: widget.initial?.score,
         photoUrl: row['photo_url'] as String?,
-        accessCode: (row['login_key'] as String?) ?? (code ?? ''), // 필요 시 표시
+        accessCode: (row['login_key'] as String?) ?? (code ?? ''),
       );
 
       if (!mounted) return;
       Navigator.of(context).pop(MenteeEditResult(mentee: entry));
     } catch (e) {
-      // 서버가 'DUPLICATE_LOGIN_KEY' 던지면 메시지 치환
       final msg = e.toString().contains('DUPLICATE_LOGIN_KEY')
           ? '이미 존재하는 접속 코드입니다'
           : '저장 실패: $e';
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
   }
@@ -195,7 +203,6 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return GestureDetector(
-      // 화면 아무 곳이나 탭 → 키보드 닫힘
       onTap: _unfocusAll,
       behavior: HitTestBehavior.translucent,
       child: Scaffold(
@@ -211,7 +218,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: UiTokens.actionIcon),
                 tooltip: '삭제',
-                onPressed: _delete,
+                onPressed: _delete, // ← 서버 삭제 연결
               ),
           ],
         ),
@@ -219,7 +226,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
           child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-            child: Form( // ✅ Form 추가
+            child: Form(
               key: _formKey,
               child: Column(
                 children: [
@@ -268,7 +275,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // 접속 코드 + 랜덤생성(중복 방지)
+                  // 접속 코드(필수, 중복 체크는 서버 + 폼에서 1차 체크)
                   TextFormField(
                     controller: _accessCode,
                     keyboardType: TextInputType.number,
@@ -285,11 +292,10 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                     ),
                     validator: (v) {
                       final s = (v ?? '').trim();
-                      if (s.isEmpty) return '접속 코드는 필수입니다';
+                      if (s.isEmpty) return '접속 코드를 입력하세요';
                       if (s.length != 4) return '4자리 숫자를 입력하세요';
                       if (int.tryParse(s) == null) return '숫자만 입력하세요';
 
-                      // 중복 검사 (편집 중이면 본인 기존 코드는 허용)
                       final isSameAsInitial =
                           (widget.initial?.accessCode.isNotEmpty ?? false) &&
                               widget.initial!.accessCode == s;
@@ -305,7 +311,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
           ),
         ),
 
-        // 하단 버튼: 키보드 높이에 맞춰 자연스럽게 상승
+        // 하단 버튼(키보드와 함께 상승)
         bottomNavigationBar: AnimatedPadding(
           duration: const Duration(milliseconds: 180),
           curve: Curves.easeOut,
@@ -334,15 +340,5 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
         ),
       ),
     );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-  }
-
-  @override
-  void initState() {
-    super.initState();
   }
 }
