@@ -202,4 +202,15 @@ class CurriculumProvider extends ChangeNotifier {
       'resources': i.resources,
     };
   }
+
+  void upsertLocal(CurriculumItem item) {
+    final idx = _items.indexWhere((e) => e.id == item.id);
+    if (idx >= 0) {
+      _items[idx] = item;
+    } else {
+      _items.add(item);
+    }
+    _items.sort((a, b) => a.week.compareTo(b.week));
+    notifyListeners();
+  }
 }

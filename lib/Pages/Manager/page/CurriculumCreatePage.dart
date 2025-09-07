@@ -1,10 +1,14 @@
+// lib/Pages/Manager/page/CurriculumCreatePage.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
-
+import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:nail/Services/SupabaseService.dart';
 
 /// 저장 결과 (필요 시 확장 가능)
 class CurriculumCreateResult {
@@ -47,8 +51,6 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
   late final TextEditingController _titleCtl = TextEditingController();
   late final TextEditingController _weekCtl =
   TextEditingController(text: widget.suggestedWeek.toString());
-  late final TextEditingController _durationCtl =
-  TextEditingController(text: '60');
 
   // ── 섹션 상태(상세 페이지와 동일 구조)
   String _summary = '핵심 개념 이해, 실습 체크리스트 숙지';
@@ -57,6 +59,8 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
   final List<_EditMaterial> _materials = [];
 
   bool _dirty = false;
+  bool _saving = false;
+
   void _markDirty() {
     if (!_dirty) setState(() => _dirty = true);
   }
@@ -102,20 +106,18 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                     const SizedBox(height: 16),
                     ListTile(
                       leading: const Icon(Icons.video_library_outlined),
-                      title: Text(_videoUrl == null ? '영상 업로드' : '영상 변경'),
+                      title: Text(_videoUrl == null ? '영상 업로드(데모)' : '영상 변경(데모)'),
                       subtitle: Text(_videoUrl == null
-                          ? '서버로 업로드하여 연결합니다'
-                          : '기존 영상을 새로운 영상으로 교체합니다'),
+                          ? '스토리지는 나중에 붙입니다'
+                          : '임시 URL을 교체합니다'),
                       onTap: () {
-                        // TODO: 파일피커 + Supabase 업로드 연결
                         setState(() {
                           _videoUrl = 'uploaded://demo_video.mp4';
                           _dirty = true;
                         });
-                        Navigator.pop(context);
+                        Navigator.pop(sheetCtx);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('영상이 연결(변경)되었습니다 (데모)')),
+                          const SnackBar(content: Text('영상이 연결(변경)되었습니다 (데모)')),
                         );
                       },
                     ),
@@ -130,7 +132,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                             _videoUrl = null;
                             _dirty = true;
                           });
-                          Navigator.pop(context);
+                          Navigator.pop(sheetCtx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('영상이 삭제되었습니다')),
                           );
@@ -174,7 +176,12 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                 return StatefulBuilder(
                   builder: (context, setInner) {
                     void addGoal() => setInner(() => goals.add(''));
-                    void removeGoal(int i) => setInner(() => goals.removeAt(i));
+                    void removeGoal(int i) {
+                      if (i >= 0 && i < goals.length) {
+                        setInner(() => goals.removeAt(i));
+                      }
+                    }
+
                     return SafeArea(
                       top: false,
                       child: Padding(
@@ -252,7 +259,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                                           .join(', ');
                                       _dirty = true;
                                     });
-                                    Navigator.pop(context);
+                                    Navigator.pop(sheetCtx);
                                   },
                                   style: FilledButton.styleFrom(
                                     shape: RoundedRectangleBorder(
@@ -307,10 +314,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // grabber
                       _sheetGrabber(),
-
-                      // 제목 + 상태 뱃지
                       Row(
                         children: [
                           const Text(
@@ -344,7 +348,6 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                       ),
                       const SizedBox(height: 12),
 
-                      // 토글
                       SwitchListTile.adaptive(
                         activeColor: UiTokens.primaryBlue,
                         contentPadding: EdgeInsets.zero,
@@ -355,7 +358,6 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
 
                       const Divider(height: 20),
 
-                      // 시험 사용 중일 때 추가 블럭
                       if (temp) ...[
                         Container(
                           width: double.infinity,
@@ -379,22 +381,20 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                                 ],
                               ),
                               FilledButton.icon(
-                                // ← 여기서 편집 페이지로 연결
                                 onPressed: () async {
-                                  Navigator.pop(sheetCtx); // 시트 먼저 닫기
+                                  Navigator.pop(sheetCtx);
                                   final result = await Navigator.push<ExamEditResult>(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => const ExamEditPage(
-                                        initialQuestions: [],   // 빈 상태
-                                        initialPassScore: 60,   // 기본값
+                                        initialQuestions: [],
+                                        initialPassScore: 60,
                                       ),
                                     ),
                                   );
                                   if (!mounted) return;
                                   if (result != null) {
                                     setState(() {
-                                      // 문항이 1개 이상이면 사용 중으로 유지
                                       _requiresExam = result.questions.isNotEmpty || temp;
                                       _dirty = true;
                                     });
@@ -438,7 +438,6 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
 
                       const SizedBox(height: 16),
 
-                      // actions
                       Row(
                         children: [
                           OutlinedButton(
@@ -478,6 +477,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
   }
 
   Future<void> _editMaterialsSheet() async {
+    // 로컬 temp 복사
     final temp = _materials
         .map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url))
         .toList();
@@ -507,136 +507,156 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
               minChildSize: 0.4,
               maxChildSize: 0.9,
               builder: (_, controller) {
-                return SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                        child: Column(
-                          children: [
-                            _sheetGrabber(),
-                            const SizedBox(height: 8),
-                            const Text(
-                              '관련 자료 편집',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
-                                color: UiTokens.title,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: ListView.separated(
-                          controller: controller,
-                          padding: const EdgeInsets.fromLTRB(
-                            16, 0, 16, kActionBarHeight + kActionBarPaddingV + 12,
-                          ),
-                          itemCount: temp.length,
-                          separatorBuilder: (_, __) =>
-                          const SizedBox(height: 8),
-                          itemBuilder: (_, i) {
-                            final ctl =
-                            TextEditingController(text: temp[i].name);
-                            return TextField(
-                              controller: ctl,
-                              onChanged: (v) => temp[i].name = v,
-                              onSubmitted: (_) => _unfocus(),
-                              onTapOutside: (_) => _unfocus(),
-                              scrollPadding:
-                              const EdgeInsets.only(bottom: 180),
-                              decoration: InputDecoration(
-                                labelText: '자료 이름',
-                                filled: true,
-                                fillColor: const Color(0xFFF7F9FC),
-                                prefixIcon: Icon(temp[i].icon,
-                                    color: UiTokens.primaryBlue),
-                                suffixIcon: IconButton(
-                                  tooltip: '삭제',
-                                  icon: const Icon(Icons.close_rounded),
-                                  onPressed: () => setState(() => temp.removeAt(i)),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 14,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE6ECF3)),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE6ECF3)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                    color: UiTokens.primaryBlue,
-                                    width: 2,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      SafeArea(
-                        top: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          child: SizedBox(
-                            height: kActionBarHeight,
-                            child: Row(
+                return StatefulBuilder(
+                  builder: (context, setInner) {
+                    void addItem() => setInner(() => temp.add(_EditMaterial(name: '새 자료')));
+                    void removeAt(int i) {
+                      if (i >= 0 && i < temp.length) {
+                        setInner(() => temp.removeAt(i));
+                      }
+                    }
+
+                    return SafeArea(
+                      top: false,
+                      child: Column(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                            child: Column(
                               children: [
-                                OutlinedButton.icon(
-                                  onPressed: () => setState(() =>
-                                      temp.add(_EditMaterial(name: '새 자료'))),
-                                  icon: const Icon(Icons.add),
-                                  label: const Text('자료 추가'),
-                                  style: OutlinedButton.styleFrom(
-                                    minimumSize: const Size(0, 0),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 12),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
+                                _sheetGrabber(),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  '관련 자료 편집',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: UiTokens.title,
                                   ),
-                                ),
-                                const Spacer(),
-                                FilledButton(
-                                  onPressed: () {
-                                    _unfocus();
-                                    setState(() {
-                                      _materials
-                                        ..clear()
-                                        ..addAll(temp);
-                                      _dirty = true;
-                                    });
-                                    Navigator.pop(sheetCtx);
-                                  },
-                                  style: FilledButton.styleFrom(
-                                    minimumSize: const Size(0, 0),
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 18, vertical: 12),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                  ),
-                                  child: const Text('저장',
-                                      style:
-                                      TextStyle(fontWeight: FontWeight.w800)),
                                 ),
                               ],
                             ),
                           ),
-                        ),
+                          Expanded(
+                            child: ListView.separated(
+                              controller: controller,
+                              padding: const EdgeInsets.fromLTRB(
+                                16, 0, 16, kActionBarHeight + kActionBarPaddingV + 12,
+                              ),
+                              itemCount: temp.length,
+                              separatorBuilder: (_, __) =>
+                              const SizedBox(height: 8),
+                              itemBuilder: (_, i) {
+                                final nameCtl =
+                                TextEditingController(text: temp[i].name);
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: nameCtl,
+                                        onChanged: (v) => temp[i].name = v,
+                                        onSubmitted: (_) => _unfocus(),
+                                        onTapOutside: (_) => _unfocus(),
+                                        decoration: InputDecoration(
+                                          labelText: '자료 이름',
+                                          filled: true,
+                                          fillColor: const Color(0xFFF7F9FC),
+                                          prefixIcon: Icon(temp[i].icon,
+                                              color: UiTokens.primaryBlue),
+                                          contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 14,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                            BorderRadius.circular(14),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE6ECF3)),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                            BorderRadius.circular(14),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE6ECF3)),
+                                          ),
+                                          focusedBorder: OutlineInputBorder(
+                                            borderRadius:
+                                            BorderRadius.circular(14),
+                                            borderSide: const BorderSide(
+                                              color: UiTokens.primaryBlue,
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      tooltip: '삭제',
+                                      icon: const Icon(Icons.close_rounded),
+                                      onPressed: () => removeAt(i),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          SafeArea(
+                            top: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                              child: SizedBox(
+                                height: kActionBarHeight,
+                                child: Row(
+                                  children: [
+                                    OutlinedButton.icon(
+                                      onPressed: addItem, // ← setInner 사용
+                                      icon: const Icon(Icons.add),
+                                      label: const Text('자료 추가'),
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(0, 0),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                          BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    FilledButton(
+                                      onPressed: () {
+                                        _unfocus();
+                                        setState(() {
+                                          _materials
+                                            ..clear()
+                                            ..addAll(temp);
+                                          _dirty = true;
+                                        });
+                                        Navigator.pop(sheetCtx);
+                                      },
+                                      style: FilledButton.styleFrom(
+                                        minimumSize: const Size(0, 0),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 18, vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                          BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                      child: const Text('저장',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.w800)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -655,41 +675,72 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
       message: '저장하지 않은 내용은 사라집니다.',
       stayText: '계속 작성',
       leaveText: '나가기',
-      barrierDismissible: true, // 필요 시 false로 잠금 가능
+      barrierDismissible: true,
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
     _unfocus();
+    if (_saving) return;
     if (!_formKey.currentState!.validate()) return;
 
-    final week = int.parse(_weekCtl.text.trim());
-    final duration = int.parse(_durationCtl.text.trim());
-    final goals =
-    _splitGoals(_summary).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    setState(() => _saving = true);
 
-    final item = CurriculumItem(
-      id: _generateId(week),
-      week: week,
-      title: _titleCtl.text.trim(),
-      summary: goals.join(', '),
-      durationMinutes: duration,
-      hasVideo: _videoUrl != null,
-      requiresExam: _requiresExam,
-      videoUrl: '',
-      examSetCode: null,
-      resources: [], goals: []
-    );
+    try {
+      final week = int.parse(_weekCtl.text.trim());
+      final goals = _splitGoals(_summary)
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
 
-    Navigator.pop(
-      context,
-      CurriculumCreateResult(
-        item: item,
+      // 자료 → jsonb 배열로 변환 (URL 업로드는 나중에) TODO 나중에 파일피커로 해줘야함
+      final resources = _materials.map((m) {
+        final url = (m.url ?? '').trim();
+        final type = _guessType(url);
+        return {
+          'title': (m.name.trim().isEmpty ? '자료' : m.name.trim()),
+          if (url.isNotEmpty) 'url': url,
+          'type': type,
+        };
+      }).toList();
+
+      final code = _generateId(week);
+      final created = await SupabaseService.instance.createCurriculumViaRpc(
+        code: code,
+        week: week,
+        title: _titleCtl.text.trim(),
+        summary: goals.join(', '),
         goals: goals,
-        materials: _materials,
+        resources: resources,
         videoUrl: _videoUrl,
-      ),
-    );
+      );
+
+      final provider = context.read<CurriculumProvider>();
+      provider.upsertLocal(created);
+      // ignore: unawaited_futures
+      provider.refresh(force: true);
+
+      Navigator.pop(
+        context,
+        CurriculumCreateResult(
+          item: created, // durationMinutes는 UI에서 제거됨 → 모델은 0 유지
+          goals: goals,
+          materials: _materials,
+          videoUrl: _videoUrl,
+        ),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('과정이 생성되었습니다')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('생성 실패: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   String _generateId(int week) =>
@@ -723,9 +774,13 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                     color: UiTokens.title, fontWeight: FontWeight.w700)),
             actions: [
               TextButton(
-                onPressed: _save,
-                child: const Text('저장',
-                    style: TextStyle(fontWeight: FontWeight.w800)),
+                onPressed: _saving ? null : _save,
+                child: _saving
+                    ? const SizedBox(
+                  height: 18, width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+                    : const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
             ],
           ),
@@ -737,7 +792,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 기본 정보
+                  // 기본 정보 (소요 시간 필드 제거됨)
                   _SectionCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,45 +808,24 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                           (v == null || v.trim().isEmpty) ? '제목을 입력하세요' : null,
                         ),
                         const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextFormField(
-                                controller: _weekCtl,
-                                keyboardType: TextInputType.number,
-                                onChanged: (_) => _markDirty(),
-                                onTapOutside: (_) => _unfocus(),
-                                decoration: _inputDeco('주차 (숫자)'),
-                                validator: (v) {
-                                  final n = int.tryParse(v ?? '');
-                                  if (n == null || n <= 0) return '1 이상의 숫자';
-                                  return null;
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TextFormField(
-                                controller: _durationCtl,
-                                keyboardType: TextInputType.number,
-                                onChanged: (_) => _markDirty(),
-                                onTapOutside: (_) => _unfocus(),
-                                decoration: _inputDeco('소요 시간(분)'),
-                                validator: (v) {
-                                  final n = int.tryParse(v ?? '');
-                                  if (n == null || n <= 0) return '1 이상의 숫자';
-                                  return null;
-                                },
-                              ),
-                            ),
-                          ],
+                        TextFormField(
+                          controller: _weekCtl,
+                          keyboardType: TextInputType.number,
+                          onChanged: (_) => _markDirty(),
+                          onTapOutside: (_) => _unfocus(),
+                          decoration: _inputDeco('주차 (숫자)'),
+                          validator: (v) {
+                            final n = int.tryParse(v ?? '');
+                            if (n == null || n <= 0) return '1 이상의 숫자';
+                            return null;
+                          },
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 12),
 
-                  // 영상 (우상단 연필 → 업로드/삭제)
+                  // 영상
                   _SectionCard(
                     onEdit: _editVideoSheet,
                     child: Column(
@@ -835,7 +869,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 학습 목표 (연필 → 편집 모달)
+                  // 학습 목표
                   _SectionCard(
                     onEdit: _editGoalsSheet,
                     child: Column(
@@ -849,7 +883,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 시험 설정 (연필 → 토글 & 이동 버튼)
+                  // 시험 정보
                   _SectionCard(
                     onEdit: _editExamSheet,
                     child: Column(
@@ -871,7 +905,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                   ),
                   const SizedBox(height: 12),
 
-                  // 관련 자료 (연필 → 편집 모달)
+                  // 관련 자료
                   _SectionCard(
                     onEdit: _editMaterialsSheet,
                     child: Column(
@@ -882,8 +916,7 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                         if (_materials.isEmpty)
                           Text('등록된 자료가 없습니다.',
                               style: TextStyle(
-                                  color:
-                                  UiTokens.title.withOpacity(0.6),
+                                  color: UiTokens.title.withOpacity(0.6),
                                   fontWeight: FontWeight.w700))
                         else
                           Wrap(
@@ -904,14 +937,18 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                     width: double.infinity,
                     height: 52,
                     child: FilledButton(
-                      onPressed: _save,
+                      onPressed: _saving ? null : _save,
                       style: FilledButton.styleFrom(
                         backgroundColor: UiTokens.primaryBlue,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('저장',
-                          style: TextStyle(fontWeight: FontWeight.w800)),
+                      child: _saving
+                          ? const SizedBox(
+                        height: 20, width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                          : const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
                     ),
                   ),
                 ],
@@ -933,6 +970,16 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
     return parts.isEmpty
         ? ['핵심 개념 이해', '실습 체크리스트 숙지']
         : parts;
+  }
+
+  String _guessType(String? url) {
+    final u = (url ?? '').toLowerCase();
+    if (u.endsWith('.pdf')) return 'pdf';
+    if (RegExp(r'\.(png|jpe?g|gif|webp)$').hasMatch(u)) return 'image';
+    if (RegExp(r'\.(mp4|mov|m4v|webm)$').hasMatch(u)) return 'video';
+    if (u.contains('docs.google.com/spreadsheets')) return 'sheet';
+    if (u.contains('docs.google.com/document')) return 'doc';
+    return 'web';
   }
 
   Widget _bullet(String text) {
@@ -1062,6 +1109,8 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text, style: const TextStyle(color: UiTokens.title, fontSize: 14, fontWeight: FontWeight.w800));
+    return Text(text,
+        style: const TextStyle(
+            color: UiTokens.title, fontSize: 14, fontWeight: FontWeight.w800));
   }
 }

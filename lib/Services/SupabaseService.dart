@@ -226,4 +226,38 @@ class SupabaseService {
       extension: f.extension,
     );
   }
+
+  /// 커리큘럼 생성 (관리자 키 기반 RPC)
+  Future<CurriculumItem> createCurriculumViaRpc({
+    required String code,
+    required int week,
+    required String title,
+    required String summary,
+    required List<String> goals,
+    required List<Map<String, dynamic>> resources,
+    String? videoUrl,
+    String? adminKeyOverride,
+  }) async {
+    final key = adminKeyOverride ?? adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing (관리자 접속코드가 필요합니다)');
+    }
+
+    final res = await _sb.rpc('admin_create_curriculum', params: {
+      'p_admin_key': key,
+      'p_code': code,
+      'p_week': week,
+      'p_title': title,
+      'p_summary': summary,
+      'p_goals': goals,           // -> jsonb array
+      'p_resources': resources,   // -> jsonb array of objects
+      'p_video_url': videoUrl,
+    });
+
+    final row = (res is List && res.isNotEmpty) ? res.first : res;
+    if (row == null) {
+      throw Exception('admin_create_curriculum returned null');
+    }
+    return _mapCurriculumRow(Map<String, dynamic>.from(row as Map));
+  }
 }

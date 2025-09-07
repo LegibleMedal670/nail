@@ -13,9 +13,7 @@ enum MenteeSort { latest, name, progress, lowScore }
 
 /// ===== 멘티 관리 탭 =====
 class MenteeManageTab extends StatefulWidget {
-  final List<Mentee> mentees;
-  MenteeManageTab({super.key, List<Mentee>? mentees})
-      : mentees = mentees ?? [];
+  const MenteeManageTab({super.key});
 
   @override
   State<MenteeManageTab> createState() => _MenteeManageTabState();
@@ -32,7 +30,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
   @override
   void initState() {
     super.initState();
-    _data = List.of(widget.mentees); // 초기엔 데모 보여주고
     _fetch(); // 서버 데이터로 교체
   }
 

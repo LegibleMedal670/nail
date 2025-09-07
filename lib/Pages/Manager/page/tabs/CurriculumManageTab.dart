@@ -1,4 +1,6 @@
 // lib/Pages/Manager/page/tabs/CurriculumManageTab.dart
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -62,17 +64,19 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
         heroTag: 'fab_course_add',
         backgroundColor: UiTokens.primaryBlue,
         onPressed: () async {
+          final items = context.read<CurriculumProvider>().items;
+          final nextWeek = items.isEmpty ? 1 : (items.map((e) => e.week).reduce(max) + 1);
+
           final res = await Navigator.push<CurriculumCreateResult>(
             context,
             MaterialPageRoute(
-              builder: (_) => const CurriculumCreatePage(suggestedWeek: 15),
+              builder: (_) => CurriculumCreatePage(suggestedWeek: nextWeek),
             ),
           );
+
           if (res != null && mounted) {
-            // TODO: 생성도 서버 RPC/INSERT로 연결하면 여기서 저장 후 목록 새로고침
-            await context.read<CurriculumProvider>().refresh(force: true);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('과정이 생성되었습니다(목록 새로고침).')),
+              SnackBar(content: Text('‘${res.item.title}’이(가) 생성되었습니다.')),
             );
           }
         },
