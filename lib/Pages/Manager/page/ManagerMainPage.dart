@@ -1,3 +1,4 @@
+// lib/Pages/Manager/page/ManagerMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/curriculum_item.dart';
@@ -15,15 +16,13 @@ class ManagerMainPage extends StatefulWidget {
 class _ManagerMainPageState extends State<ManagerMainPage> {
   int _currentIndex = 0;
 
-  // 🔽 바텀내비 항목을 한 곳에서 관리
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: '대시보드'),
-    // BottomNavigationBarItem(icon: Icon(Icons.supervisor_account_outlined), label: '멘토 관리'),
     BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: '멘티 관리'),
     BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in_outlined), label: '교육 관리'),
   ];
 
-  // ---- 더미 데이터 (실데이터로 교체) ----
+  // 아래 더미 통계/대시보드는 그대로 두고, 커리큘럼 탭만 서버연동으로 바꿔요.
   final int totalMentees = 120;
   final int completedMentees = 84;
   final double avgScore = 86.5;
@@ -40,176 +39,17 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
     final menteesPerMentorAvg = totalMentors == 0 ? 0.0 : (totalMentees / totalMentors);
 
     final pages = <Widget>[
-      // 대시보드 탭
-      // ManagerDashboardTab(
-      //   completionRate: completionRate,
-      //   avgScore: avgScore,
-      //   waitingFinalReview: waitingFinalReview,
-      //   menteesPerMentor: menteesPerMentorAvg,
-      //   mentees: _mentees,
-      // ),
       MostProgressedMenteeTab(
         name: '김순돌',
         startedAt: DateTime.now(),
-        curriculum: [
-          CurriculumItem(id: 'w01', week: 1, title: '네일아트 기초 교육', summary: '도구 소개, 위생, 손톱 구조 이해', durationMinutes: 60, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w02', week: 2, title: '케어 기본', summary: '큐티클 정리, 파일링, 샌딩', durationMinutes: 75, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w03', week: 3, title: '베이스 코트 & 컬러 올리기', summary: '균일한 도포, 번짐 방지 요령', durationMinutes: 90, hasVideo: true,  requiresExam: true),
-          CurriculumItem(id: 'w04', week: 4, title: '마감재 사용법', summary: '탑젤/매트탑, 경화 시간', durationMinutes: 60, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w05', week: 5, title: '간단 아트 1', summary: '도트, 스트라이프, 그라데이션', durationMinutes: 80, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w06', week: 6, title: '간단 아트 2', summary: '프렌치, 마블 기초', durationMinutes: 80, hasVideo: true,  requiresExam: true),
-          CurriculumItem(id: 'w07', week: 7, title: '젤 오프 & 재시술', summary: '안전한 오프, 손상 최소화', durationMinutes: 50, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w08', week: 8, title: '손 위생/살롱 위생 표준', summary: '소독 루틴, 위생 체크리스트', durationMinutes: 45, hasVideo: false, requiresExam: false),
-          CurriculumItem(id: 'w09', week: 9, title: '고객 응대 매뉴얼', summary: '예약/상담/클레임 응대', durationMinutes: 60, hasVideo: false, requiresExam: true),
-          CurriculumItem(id: 'w10', week:10, title: '트러블 케이스', summary: '리프트/파손/알러지 예방과 대응', durationMinutes: 70, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w11', week:11, title: '젤 연장 기초', summary: '폼, 팁, 쉐입 만들기', durationMinutes: 90, hasVideo: true,  requiresExam: true),
-          CurriculumItem(id: 'w12', week:12, title: '아트 심화', summary: '스톤, 파츠, 믹스미디어', durationMinutes: 95, hasVideo: true,  requiresExam: false),
-          CurriculumItem(id: 'w13', week:13, title: '시술 시간 단축 팁', summary: '동선/세팅 최적화, 체크리스트', durationMinutes: 40, hasVideo: false, requiresExam: false),
-          CurriculumItem(id: 'w14', week:14, title: '종합 점검 & 모의평가', summary: '전 과정 복습, 취약 파트 점검', durationMinutes: 120, hasVideo: true, requiresExam: true),
-        ],
-        completedIds: {'w01', 'w02',}, // 임의 완료
-        progressRatio: {
-          'w03': 0.2, // 20% 시청 중
-        },
+        // ← 대시보드 데모는 그대로 둡니다. (차후 서버 연동)
+        curriculum: const [],
+        completedIds: const {},
+        progressRatio: const {},
       ),
-      // 멘토 관리 탭
-      // MentorManageTab(
-      //   menteesPerMentor: menteesPerMentor,
-      //   pending7d: pending7d,
-      //   pending28d: pending28d,
-      //   mentors: kDemoMentors,
-      // ),
       MenteeManageTab(),
-      CurriculumManageTab(
-        items: [
-          CurriculumItem(
-            id: 'w01',
-            week: 1,
-            title: '네일아트 기초 교육',
-            summary: '도구 소개, 위생, 손톱 구조 이해',
-            durationMinutes: 60,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w02',
-            week: 2,
-            title: '케어 기본',
-            summary: '큐티클 정리, 파일링, 샌딩',
-            durationMinutes: 75,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w03',
-            week: 3,
-            title: '베이스 코트 & 컬러 올리기',
-            summary: '균일한 도포, 번짐 방지 요령',
-            durationMinutes: 90,
-            hasVideo: true,
-            requiresExam: true,
-          ),
-          CurriculumItem(
-            id: 'w04',
-            week: 4,
-            title: '마감재 사용법',
-            summary: '탑젤/매트탑, 경화 시간',
-            durationMinutes: 60,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w05',
-            week: 5,
-            title: '간단 아트 1',
-            summary: '도트, 스트라이프, 그라데이션',
-            durationMinutes: 80,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w06',
-            week: 6,
-            title: '간단 아트 2',
-            summary: '프렌치, 마블 기초',
-            durationMinutes: 80,
-            hasVideo: true,
-            requiresExam: true,
-          ),
-          CurriculumItem(
-            id: 'w07',
-            week: 7,
-            title: '젤 오프 & 재시술',
-            summary: '안전한 오프, 손상 최소화',
-            durationMinutes: 50,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w08',
-            week: 8,
-            title: '손 위생/살롱 위생 표준',
-            summary: '소독 루틴, 위생 체크리스트',
-            durationMinutes: 45,
-            hasVideo: false,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w09',
-            week: 9,
-            title: '고객 응대 매뉴얼',
-            summary: '예약/상담/클레임 응대',
-            durationMinutes: 60,
-            hasVideo: false,
-            requiresExam: true,
-          ),
-          CurriculumItem(
-            id: 'w10',
-            week: 10,
-            title: '트러블 케이스',
-            summary: '리프트/파손/알러지 예방과 대응',
-            durationMinutes: 70,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w11',
-            week: 11,
-            title: '젤 연장 기초',
-            summary: '폼, 팁, 쉐입 만들기',
-            durationMinutes: 90,
-            hasVideo: true,
-            requiresExam: true,
-          ),
-          CurriculumItem(
-            id: 'w12',
-            week: 12,
-            title: '아트 심화',
-            summary: '스톤, 파츠, 믹스미디어',
-            durationMinutes: 95,
-            hasVideo: true,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w13',
-            week: 13,
-            title: '시술 시간 단축 팁',
-            summary: '동선/세팅 최적화, 체크리스트',
-            durationMinutes: 40,
-            hasVideo: false,
-            requiresExam: false,
-          ),
-          CurriculumItem(
-            id: 'w14',
-            week: 14,
-            title: '종합 점검 & 모의평가',
-            summary: '전 과정 복습, 취약 파트 점검',
-            durationMinutes: 120,
-            hasVideo: true,
-            requiresExam: true,
-          ),
-        ],
-      ),
+      // ✅ 하드코딩 제거 → 탭 내부에서 CurriculumProvider 사용
+      const CurriculumManageTab(),
     ];
 
     return Scaffold(
@@ -219,19 +59,13 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         centerTitle: false,
         elevation: 0,
         title: Text(
-          (_currentIndex == 0) ? '가장 진도가 빠른 신입' :_navItems[_currentIndex].label!,
+          (_currentIndex == 0) ? '가장 진도가 빠른 신입' : _navItems[_currentIndex].label!,
           style: const TextStyle(
             color: UiTokens.title,
             fontWeight: FontWeight.w700,
             fontSize: 26,
           ),
         ),
-        // actions: const [
-        //   Padding(
-        //     padding: EdgeInsets.only(right: 10),
-        //     child: Icon(Icons.person_add_alt_rounded, color: UiTokens.actionIcon, size: 28),
-        //   ),
-        // ],
       ),
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
@@ -242,27 +76,6 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         unselectedItemColor: const Color(0xFFB0B9C1),
         showUnselectedLabels: true,
         items: _navItems,
-      ),
-    );
-  }
-}
-
-class _PlaceholderTab extends StatelessWidget {
-  final String title;
-  const _PlaceholderTab({required this.title});
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Center(
-        child: Text(
-          title,
-          style: const TextStyle(
-            color: UiTokens.title,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
       ),
     );
   }

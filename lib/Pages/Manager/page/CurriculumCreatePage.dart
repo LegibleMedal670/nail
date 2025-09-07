@@ -676,6 +676,9 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
       durationMinutes: duration,
       hasVideo: _videoUrl != null,
       requiresExam: _requiresExam,
+      videoUrl: '',
+      examSetCode: null,
+      resources: [], goals: []
     );
 
     Navigator.pop(

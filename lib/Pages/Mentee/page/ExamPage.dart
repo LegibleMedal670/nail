@@ -119,12 +119,12 @@ class _ExamPageState extends State<ExamPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                      color: const Color(0xFFE6EAF0),
-                      borderRadius: BorderRadius.circular(3))),
+              // Container(
+              //     width: 40,
+              //     height: 4,
+              //     decoration: BoxDecoration(
+              //         color: const Color(0xFFE6EAF0),
+              //         borderRadius: BorderRadius.circular(3))),
               const SizedBox(height: 12),
               const Text('시험을 종료할까요?',
                   style: TextStyle(

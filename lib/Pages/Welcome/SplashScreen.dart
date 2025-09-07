@@ -26,7 +26,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
     // 커리큘럼은 SWR 방식: 캐시 즉시 반영, 서버는 백그라운드로 재검증
     // (idempotent 하므로 여러 번 호출돼도 안전)
-    context.read<CurriculumProvider>().ensureLoaded();
+    // context.read<CurriculumProvider>().ensureLoaded();
 
     // UserProvider 구독 셋업
     final next = context.read<UserProvider>();

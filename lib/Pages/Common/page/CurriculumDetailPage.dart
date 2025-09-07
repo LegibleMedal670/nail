@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -7,7 +8,9 @@ import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/page/ExamresultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Pages/Mentee/page/ExamPage.dart';
-
+import 'package:nail/Services/SupabaseService.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// 화면 모드: 관리자 편집 / 관리자 검토(멘티 진행 확인) / 멘티 수강
 enum CurriculumViewMode { adminEdit, adminReview, mentee }
@@ -32,12 +35,19 @@ class CurriculumDetailResult {
   const CurriculumDetailResult({this.deleted = false});
 }
 
-/// 간단 자료 모델(이 페이지 전용)
+/// 페이지 내부 전용 자료 모델
 class _EditMaterial {
   String name;
   IconData icon;
-  String? url;
-  _EditMaterial({required this.name, this.icon = Icons.menu_book_outlined, this.url});
+  String? url;          // 원격 URL(있을 때만 열기 가능)
+  bool localPending;    // 파일피커로 추가만 된 상태(업로드 X)
+
+  _EditMaterial({
+    required this.name,
+    this.icon = Icons.menu_book_outlined,
+    this.url,
+    this.localPending = false,
+  });
 }
 
 class CurriculumDetailPage extends StatefulWidget {
@@ -51,6 +61,9 @@ class CurriculumDetailPage extends StatefulWidget {
 
   /// (adminReview 전용) 검토 대상 멘티명 표시용
   final String? menteeName;
+
+  /// 관리자 인증 키(접속 코드 기반) — 없으면 SupabaseService.instance.adminKey 사용
+  final String? adminKey;
 
   /// 콜백들
   // 멘티 인터랙션
@@ -70,6 +83,7 @@ class CurriculumDetailPage extends StatefulWidget {
     this.mode = CurriculumViewMode.adminEdit,
     this.progress,
     this.menteeName,
+    this.adminKey,
     this.onPlay,
     this.onContinueWatch,
     this.onTakeExam,
@@ -84,21 +98,24 @@ class CurriculumDetailPage extends StatefulWidget {
 }
 
 class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
-  // === 로컬 편집 상태 (이 페이지에서 즉시 반영) ===
+  // === 로컬 상태 ===
   late CurriculumItem _item = widget.item;
-  late String _summary = widget.item.summary;
+
+  // 학습 목표는 item.goals 사용
+  late List<String> _goals = List<String>.from(widget.item.goals);
+
+  // 시험 필요 여부(파생값이지만 UI 토글용)
   late bool _requiresExam = widget.item.requiresExam;
 
-  // 영상은 실제 URL 보관 대신 존재 여부만 데모로 관리
-  late String? _videoUrl = widget.item.hasVideo ? 'present://video' : null;
+  // 영상 URL(저장 시 서버 반영은 아직 안 함 – UI용)
+  late String? _videoUrl = widget.item.videoUrl;
 
-  // 자료(데모 기본 두 개)
-  final List<_EditMaterial> _materials = [
-    _EditMaterial(name: '위생 체크리스트'),
-    _EditMaterial(name: '시술 단계 가이드'),
-  ];
+  // 자료(서버 resources → 변환). 서버에서 온 것은 localPending=false
+  List<_EditMaterial> _materials = [];
 
-  bool _dirty = false; // ← 변경사항 발생 시 true
+  bool _dirty = false; // 변경사항 여부
+  bool _saving = false;
+
   void _markDirty() => setState(() => _dirty = true);
   void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
 
@@ -108,22 +125,53 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   CurriculumProgress get _pr => widget.progress ?? const CurriculumProgress();
 
-  // UI 데모용 시험 문항 수 생성
-  Map<String, int> _examCounts(CurriculumItem it) {
-    if (!_requiresExam) return {'mcq': 0, 'sa': 0, 'order': 0};
-    final base = 4 + (it.week % 3); // 4~6
-    return {'mcq': base + 4, 'sa': (base / 2).floor(), 'order': it.week % 2};
+  @override
+  void initState() {
+    super.initState();
+    _hydrateFromItem(widget.item);
+    _reloadFromServer(); // 단건 최신화(SWR) – 초기 1회
   }
 
-  // 학습 목표 파싱/출력
-  static List<String> _splitGoals(String s) {
-    final parts = s.split(RegExp(r'[,\u3001]')).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
-    return parts.isEmpty ? ['핵심 개념 이해', '실습 체크리스트 숙지', '시험 대비 포인트 정리'] : parts;
+  void _hydrateFromItem(CurriculumItem it) {
+    _item = it;
+    _goals = List<String>.from(it.goals);
+    _requiresExam = it.requiresExam;
+    _videoUrl = it.videoUrl;
+
+    _materials = it.resources.map((m) {
+      final title = (m['title'] ?? m['name'] ?? '').toString();
+      final url = (m['url'] ?? '').toString();
+      final type = (m['type'] ?? '').toString().toLowerCase();
+      return _EditMaterial(
+        name: title.isEmpty ? '자료' : title,
+        icon: _iconFromType(type, url),
+        url: url.isEmpty ? null : url,
+        localPending: false, // 서버에서 온 자료는 업로드 완료 상태
+      );
+    }).toList();
+  }
+
+  Future<void> _reloadFromServer() async {
+    final fresh = await SupabaseService.instance.getCurriculumItemByCode(_item.id);
+    if (!mounted || fresh == null) return;
+    // 사용자가 편집 중일 수 있으니, 초기 1회만 덮도록 guard가 필요할 수 있음.
+    // 지금은 단순히 최신 상태로 수화하되 _dirty는 유지.
+    setState(() {
+      // 수화하되, 사용자가 현재 편집 중인 필드는 존중하려면 머지 전략 필요.
+      // 요구사항 간단화를 위해 서버 값을 반영(초기 로드 시점에 유효).
+      if (!_dirty) _hydrateFromItem(fresh);
+    });
+  }
+
+  Map<String, int> _examCounts(CurriculumItem it) {
+    if (!_requiresExam) return {'mcq': 0, 'sa': 0, 'order': 0};
+    final base = 4 + (it.week % 3); // 4~6 (데모 표시용)
+    return {'mcq': base + 4, 'sa': (base / 2).floor(), 'order': it.week % 2};
   }
 
   // 뒤로가기 공통 처리
   Future<void> _handleBack() async {
-    if (!_dirty || !_isAdminEdit) { // 편집 모드가 아니면 경고 없이 나감
+    if (!_dirty || !_isAdminEdit) {
       if (mounted) Navigator.pop(context);
       return;
     }
@@ -138,7 +186,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     if (leave && mounted) Navigator.pop(context);
   }
 
-  // ====== 모달 편집기들 (adminEdit 전용) ======
+  // ====== 편집 시트들 (모두 "로컬 변경만" 반영) ======
+
   Future<void> _editVideoSheet() async {
     if (!_isAdminEdit) return;
     await showModalBottomSheet<void>(
@@ -169,29 +218,27 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     const SizedBox(height: 16),
                     ListTile(
                       leading: const Icon(Icons.video_library_outlined),
-                      title: Text(_videoUrl == null ? '영상 업로드' : '영상 변경'),
-                      subtitle: Text(_videoUrl == null ? '서버로 업로드하여 연결합니다' : '기존 영상을 새로운 영상으로 교체합니다'),
+                      title: Text(_videoUrl == null ? '영상 연결(데모)' : '영상 변경(데모)'),
+                      subtitle: Text(_videoUrl == null ? 'UI만 반영합니다(서버 저장은 하단 저장하기에서 일괄 처리 예정)' : 'UI만 변경합니다'),
                       onTap: () {
                         setState(() {
                           _videoUrl = 'uploaded://demo_video.mp4';
-                          _dirty = true; // ← 변경됨
+                          _dirty = true;
                         });
                         Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('영상이 연결(변경)되었습니다 (데모)')));
                       },
                     ),
                     if (_videoUrl != null)
                       ListTile(
                         leading: const Icon(Icons.delete_outline, color: Colors.red),
-                        title: const Text('영상 삭제'),
-                        subtitle: const Text('현재 연결된 영상을 제거합니다'),
+                        title: const Text('영상 연결 해제'),
+                        subtitle: const Text('UI에서만 제거됩니다'),
                         onTap: () {
                           setState(() {
                             _videoUrl = null;
-                            _dirty = true; // ← 변경됨
+                            _dirty = true;
                           });
                           Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('영상이 삭제되었습니다')));
                         },
                       ),
                   ],
@@ -206,7 +253,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   Future<void> _editGoalsSheet() async {
     if (!_isAdminEdit) return;
-    final goals = _splitGoals(_summary);
+    final goals = List<String>.from(_goals);
+
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
@@ -286,14 +334,15 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 const Spacer(),
                                 FilledButton(
                                   onPressed: () {
+                                    final newGoals = goals.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
                                     setState(() {
-                                      _summary = goals.map((e) => e.trim()).where((e) => e.isNotEmpty).join(', ');
-                                      _dirty = true; // ← 변경됨
+                                      _goals = newGoals;
+                                      _dirty = true;
                                     });
                                     Navigator.pop(context);
                                   },
                                   style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                                  child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                                  child: const Text('확인', style: TextStyle(fontWeight: FontWeight.w800)),
                                 ),
                               ],
                             ),
@@ -409,14 +458,17 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       final result = await Navigator.push<ExamEditResult>(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (_) => ExamEditPage(
+                                          builder: (_) => const ExamEditPage(
                                             initialQuestions: [],
                                             initialPassScore: 60,
                                           ),
                                         ),
                                       );
                                       if (result != null) {
-                                        // TODO: 저장 처리
+                                        setState(() {
+                                          _requiresExam = true; // UI만 반영
+                                          _dirty = true;
+                                        });
                                       }
                                     },
                                 icon: const Icon(Icons.assignment, size: 18),
@@ -464,7 +516,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                             style: FilledButton.styleFrom(
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                             ),
-                            child: const Text('저장'),
+                            child: const Text('확인'),
                           ),
                         ],
                       ),
@@ -482,7 +534,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   Future<void> _editMaterialsSheet() async {
     if (!_isAdminEdit) return;
-    final temp = _materials.map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url)).toList();
+    final temp = _materials.map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url, localPending: e.localPending)).toList();
 
     await showModalBottomSheet<void>(
       context: context,
@@ -504,12 +556,32 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
             padding: EdgeInsets.only(bottom: bottomInset),
             child: DraggableScrollableSheet(
               expand: false,
-              initialChildSize: 0.6,
+              initialChildSize: 0.72,
               minChildSize: 0.4,
-              maxChildSize: 0.9,
+              maxChildSize: 0.92,
               builder: (_, controller) {
                 return StatefulBuilder(
                   builder: (context, setInner) {
+                    Future<void> addByPickFile() async {
+                      try {
+                        final pf = await SupabaseService.instance.pickOneFile();
+                        if (pf == null) return;
+
+                        // 업로드는 하지 않음 — UI에만 추가(미업로드 상태)
+                        setInner(() {
+                          temp.add(_EditMaterial(
+                            name: pf.name,
+                            icon: _iconFromType(_guessType(pf.name), pf.name),
+                            url: null,            // 아직 원격 URL 없음
+                            localPending: true,   // 미업로드 표시
+                          ));
+                        });
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('파일 선택 실패: $e')));
+                      }
+                    }
+
                     return SafeArea(
                       top: false,
                       child: Column(
@@ -517,10 +589,10 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                           Padding(
                             padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                             child: Column(
-                              children: [
-                                _sheetGrabber(),
-                                const SizedBox(height: 8),
-                                const Text('관련 자료 편집',
+                              children: const [
+                                _SheetGrabber(),
+                                SizedBox(height: 8),
+                                Text('관련 자료 편집',
                                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: UiTokens.title)),
                               ],
                             ),
@@ -530,41 +602,56 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                               controller: controller,
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, kActionBarHeight + 28),
                               itemCount: temp.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
                               itemBuilder: (_, i) {
-                                final ctl = TextEditingController(text: temp[i].name);
-                                return TextField(
-                                  controller: ctl,
-                                  onChanged: (v) => temp[i].name = v,
-                                  onSubmitted: (_) => _unfocus(),
-                                  onTapOutside: (_) => _unfocus(),
-                                  scrollPadding: const EdgeInsets.only(bottom: 180),
-                                  decoration: InputDecoration(
-                                    labelText: '자료 이름',
-                                    filled: true,
-                                    fillColor: const Color(0xFFF7F9FC),
-                                    prefixIcon: Icon(temp[i].icon, color: UiTokens.primaryBlue),
-                                    suffixIcon: IconButton(
-                                      tooltip: '삭제',
-                                      icon: const Icon(Icons.close_rounded),
-                                      onPressed: () {
-                                        if (i >= 0 && i < temp.length) setInner(() => temp.removeAt(i));
-                                      },
+                                final nameCtl = TextEditingController(text: temp[i].name);
+                                final isPending = temp[i].localPending;
+                                final hint = isPending
+                                    ? '로컬 파일(미업로드) — 저장하기 이후에 업로드 흐름 연결 예정'
+                                    : (temp[i].url ?? '');
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    TextField(
+                                      controller: nameCtl,
+                                      onChanged: (v) => temp[i].name = v,
+                                      onSubmitted: (_) => _unfocus(),
+                                      decoration: _inputDeco('자료 이름'),
                                     ),
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(color: Color(0xFFE6ECF3)),
+                                    if (hint.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 6),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              isPending ? Icons.file_download_off_rounded : Icons.link_rounded,
+                                              size: 16,
+                                              color: isPending ? Colors.orange : UiTokens.actionIcon,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                hint,
+                                                style: TextStyle(
+                                                  color: UiTokens.title.withOpacity(0.55),
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 12,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: IconButton(
+                                        tooltip: '삭제',
+                                        icon: const Icon(Icons.delete_outline),
+                                        onPressed: () => setInner(() => temp.removeAt(i)),
+                                      ),
                                     ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(color: Color(0xFFE6ECF3)),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                      borderSide: const BorderSide(color: UiTokens.primaryBlue, width: 2),
-                                    ),
-                                  ),
+                                  ],
                                 );
                               },
                             ),
@@ -578,9 +665,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 child: Row(
                                   children: [
                                     OutlinedButton.icon(
-                                      onPressed: () => setInner(() => temp.add(_EditMaterial(name: '새 자료'))),
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('자료 추가'),
+                                      onPressed: addByPickFile,
+                                      icon: const Icon(Icons.file_upload_outlined),
+                                      label: const Text('파일 추가'),
                                       style: OutlinedButton.styleFrom(
                                         minimumSize: const Size(0, 0),
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -592,7 +679,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       onPressed: () {
                                         _unfocus();
                                         setState(() {
-                                          _materials..clear()..addAll(temp);
+                                          _materials
+                                            ..clear()
+                                            ..addAll(temp);
                                           _dirty = true;
                                         });
                                         Navigator.pop(sheetCtx);
@@ -602,7 +691,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                       ),
-                                      child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                                      child: const Text('확인', style: TextStyle(fontWeight: FontWeight.w800)),
                                     ),
                                   ],
                                 ),
@@ -622,6 +711,71 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
   }
 
+  // ===== 저장: CTA에서 한 번에 서버 동기화 =====
+  Future<void> _saveAllEdits() async {
+    if (!_dirty || _saving) return;
+
+    final adminKey = widget.adminKey ?? SupabaseService.instance.adminKey;
+    if (adminKey == null || adminKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('관리자 인증이 필요합니다(adminKey 없음)')));
+      return;
+    }
+
+    setState(() => _saving = true);
+
+    // 아직 스토리지 업로드는 안 하므로, 서버로 보내는 resources는
+    // 원격 URL을 가진 항목만 포함 (localPending은 보류)
+    final ready = _materials.where((m) => !m.localPending && (m.url?.trim().isNotEmpty ?? false)).toList();
+
+    final resourcesJson = ready.map((m) {
+      final name = m.name.trim().isEmpty ? '자료' : m.name.trim();
+      final url  = (m.url ?? '').trim();
+      final type = _guessType(url);
+      return {
+        'title': name,
+        'url': url,
+        'type': type,
+      };
+    }).toList();
+
+    try {
+      await SupabaseService.instance.saveEditsViaRpc(
+        code: _item.id,
+        goals: _goals,
+        resources: resourcesJson,
+        adminKey: adminKey,
+      );
+
+      // 저장 후 최신화(SWR)
+      if (mounted) {
+        setState(() {
+          _dirty = false;
+          _saving = false;
+        });
+        // 전역 목록 최신화(SWR)
+        try {
+          context.read<dynamic>() /* CurriculumProvider */ .refresh(force: true);
+        } catch (_) {/* Provider 없으면 무시 */}
+
+        // 단건도 갱신
+        await _reloadFromServer();
+
+        final pendingCount = _materials.where((m) => m.localPending).length;
+        final msg = pendingCount > 0
+            ? '변경사항 저장 완료 (미업로드 ${pendingCount}개 보류)'
+            : '변경사항이 저장되었습니다';
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (e) {
+      if (mounted) {
+        print(e);
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
+      }
+    }
+  }
+
+  // ===== 뷰 =====
   @override
   Widget build(BuildContext context) {
     final counts = _examCounts(_item);
@@ -779,7 +933,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   ),
                                 ),
 
-                              // adminReview 모드: 우상단 시청률 뱃지(한 덩어리)
+                              // adminReview 모드: 우상단 시청률 뱃지
                               if (_isAdminReview)
                                 Positioned(
                                   right: 12, top: 12,
@@ -801,7 +955,10 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                       children: [
                         const SectionTitle('학습 목표'),
                         const SizedBox(height: 8),
-                        ..._splitGoals(_summary).map(_bullet),
+                        if (_goals.isEmpty)
+                          Text('등록된 학습 목표가 없습니다.', style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700))
+                        else
+                          ..._goals.map(_bullet),
                       ],
                     ),
                   ),
@@ -866,7 +1023,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
                                     onPressed: () {
-                                      // 데모용 샘플 문항
+                                      // 데모 문항
                                       final demoQuestions = <ExamQuestion>[
                                         ExamQuestion.mcq(
                                           id: 'q_mcq_001',
@@ -915,38 +1072,13 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
-                                    ///TODO : 서버연동하면주석해제
-                                    // onPressed: (_pr.attempts > 0)
-                                    //     ? (widget.onOpenExamReport ?? (){
-                                    //   Navigator.push(
-                                    //     context,
-                                    //     MaterialPageRoute(
-                                    //       builder: (_) => ExamResultPage.demo(), // ← 데모
-                                    //       // 실제 데이터가 있다면:
-                                    //       // builder: (_) => ExamResultPage(
-                                    //       //   menteeName: mentee.name,
-                                    //       //   curriculumTitle: 'W${item.week}. ${item.title}',
-                                    //       //   passScore: 60,
-                                    //       //   attempts: yourAttemptsList, // 서버에서 가져온 List<ExamAttemptResult>
-                                    //       // ),
-                                    //     ),
-                                    //   );
-                                    // })
-                                    //     : null,
                                     onPressed: (){
                                       Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (_) => ExamResultPage.demo(), // ← 데모
-                                                // 실제 데이터가 있다면:
-                                                // builder: (_) => ExamResultPage(
-                                                //   menteeName: mentee.name,
-                                                //   curriculumTitle: 'W${item.week}. ${item.title}',
-                                                //   passScore: 60,
-                                                //   attempts: yourAttemptsList, // 서버에서 가져온 List<ExamAttemptResult>
-                                                // ),
-                                              ),
-                                            );
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ExamResultPage.demo(),
+                                        ),
+                                      );
                                     },
                                     style: FilledButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -981,7 +1113,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: _materials.map((m) => _fileChip(m.icon, m.name)).toList(),
+                            children: _materials.map((m) => _fileChip(m.icon, m.name, url: m.url, localPending: m.localPending)).toList(),
                           ),
                       ],
                     ),
@@ -991,17 +1123,24 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
                   // ===== 하단 CTA =====
                   _isAdminReview
-                      ? const SizedBox.shrink() // (요청) 관리자 검토 모드에선 CTA 숨김
+                      ? const SizedBox.shrink() // 관리자 검토 모드에선 CTA 숨김
                       : SizedBox(
                     width: double.infinity,
                     height: 52,
                     child: FilledButton(
-                      onPressed: _ctaOnPressed(),
+                      onPressed: _isAdminEdit
+                          ? (_dirty && !_saving ? _saveAllEdits : null)
+                          : (widget.onContinueWatch ?? widget.onPlay),
                       style: FilledButton.styleFrom(
                         backgroundColor: UiTokens.primaryBlue,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(_ctaLabel(), style: const TextStyle(fontWeight: FontWeight.w800)),
+                      child: Text(
+                        _isAdminEdit
+                            ? (_saving ? '저장 중...' : (_dirty ? '저장하기' : '변경 없음'))
+                            : (_pr.watchedRatio <= 0 ? '시청하기' : (_pr.watchedRatio < 1 ? '이어보기' : '다시보기')),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
                     ),
                   ),
                 ],
@@ -1013,7 +1152,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
   }
 
-  // ===== 작은 빌더들 =====
+  // ===== 작은 빌더들/유틸 =====
   Widget _modeChip() {
     String label;
     Color bg, border, fg;
@@ -1083,8 +1222,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
   }
 
-
-
   Widget _reviewHeader(String name) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1102,12 +1239,10 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
             style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
           ),
           const Spacer(),
-          // (요청) 멘티로 보기 버튼 제거
         ],
       ),
     );
   }
-
 
   Widget finalExamRows(Map<String, int> counts) {
     return Column(
@@ -1120,29 +1255,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       ],
     );
   }
-
-  String _ctaLabel() {
-    if (_isAdminEdit) return '수정하기';
-    if (_isAdminReview) return '멘티로 보기';
-    // mentee
-    if (_pr.watchedRatio <= 0) return '시청하기';
-    if (_pr.watchedRatio < 1) return '이어보기';
-    return '다시보기';
-  }
-
-  VoidCallback? _ctaOnPressed() {
-    if (_isAdminEdit) return _editGoalsSheet;
-    if (_isAdminReview) {
-      return widget.onImpersonate ??
-              () => ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('멘티 화면으로 전환합니다(데모).')),
-          );
-    }
-    // mentee
-    return widget.onContinueWatch ?? widget.onPlay;
-  }
-
-  static Iterable<String> _bulletsFrom(String s) => _splitGoals(s);
 
   Widget _bullet(String text) {
     return Padding(
@@ -1172,37 +1284,68 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
   }
 
-  Widget _fileChip(IconData icon, String name) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(color: const Color(0xFFE9F2FF), borderRadius: BorderRadius.circular(10)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 16, color: UiTokens.primaryBlue),
-        const SizedBox(width: 6),
-        Text(name, style: const TextStyle(color: UiTokens.primaryBlue, fontWeight: FontWeight.w800)),
-      ]),
+  IconData _iconFromType(String type, String url) {
+    final u = url.toLowerCase();
+    if (type == 'pdf' || u.endsWith('.pdf')) return Icons.picture_as_pdf_outlined;
+    if (type == 'image' || RegExp(r'\.(png|jpe?g|gif|webp)$').hasMatch(u)) return Icons.image_outlined;
+    if (type == 'video' || RegExp(r'\.(mp4|mov|m4v|webm)$').hasMatch(u)) return Icons.movie_outlined;
+    if (type == 'sheet' || u.contains('docs.google.com/spreadsheets')) return Icons.table_view_outlined;
+    if (type == 'doc' || u.contains('docs.google.com/document')) return Icons.description_outlined;
+    return Icons.link_outlined;
+  }
+
+  String _guessType(String? urlOrName) {
+    final u = (urlOrName ?? '').toLowerCase();
+    if (u.endsWith('.pdf')) return 'pdf';
+    if (RegExp(r'\.(png|jpe?g|gif|webp)$').hasMatch(u)) return 'image';
+    if (RegExp(r'\.(mp4|mov|m4v|webm)$').hasMatch(u)) return 'video';
+    if (u.contains('docs.google.com/spreadsheets')) return 'sheet';
+    if (u.contains('docs.google.com/document')) return 'doc';
+    return 'web';
+  }
+
+  Widget _fileChip(IconData icon, String name, {String? url, bool localPending = false}) {
+    final canOpen = !localPending && url != null && url.isNotEmpty && Uri.tryParse(url)?.hasScheme == true;
+    return InkWell(
+      onTap: canOpen
+          ? () async {
+        final uri = Uri.parse(url!);
+        final ok = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+        if (!ok && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('링크를 열 수 없어요')));
+        }
+      }
+          : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: localPending ? const Color(0xFFFFF1E6) : const Color(0xFFE9F2FF),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: localPending ? const Color(0xFFFECBA1) : const Color(0xFFD7E6FF)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 16, color: localPending ? const Color(0xFF9A3412) : UiTokens.primaryBlue),
+          const SizedBox(width: 6),
+          Text(
+            localPending ? '$name (미업로드)' : name,
+            style: TextStyle(
+              color: localPending ? const Color(0xFF9A3412) : UiTokens.primaryBlue,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ]),
+      ),
     );
   }
 
   static Widget _sheetGrabber() => Container(
-    width: 44, height: 4, margin: const EdgeInsets.only(bottom: 10),
+    width: 44,
+    height: 4,
+    margin: const EdgeInsets.only(bottom: 10),
     decoration: BoxDecoration(color: const Color(0xFFE6EAF0), borderRadius: BorderRadius.circular(3)),
-  );
-
-  static InputDecoration _inputDeco(String label) => InputDecoration(
-    labelText: label, isDense: true, filled: true, fillColor: const Color(0xFFF7F9FC),
-    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-    enabledBorder: const OutlineInputBorder(
-      borderSide: BorderSide(color: Color(0xFFE6ECF3)), borderRadius: BorderRadius.all(Radius.circular(12)),
-    ),
-    focusedBorder: const OutlineInputBorder(
-      borderSide: BorderSide(color: UiTokens.primaryBlue, width: 2), borderRadius: BorderRadius.all(Radius.circular(12)),
-    ),
   );
 }
 
-/// 공통 섹션 카드 + (관리자 편집일 때) 우상단 연필 버튼
 class _SectionCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -1251,3 +1394,36 @@ class _SectionCard extends StatelessWidget {
     );
   }
 }
+
+class _SheetGrabber extends StatelessWidget {
+  const _SheetGrabber();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 4,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE6EAF0),
+        borderRadius: BorderRadius.circular(3),
+      ),
+    );
+  }
+}
+
+InputDecoration _inputDeco(String label) => InputDecoration(
+  labelText: label,
+  isDense: true,
+  filled: true,
+  fillColor: const Color(0xFFF7F9FC),
+  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  enabledBorder: const OutlineInputBorder(
+    borderSide: BorderSide(color: Color(0xFFE6ECF3)),
+    borderRadius: BorderRadius.all(Radius.circular(12)),
+  ),
+  focusedBorder: const OutlineInputBorder(
+    borderSide: BorderSide(color: UiTokens.primaryBlue, width: 2),
+    borderRadius: BorderRadius.all(Radius.circular(12)),
+  ),
+);

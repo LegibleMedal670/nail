@@ -82,6 +82,7 @@ class MenteeSummaryTile extends StatelessWidget {
         durationMinutes: 0,
         hasVideo: false,
         requiresExam: false,
+          videoUrl: '', examSetCode: '', resources: [], goals: []
       ),
     );
 
@@ -315,6 +316,7 @@ List<CurriculumItem> _demoCurriculum() => const [
     durationMinutes: 60,
     hasVideo: true,
     requiresExam: true,
+      videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w02',
@@ -323,7 +325,7 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '안전한 큐티클 정리와 파일링 각도',
     durationMinutes: 75,
     hasVideo: true,
-    requiresExam: true,
+    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w03',
@@ -332,6 +334,6 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '도포 순서, 경화 시간, 흔한 실수',
     durationMinutes: 90,
     hasVideo: true,
-    requiresExam: true,
+    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
 ];

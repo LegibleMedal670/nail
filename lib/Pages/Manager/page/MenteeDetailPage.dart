@@ -444,7 +444,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
-// ===== 데모 커리큘럼 =====
+// ===== 데모 커리큘럼 ===== TODO 커리큘럼
 List<CurriculumItem> _demoCurriculum() => const [
   CurriculumItem(
     id: 'w01',
@@ -453,7 +453,7 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '필수 위생, 도구 종류, 기본 사용법',
     durationMinutes: 60,
     hasVideo: true,
-    requiresExam: false,
+    requiresExam: false,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w02',
@@ -462,7 +462,7 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '안전한 큐티클 정리와 파일링 각도',
     durationMinutes: 75,
     hasVideo: true,
-    requiresExam: true,
+    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w03',
@@ -471,7 +471,7 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '도포 순서, 경화 시간, 흔한 실수',
     durationMinutes: 90,
     hasVideo: true,
-    requiresExam: true,
+    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w04',
@@ -480,7 +480,7 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '탑젤/매트탑, 경화 시간',
     durationMinutes: 60,
     hasVideo: true,
-    requiresExam: false,
+    requiresExam: false,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w05',
@@ -489,6 +489,6 @@ List<CurriculumItem> _demoCurriculum() => const [
     summary: '도트, 스트라이프, 그라데이션',
     durationMinutes: 80,
     hasVideo: true,
-    requiresExam: false,
+    requiresExam: false,videoUrl: '', examSetCode: '', resources: [], goals: []
   ),
 ];
