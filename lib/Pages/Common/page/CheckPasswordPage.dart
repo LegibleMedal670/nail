@@ -2,11 +2,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:nail/Pages/Manager/models/curriculum_item.dart';
 import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
 import 'package:nail/Providers/UserProvider.dart';
-import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 
 enum EntryMode { manager, mentee }
@@ -42,9 +40,6 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
 
   String get _code => _controller.text;
   bool get _isFilled => _code.length == 4;
-
-  // 관리자 비번 (데모)
-  static const String _adminPassword = '1234';
 
   bool _isError = false;       // 현재 에러 상태(박스/점 색상 반영)
   bool _showErrorText = false; // 안내 문구 노출
@@ -143,28 +138,11 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
       return;
     }
 
-    // === 멘티: Supabase에서 표시용 정보 읽어와서 전달 ===
     try {
-      final row = await SupabaseService.instance.loginWithKey(code);
-      if (row == null) {
-        await _failFeedback('사용자 정보를 불러오지 못했습니다');
-        return;
-      }
 
-      final String name = (row['nickname'] as String?) ?? user.nickname;
-      final DateTime startedAt = row['joined_at'] != null
-          ? DateTime.parse(row['joined_at'] as String)
-          : DateTime.now();
-      final String? photoUrl = row['photo_url'] as String?;
-
+      // 성공 분기에서 관리자 아니면:
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) => MenteeMainPage(
-            name: name,
-            startedAt: startedAt,
-            photoUrl: photoUrl,
-          ),
-        ),
+        MaterialPageRoute(builder: (_) => const MenteeMainPage()),
             (route) => false,
       );
     } catch (e) {
