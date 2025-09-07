@@ -20,7 +20,7 @@ class MenteeManageTab extends StatefulWidget {
 }
 
 class _MenteeManageTabState extends State<MenteeManageTab> {
-  late List<Mentee> _data; // 내부 리스트 상태
+  List<Mentee> _data = [];
   MenteeSort _sort = MenteeSort.latest;
   String? _expandedId;
 

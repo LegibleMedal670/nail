@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -8,6 +7,7 @@ import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/page/ExamresultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Pages/Mentee/page/ExamPage.dart';
+import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -169,12 +169,28 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     return {'mcq': base + 4, 'sa': (base / 2).floor(), 'order': it.week % 2};
   }
 
-  // 뒤로가기 공통 처리
   Future<void> _handleBack() async {
+    // 1) 저장 중이면 뒤로가기 차단 (이중 탭/중복 저장 방지)
+    if (_saving) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('저장 중에는 나갈 수 없어요. 잠시만 기다려주세요.')),
+        );
+      }
+      return;
+    }
+
+    // 2) 키보드 닫기 (UX)
+    _unfocus();
+
+    // 3) 변경 없음이거나 편집 모드가 아니면 바로 나감
     if (!_dirty || !_isAdminEdit) {
       if (mounted) Navigator.pop(context);
       return;
     }
+
+    // 4) 변경사항이 있으면 확인 모달
     final leave = await showDiscardChangesDialog(
       context,
       title: '변경사항을 저장하지 않고 나갈까요?',
@@ -183,6 +199,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       leaveText: '나가기',
       barrierDismissible: true,
     );
+
     if (leave && mounted) Navigator.pop(context);
   }
 
@@ -754,7 +771,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
         });
         // 전역 목록 최신화(SWR)
         try {
-          context.read<dynamic>() /* CurriculumProvider */ .refresh(force: true);
+          context.read<CurriculumProvider>().refresh(force: true);
         } catch (_) {/* Provider 없으면 무시 */}
 
         // 단건도 갱신
