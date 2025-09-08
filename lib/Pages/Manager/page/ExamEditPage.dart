@@ -290,7 +290,8 @@ class _ExamEditPageState extends State<ExamEditPage> {
             actions: [
               TextButton(
                 onPressed: _save,
-                child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                child:
+                const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
             ],
           ),
@@ -319,9 +320,12 @@ class _ExamEditPageState extends State<ExamEditPage> {
                           runSpacing: 8,
                           children: [
                             _kpiChip(Icons.list_alt, '전체', _questions.length.toString()),
-                            _kpiChip(Icons.radio_button_checked, '객관식', _count(ExamQuestionType.mcq).toString()),
-                            _kpiChip(Icons.short_text, '주관식', _count(ExamQuestionType.shortAnswer).toString()),
-                            _kpiChip(Icons.swap_vert, '순서 맞추기', _count(ExamQuestionType.ordering).toString()),
+                            _kpiChip(Icons.radio_button_checked, '객관식',
+                                _count(ExamQuestionType.mcq).toString()),
+                            _kpiChip(Icons.short_text, '주관식',
+                                _count(ExamQuestionType.shortAnswer).toString()),
+                            _kpiChip(Icons.swap_vert, '순서 맞추기',
+                                _count(ExamQuestionType.ordering).toString()),
                           ],
                         ),
                         const SizedBox(height: 14),
@@ -330,11 +334,13 @@ class _ExamEditPageState extends State<ExamEditPage> {
                             const Text(
                               '통과 기준',
                               style: TextStyle(
-                                  color: UiTokens.title, fontWeight: FontWeight.w800),
+                                  color: UiTokens.title,
+                                  fontWeight: FontWeight.w800),
                             ),
                             const Spacer(),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFE9F2FF),
                                 borderRadius: BorderRadius.circular(999),
@@ -513,6 +519,18 @@ class _QuestionTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
+          // 순서 이동
+          IconButton(
+            tooltip: '위로',
+            onPressed: onMoveUp,
+            icon: const Icon(Icons.arrow_upward_rounded),
+          ),
+          IconButton(
+            tooltip: '아래로',
+            onPressed: onMoveDown,
+            icon: const Icon(Icons.arrow_downward_rounded),
+          ),
+          // 편집/삭제
           IconButton(
             tooltip: '편집',
             onPressed: onEdit,
@@ -636,18 +654,26 @@ class _McqEditorSheetState extends State<_McqEditorSheet> {
                         const SizedBox(width: 4),
                         Expanded(
                           child: TextField(
-                            controller: TextEditingController(text: _choices[i]),
+                            controller:
+                            TextEditingController(text: _choices[i]),
                             onChanged: (v) => _choices[i] = v,
                             decoration: _inputDeco('보기 ${i + 1}').copyWith(
                               isDense: true,
-                              contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
                             ),
                           ),
                         ),
                         IconButton(
                           tooltip: '삭제',
-                          onPressed: () => setState(() => _choices.removeAt(i)),
+                          onPressed: () => setState(() {
+                            _choices.removeAt(i);
+                            if (_choices.isEmpty) {
+                              _correct = 0;
+                            } else if (_correct >= _choices.length) {
+                              _correct = _choices.length - 1;
+                            }
+                          }),
                           icon: const Icon(Icons.close_rounded),
                         ),
                       ],
@@ -663,7 +689,8 @@ class _McqEditorSheetState extends State<_McqEditorSheet> {
                   icon: const Icon(Icons.add),
                   label: const Text('보기 추가'),
                   style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
                 const Spacer(),
@@ -682,7 +709,8 @@ class _McqEditorSheetState extends State<_McqEditorSheet> {
                         ..correctIndex = _correct,
                     );
                   },
-                  child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                  child:
+                  const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
                 ),
               ],
             ),
@@ -744,18 +772,23 @@ class _ShortEditorSheetState extends State<_ShortEditorSheet> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_rounded, color: UiTokens.actionIcon, size: 18),
+                      const Icon(Icons.check_rounded,
+                          color: UiTokens.actionIcon, size: 18),
                       const SizedBox(width: 6),
                       Expanded(
                         child: TextField(
-                          controller: TextEditingController(text: _answers[i]),
+                          controller:
+                          TextEditingController(text: _answers[i]),
                           onChanged: (v) => _answers[i] = v,
-                          decoration: _inputDeco('허용 답안 ${i + 1}')
-                              .copyWith(isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                          decoration: _inputDeco('허용 답안 ${i + 1}').copyWith(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10)),
                         ),
                       ),
                       IconButton(
-                        onPressed: () => setState(() => _answers.removeAt(i)),
+                        onPressed: () =>
+                            setState(() => _answers.removeAt(i)),
                         icon: const Icon(Icons.close_rounded),
                       ),
                     ],
@@ -773,7 +806,10 @@ class _ShortEditorSheetState extends State<_ShortEditorSheet> {
                 const Spacer(),
                 FilledButton(
                   onPressed: () {
-                    final kept = _answers.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                    final kept = _answers
+                        .map((e) => e.trim())
+                        .where((e) => e.isNotEmpty)
+                        .toList();
                     if (kept.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('답안을 1개 이상 입력하세요')));
@@ -786,7 +822,8 @@ class _ShortEditorSheetState extends State<_ShortEditorSheet> {
                         ..answers = kept,
                     );
                   },
-                  child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                  child:
+                  const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
                 ),
               ],
             ),
@@ -862,7 +899,8 @@ class _OrderingEditorSheetState extends State<_OrderingEditorSheet> {
                 itemCount: _items.length,
                 itemBuilder: (_, i) => Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF7F9FC),
                     border: Border.all(color: const Color(0xFFE6ECF3)),
@@ -875,12 +913,14 @@ class _OrderingEditorSheetState extends State<_OrderingEditorSheet> {
                         backgroundColor: Colors.white,
                         child: Text('${i + 1}',
                             style: const TextStyle(
-                                color: UiTokens.title, fontWeight: FontWeight.w800)),
+                                color: UiTokens.title,
+                                fontWeight: FontWeight.w800)),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: TextField(
-                          controller: TextEditingController(text: _items[i]),
+                          controller:
+                          TextEditingController(text: _items[i]),
                           onChanged: (v) => _items[i] = v,
                           decoration: const InputDecoration(
                             border: InputBorder.none,
@@ -890,14 +930,17 @@ class _OrderingEditorSheetState extends State<_OrderingEditorSheet> {
                       ),
                       IconButton(
                         onPressed: () => _moveUp(i),
-                        icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                        icon:
+                        const Icon(Icons.arrow_upward_rounded, size: 18),
                       ),
                       IconButton(
                         onPressed: () => _moveDown(i),
-                        icon: const Icon(Icons.arrow_downward_rounded, size: 18),
+                        icon:
+                        const Icon(Icons.arrow_downward_rounded, size: 18),
                       ),
                       IconButton(
-                        onPressed: () => setState(() => _items.removeAt(i)),
+                        onPressed: () =>
+                            setState(() => _items.removeAt(i)),
                         icon: const Icon(Icons.close_rounded),
                       ),
                     ],
@@ -915,10 +958,13 @@ class _OrderingEditorSheetState extends State<_OrderingEditorSheet> {
                 const Spacer(),
                 FilledButton(
                   onPressed: () {
-                    final kept = _items.map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+                    final kept = _items
+                        .map((e) => e.trim())
+                        .where((e) => e.isNotEmpty)
+                        .toList();
                     if (kept.length < 2) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('항목을 2개 이상 입력하세요')));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('항목을 2개 이상 입력하세요')));
                       return;
                     }
                     Navigator.pop(
@@ -928,7 +974,8 @@ class _OrderingEditorSheetState extends State<_OrderingEditorSheet> {
                         ..ordering = kept,
                     );
                   },
-                  child: const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
+                  child:
+                  const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)),
                 ),
               ],
             ),
@@ -972,8 +1019,8 @@ class _SectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style:
-      const TextStyle(color: UiTokens.title, fontSize: 14, fontWeight: FontWeight.w800),
+      style: const TextStyle(
+          color: UiTokens.title, fontSize: 14, fontWeight: FontWeight.w800),
     );
   }
 }
@@ -992,7 +1039,8 @@ InputDecoration _inputDeco(String label) => InputDecoration(
   isDense: true,
   filled: true,
   fillColor: const Color(0xFFF7F9FC),
-  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+  contentPadding:
+  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
   enabledBorder: const OutlineInputBorder(
     borderSide: BorderSide(color: Color(0xFFE6ECF3)),
@@ -1032,7 +1080,12 @@ class _DiscardConfirmDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE6EAF0), borderRadius: BorderRadius.circular(3))),
+            Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                    color: const Color(0xFFE6EAF0),
+                    borderRadius: BorderRadius.circular(3))),
             const SizedBox(height: 12),
             Text(title,
                 style: const TextStyle(
@@ -1057,9 +1110,11 @@ class _DiscardConfirmDialog extends StatelessWidget {
                     onPressed: () => Navigator.pop(context, false),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(keepEditingText, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    child: Text(keepEditingText,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1069,9 +1124,11 @@ class _DiscardConfirmDialog extends StatelessWidget {
                     style: FilledButton.styleFrom(
                       backgroundColor: UiTokens.primaryBlue,
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(leaveText, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    child: Text(leaveText,
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
                   ),
                 ),
               ],

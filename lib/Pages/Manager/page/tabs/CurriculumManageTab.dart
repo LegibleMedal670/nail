@@ -8,7 +8,7 @@ import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/CurriculumCreatePage.dart';
-import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
+import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 
 class CurriculumManageTab extends StatefulWidget {
@@ -126,7 +126,6 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                     return CurriculumTile(
                       item: item,
                       onTap: () => _openDetail(item),
-                      onEdit: () => _openDetail(item),
                     );
                   },
                 ),

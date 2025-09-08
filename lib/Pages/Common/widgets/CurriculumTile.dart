@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import '../models/CurriculumItem.dart';
+import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 
 class CurriculumTile extends StatelessWidget {
   final CurriculumItem item;
   final VoidCallback? onTap;
-  final VoidCallback? onEdit;
 
   const CurriculumTile({
     super.key,
     required this.item,
     this.onTap,
-    this.onEdit,
   });
 
-  String _mins(int m) => '${m}분';
 
   @override
   Widget build(BuildContext context) {
@@ -68,18 +65,6 @@ class CurriculumTile extends StatelessWidget {
                     // 하단 메타: 시간, 뱃지들
                     Row(
                       children: [
-                        const Icon(Icons.access_time_rounded,
-                            size: 16, color: UiTokens.actionIcon),
-                        const SizedBox(width: 6),
-                        // Text(
-                        //   _mins(item.durationMinutes),
-                        //   style: const TextStyle(
-                        //     color: UiTokens.title,
-                        //     fontSize: 13,
-                        //     fontWeight: FontWeight.w700,
-                        //   ),
-                        // ),
-                        const SizedBox(width: 10),
                         if (item.hasVideo) _chip('영상'),
                         if (item.requiresExam) ...[
                           const SizedBox(width: 6),
@@ -90,12 +75,6 @@ class CurriculumTile extends StatelessWidget {
                   ],
                 ),
               ),
-              // // 오른쪽: 편집 아이콘
-              // IconButton(
-              //   onPressed: onEdit,
-              //   icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
-              //   tooltip: '편집',
-              // ),
             ],
           ),
         ),

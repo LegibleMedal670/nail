@@ -1,15 +1,18 @@
+// lib/Pages/Manager/page/ExamresultPage.dart
+
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Services/ExamService.dart';
 
-/// ===== 데이터 모델 =====
+/// ===== 로컬(뷰 표현) 데이터 모델 =====
 
 class ExamAttemptResult {
-  final String id;                 // 시도 ID
+  final String id;                 // 시도 ID(서버 미제공 시 생성)
   final DateTime takenAt;          // 응시 일시
   final int score;                 // 0~100
   final bool passed;               // 통과 여부
-  final Duration duration;         // 풀이 시간
-  final List<QuestionResult> items;
+  final Duration duration;         // 풀이 시간 (서버 미제공 시 Duration.zero)
+  final List<QuestionResult> items; // 문항 상세(현재 서버 미제공 → 빈 리스트)
 
   const ExamAttemptResult({
     required this.id,
@@ -34,8 +37,8 @@ class QuestionResult {
   final int? correctIndex;
 
   // 단답
-  final String? answerText;     // 사용자가 입력
-  final List<String>? accepteds; // 정답 허용값(소문자 트림 일치 등 전처리 가정)
+  final String? answerText;       // 사용자가 입력
+  final List<String>? accepteds;  // 정답 허용값
 
   // 순서
   final List<String>? selectedOrdering;
@@ -62,19 +65,41 @@ class QuestionResult {
 }
 
 /// ===== 페이지 =====
-
+///
+/// 사용 방법:
+/// - (추천) 서버 연동용
+///   ExamResultPage(
+///     menteeName: '홍길동',
+///     curriculumTitle: 'W1. ...',
+///     moduleCode: 'MOD-001',
+///     loginKey: 'login-xxxx',
+///     // passScore 를 안 넘기면 서버(get_exam_set)에서 가져옵니다.
+///   )
+///
+/// - (데모/프리뷰용)
+///   ExamResultPage.demo()
 class ExamResultPage extends StatefulWidget {
-  final String menteeName;          // 예: 한지민
-  final String curriculumTitle;     // 예: W1. 기초 위생 및 도구 소개
-  final int passScore;              // 예: 60
-  final List<ExamAttemptResult> attempts;
+  final String menteeName;              // 예: 한지민
+  final String curriculumTitle;         // 예: W1. 기초 위생 및 도구 소개
+
+  /// 서버 연동 파라미터 (둘 다 주어지면 자동 로드)
+  final String? moduleCode;             // 과정 코드
+  final String? loginKey;               // 멘티 로그인 키
+
+  /// 통과 기준(옵션). 전달 안 하면 서버에서 exam_set pass_score를 읽습니다.
+  final int? passScore;
+
+  /// 수동 주입 시도 목록(옵션). 이 값이 있으면 우선 렌더링하고, 서버 파라미터가 있다면 백그라운드로 새로 고쳐 반영합니다.
+  final List<ExamAttemptResult>? attempts;
 
   const ExamResultPage({
     super.key,
     required this.menteeName,
     required this.curriculumTitle,
-    required this.passScore,
-    required this.attempts,
+    this.moduleCode,
+    this.loginKey,
+    this.passScore,
+    this.attempts,
   });
 
   /// 데모 데이터로 바로 띄우는 팩토리
@@ -166,16 +191,102 @@ class ExamResultPage extends StatefulWidget {
 }
 
 class _ExamResultPageState extends State<ExamResultPage> {
-  int _selected = 0; // 기본: 0번(보통 최신 시도)
+  bool _loading = false;
+  String? _error;
 
-  ExamAttemptResult get _attempt => widget.attempts[_selected];
+  /// 서버/입력으로 수집된 최종 시도 목록(최신 우선 정렬)
+  List<ExamAttemptResult> _attempts = [];
+
+  /// 헤더에 표시할 통과 기준
+  int? _passScore;
+
+  /// 선택된 시도 인덱스(0=최신)
+  int _selected = 0;
+
+  ExamAttemptResult get _attempt => _attempts[_selected];
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 초기 값 반영
+    _attempts = List<ExamAttemptResult>.from(widget.attempts ?? const []);
+    _attempts.sort((a, b) => b.takenAt.compareTo(a.takenAt));
+    _passScore = widget.passScore;
+
+    // 서버 파라미터가 주어졌다면 새로고침
+    if ((widget.moduleCode ?? '').isNotEmpty && (widget.loginKey ?? '').isNotEmpty) {
+      _loadRemote();
+    } else if (_attempts.isEmpty && _passScore == null && (widget.moduleCode ?? '').isNotEmpty) {
+      // attempts 없이 passScore만 필요할 때
+      _loadPassScoreOnly();
+    }
+  }
+
+  Future<void> _loadRemote() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // 1) 시도 목록
+      final list = await ExamService.instance.menteeListAttempts(
+        loginKey: widget.loginKey!,
+        moduleCode: widget.moduleCode!,
+      );
+
+      final mapped = list.map((m) {
+        final id = 'attempt_${m.createdAt.millisecondsSinceEpoch}';
+        return ExamAttemptResult(
+          id: id,
+          takenAt: m.createdAt,
+          score: m.score,
+          passed: m.passed,
+          duration: Duration.zero, // 현재 RPC에 풀이시간/문항 상세 없음
+          items: const <QuestionResult>[],
+        );
+      }).toList();
+
+      // 2) 통과 기준 (없다면)
+      int? pass = _passScore;
+      if (pass == null) {
+        final set = await ExamService.instance.getExamSet(widget.moduleCode!);
+        pass = set?.passScore;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _attempts = mapped..sort((a, b) => b.takenAt.compareTo(a.takenAt));
+        _selected = 0;
+        _passScore = pass ?? _passScore;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '결과를 불러오지 못했어요: $e';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadPassScoreOnly() async {
+    try {
+      final set = await ExamService.instance.getExamSet(widget.moduleCode!);
+      if (!mounted) return;
+      setState(() {
+        _passScore = set?.passScore ?? _passScore;
+      });
+    } catch (_) {
+      // 무시 (헤더에만 영향)
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    widget.attempts.sort((a, b) => b.takenAt.compareTo(a.takenAt)); // 최신 우선
-
-    final best = widget.attempts.fold<int>(0, (m, e) => e.score > m ? e.score : m);
-    final anyPassed = widget.attempts.any((e) => e.passed);
+    final best = _attempts.fold<int>(0, (m, e) => e.score > m ? e.score : m);
+    final anyPassed = _attempts.any((e) => e.passed);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -185,7 +296,6 @@ class _ExamResultPageState extends State<ExamResultPage> {
         leading: const BackButton(color: UiTokens.title),
         title: const Text('시험 결과', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
         actions: [
-          // 향후 PDF 내보내기/공유 아이콘 자리
           IconButton(
             tooltip: '요약 보기',
             onPressed: () => _showSummarySheet(context, best, anyPassed),
@@ -194,7 +304,17 @@ class _ExamResultPageState extends State<ExamResultPage> {
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? _ErrorState(message: _error!, onRetry: _loadRemote)
+            : _attempts.isEmpty
+            ? _EmptyState(
+          menteeName: widget.menteeName,
+          curriculumTitle: widget.curriculumTitle,
+          passScore: _passScore,
+        )
+            : SingleChildScrollView(
           keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           child: Column(
@@ -203,16 +323,16 @@ class _ExamResultPageState extends State<ExamResultPage> {
               _HeaderCard(
                 menteeName: widget.menteeName,
                 curriculumTitle: widget.curriculumTitle,
-                attempts: widget.attempts.length,
+                attempts: _attempts.length,
                 bestScore: best,
-                passScore: widget.passScore,
+                passScore: _passScore ?? 60,
                 anyPassed: anyPassed,
               ),
               const SizedBox(height: 12),
 
               // 시도 선택 바
               _AttemptPicker(
-                attempts: widget.attempts,
+                attempts: _attempts,
                 selected: _selected,
                 onSelected: (i) => setState(() => _selected = i),
               ),
@@ -222,23 +342,41 @@ class _ExamResultPageState extends State<ExamResultPage> {
               _AttemptSummary(attempt: _attempt),
               const SizedBox(height: 12),
 
-              // 문항별 결과
-              _SectionCard(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const _SectionTitle('문항별 결과'),
-                    const SizedBox(height: 8),
-                    ListView.separated(
-                      itemCount: _attempt.items.length,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (_, i) => _QuestionBlock(q: _attempt.items[i]),
-                    ),
-                  ],
+              // 문항별 결과(현재 RPC 미지원: 데모/향후 확장을 위해 조건부 표시)
+              if (_attempt.items.isNotEmpty)
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _SectionTitle('문항별 결과'),
+                      const SizedBox(height: 8),
+                      ListView.separated(
+                        itemCount: _attempt.items.length,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (_, i) => _QuestionBlock(q: _attempt.items[i]),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _SectionCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _SectionTitle('문항별 결과'),
+                      const SizedBox(height: 8),
+                      Text(
+                        '문항 상세 데이터가 아직 제공되지 않습니다.',
+                        style: TextStyle(
+                          color: UiTokens.title.withOpacity(0.65),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -263,7 +401,7 @@ class _ExamResultPageState extends State<ExamResultPage> {
             const SizedBox(height: 12),
             Row(
               children: [
-                _miniStat('응시 횟수', '${widget.attempts.length}회'),
+                _miniStat('응시 횟수', '${_attempts.length}회'),
                 const SizedBox(width: 10),
                 _miniStat('최고 점수', '$best점'),
                 const SizedBox(width: 10),
@@ -321,6 +459,92 @@ class _ExamResultPageState extends State<ExamResultPage> {
   }
 }
 
+/// ===== 빈 상태 / 에러 상태 =====
+
+class _EmptyState extends StatelessWidget {
+  final String menteeName;
+  final String curriculumTitle;
+  final int? passScore;
+
+  const _EmptyState({
+    required this.menteeName,
+    required this.curriculumTitle,
+    required this.passScore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(menteeName,
+                    style: const TextStyle(color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(curriculumTitle,
+                    style: TextStyle(color: UiTokens.title.withOpacity(0.8), fontWeight: FontWeight.w700)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _HeaderCard._pill('통과기준 ${passScore ?? 60}점',
+                        const Color(0xFFFEF3C7), const Color(0xFFFDE68A), const Color(0xFF92400E)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          _SectionCard(
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: UiTokens.actionIcon),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '응시 내역이 없습니다.',
+                    style: TextStyle(color: UiTokens.title.withOpacity(0.7), fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: _SectionCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red),
+            const SizedBox(height: 8),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: UiTokens.title.withOpacity(0.8), fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: onRetry, child: const Text('다시 시도')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// ===== 헤더 카드 =====
 
 class _HeaderCard extends StatelessWidget {
@@ -353,6 +577,8 @@ class _HeaderCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
+              _pill('응시 ${attempts}회', const Color(0xFFF5F3FF), const Color(0xFFE9D5FF), const Color(0xFF6D28D9)),
+              const SizedBox(width: 8),
               _pill('최고 $bestScore점', const Color(0xFFEFF6FF), const Color(0xFFBFDBFE), const Color(0xFF2563EB)),
               const SizedBox(width: 8),
               _pill('통과기준 $passScore점', const Color(0xFFFEF3C7), const Color(0xFFFDE68A), const Color(0xFF92400E)),
@@ -430,8 +656,8 @@ class _AttemptPicker extends StatelessWidget {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            '${attempts.length - i}회차 · ${_fmtDateTime(a.takenAt)} · ${a.score}점',
-                            style: TextStyle(
+                            '${attempts.length - i}회차 · ${_fmtDate(a.takenAt)} · ${a.score}점',
+                            style: const TextStyle(
                               color: UiTokens.title,
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
@@ -450,12 +676,10 @@ class _AttemptPicker extends StatelessWidget {
     );
   }
 
-  static String _fmtDateTime(DateTime d) {
+  static String _fmtDate(DateTime d) {
     final y = d.year.toString().padLeft(4, '0');
     final m = d.month.toString().padLeft(2, '0');
     final da = d.day.toString().padLeft(2, '0');
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
     return '$y-$m-$da';
   }
 }
@@ -471,7 +695,7 @@ class _AttemptSummary extends StatelessWidget {
     return _SectionCard(
       child: Row(
         children: [
-          // 점수 원형 게이지 느낌(라벨만)
+          // 점수 원형
           Container(
             width: 76,
             height: 76,
@@ -508,9 +732,10 @@ class _AttemptSummary extends StatelessWidget {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    _iconText(Icons.access_time_rounded, _fmtDuration(attempt.duration)),
+                    _iconText(Icons.event_rounded, _fmtDateTime(attempt.takenAt)),
                     const SizedBox(width: 10),
-                    _iconText(Icons.event_rounded, _AttemptPicker._fmtDateTime(attempt.takenAt)),
+                    _iconText(Icons.timer_outlined,
+                        attempt.duration == Duration.zero ? '시간 정보 없음' : _fmtDuration(attempt.duration)),
                   ],
                 ),
               ],
@@ -529,6 +754,15 @@ class _AttemptSummary extends StatelessWidget {
         Text(text, style: TextStyle(color: UiTokens.title.withOpacity(0.85), fontWeight: FontWeight.w700)),
       ],
     );
+  }
+
+  static String _fmtDateTime(DateTime d) {
+    final y = d.year.toString().padLeft(4, '0');
+    final m = d.month.toString().padLeft(2, '0');
+    final da = d.day.toString().padLeft(2, '0');
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '$y-$m-$da $hh:$mm';
   }
 
   static String _fmtDuration(Duration d) {
@@ -551,6 +785,7 @@ class _AttemptSummary extends StatelessWidget {
 }
 
 /// ===== 문항 카드 =====
+/// 현재 RPC로 문항 상세를 받지 못하므로, 데모/향후 확장 대비 코드는 유지합니다.
 
 class _QuestionBlock extends StatefulWidget {
   final QuestionResult q;
@@ -601,9 +836,12 @@ class _QuestionBlockState extends State<_QuestionBlock> {
           const SizedBox(height: 10),
 
           // 본문
-          if (q.type == QuestionType.mcq) _mcqView(q) else
-            if (q.type == QuestionType.short) _shortView(q) else
-              _orderingView(q),
+          if (q.type == QuestionType.mcq)
+            _mcqView(q)
+          else if (q.type == QuestionType.short)
+            _shortView(q)
+          else
+            _orderingView(q),
 
           // 해설 토글
           if (q.explanation != null && q.explanation!.trim().isNotEmpty) ...[
@@ -648,9 +886,15 @@ class _QuestionBlockState extends State<_QuestionBlock> {
   static Widget _typeChip(QuestionType t) {
     String label;
     switch (t) {
-      case QuestionType.mcq: label = '객관식'; break;
-      case QuestionType.short: label = '단답'; break;
-      case QuestionType.ordering: label = '순서'; break;
+      case QuestionType.mcq:
+        label = '객관식';
+        break;
+      case QuestionType.short:
+        label = '단답';
+        break;
+      case QuestionType.ordering:
+        label = '순서';
+        break;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

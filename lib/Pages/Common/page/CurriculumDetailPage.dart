@@ -1,13 +1,17 @@
+// lib/Pages/Manager/page/CurriculumDetailPage.dart
+
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Common/widget/SectionTitle.dart';
+import 'package:nail/Pages/Common/widgets/SectionTitle.dart';
 import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/page/ExamresultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Pages/Mentee/page/ExamPage.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/ExamService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -113,6 +117,12 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   // 자료(서버 resources → 변환). 서버에서 온 것은 localPending=false
   List<_EditMaterial> _materials = [];
 
+  // ✅ 시험 세트 변경 임시 저장 (에디터에서 나온 결과만 담아둠)
+  ExamEditResult? _pendingExam;
+
+  // ✅ 현재 서버 통과기준(초기 로드용 / 실패 시 null)
+  int? _examPassScore;
+
   bool _dirty = false; // 변경사항 여부
   bool _saving = false;
 
@@ -130,6 +140,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     super.initState();
     _hydrateFromItem(widget.item);
     _reloadFromServer(); // 단건 최신화(SWR) – 초기 1회
+    _loadExamPassScore(); // ✅ 통과 기준 초기 로드
   }
 
   void _hydrateFromItem(CurriculumItem it) {
@@ -154,13 +165,22 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   Future<void> _reloadFromServer() async {
     final fresh = await SupabaseService.instance.getCurriculumItemByCode(_item.id);
     if (!mounted || fresh == null) return;
-    // 사용자가 편집 중일 수 있으니, 초기 1회만 덮도록 guard가 필요할 수 있음.
-    // 지금은 단순히 최신 상태로 수화하되 _dirty는 유지.
     setState(() {
-      // 수화하되, 사용자가 현재 편집 중인 필드는 존중하려면 머지 전략 필요.
-      // 요구사항 간단화를 위해 서버 값을 반영(초기 로드 시점에 유효).
       if (!_dirty) _hydrateFromItem(fresh);
     });
+  }
+
+  // ✅ 서버의 시험 통과 기준(pass_score) 가져오기
+  Future<void> _loadExamPassScore() async {
+    try {
+      final set = await ExamService.instance.getExamSet(_item.id);
+      if (!mounted) return;
+      setState(() {
+        _examPassScore = set?.passScore;
+      });
+    } catch (_) {
+      // 실패는 무시
+    }
   }
 
   Map<String, int> _examCounts(CurriculumItem it) {
@@ -170,7 +190,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   }
 
   Future<void> _handleBack() async {
-    // 1) 저장 중이면 뒤로가기 차단 (이중 탭/중복 저장 방지)
     if (_saving) {
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -180,17 +199,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       }
       return;
     }
-
-    // 2) 키보드 닫기 (UX)
     _unfocus();
-
-    // 3) 변경 없음이거나 편집 모드가 아니면 바로 나감
     if (!_dirty || !_isAdminEdit) {
       if (mounted) Navigator.pop(context);
       return;
     }
-
-    // 4) 변경사항이 있으면 확인 모달
     final leave = await showDiscardChangesDialog(
       context,
       title: '변경사항을 저장하지 않고 나갈까요?',
@@ -199,7 +212,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       leaveText: '나가기',
       barrierDismissible: true,
     );
-
     if (leave && mounted) Navigator.pop(context);
   }
 
@@ -401,6 +413,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
             padding: EdgeInsets.only(bottom: bottomInset),
             child: StatefulBuilder(
               builder: (context, setInner) {
+                final shownPass = _pendingExam?.passScore ?? _examPassScore ?? 60;
+
                 return Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                   child: Column(
@@ -461,33 +475,69 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Row(
-                                children: const [
-                                  Icon(Icons.check_circle_outline, size: 18, color: UiTokens.primaryBlue),
-                                  SizedBox(width: 8),
-                                  Text('통과 기준: 60점 / 100점',
-                                      style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+                                children: [
+                                  const Icon(Icons.check_circle_outline, size: 18, color: UiTokens.primaryBlue),
+                                  const SizedBox(width: 8),
+                                  Text('통과 기준: $shownPass점 / 100점',
+                                      style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+                                  if (_pendingExam != null) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFF7ED),
+                                        borderRadius: BorderRadius.circular(999),
+                                        border: Border.all(color: const Color(0xFFFECBA1)),
+                                      ),
+                                      child: const Text('임시 변경 있음',
+                                          style: TextStyle(color: Color(0xFF9A3412), fontWeight: FontWeight.w800, fontSize: 12)),
+                                    ),
+                                  ],
                                 ],
                               ),
                               FilledButton.icon(
-                                onPressed: widget.onOpenExamEditor ??
-                                        () async {
-                                      Navigator.pop(context);
-                                      final result = await Navigator.push<ExamEditResult>(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => const ExamEditPage(
-                                            initialQuestions: [],
-                                            initialPassScore: 60,
-                                          ),
-                                        ),
-                                      );
-                                      if (result != null) {
-                                        setState(() {
-                                          _requiresExam = true; // UI만 반영
-                                          _dirty = true;
-                                        });
-                                      }
-                                    },
+                                onPressed: () async {
+                                  final user = context.read<UserProvider>();
+                                  final adminKey = user.adminKey ?? widget.adminKey;
+                                  final moduleCode = widget.item.id;
+
+                                  if (adminKey == null || adminKey.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('관리자 인증(adminKey)이 필요합니다. 상단에서 관리자 로그인 먼저 진행하세요.')),
+                                    );
+                                    return;
+                                  }
+
+                                  // 서버 세트 불러와 초기값으로 사용
+                                  final set = await ExamService.instance.getExamSet(moduleCode);
+                                  final initQs = set?.questions ?? <ExamQuestion>[];
+                                  final initPass = set?.passScore ?? (_pendingExam?.passScore ?? (_examPassScore ?? 60));
+
+                                  final result = await Navigator.push<ExamEditResult>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => ExamEditPage(
+                                        initialQuestions: initQs,
+                                        initialPassScore: initPass,
+                                      ),
+                                    ),
+                                  );
+                                  if (result == null) return;
+
+                                  // ✅ 여기서는 서버 저장하지 않음 — 임시 반영만
+                                  if (!mounted) return;
+                                  setState(() {
+                                    _pendingExam = result;
+                                    _requiresExam = true;
+                                    _examPassScore = result.passScore; // 미리 표시 갱신
+                                    _dirty = true;
+                                  });
+
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('시험 변경사항이 임시 저장되었습니다. 하단 "저장하기"를 눌러 반영하세요.')),
+                                  );
+                                },
+
                                 icon: const Icon(Icons.assignment, size: 18),
                                 label: const Text('편집하기', style: TextStyle(fontWeight: FontWeight.w600)),
                                 style: FilledButton.styleFrom(shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
@@ -756,6 +806,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }).toList();
 
     try {
+      // 1) 과정 메타(목표/자료) 저장
       await SupabaseService.instance.saveEditsViaRpc(
         code: _item.id,
         goals: _goals,
@@ -763,19 +814,46 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
         adminKey: adminKey,
       );
 
-      // 저장 후 최신화(SWR)
+// 2) OFF인 경우, 모듈의 시험 세트를 서버에서 삭제
+      if (!_requiresExam) {
+        try {
+          await ExamService.instance.adminDeleteExamSet(
+            adminKey: adminKey,
+            moduleCode: _item.id,
+          );
+        } catch (e) {
+          // 없으면(미생성) 에러 무시해도 됨
+          debugPrint('delete exam set skipped: $e');
+        }
+      }
+
+      // 2) ✅ 시험 세트가 임시 변경되어 있으면 이때 반영
+      if (_pendingExam != null) {
+        await ExamService.instance.adminUpsertExamSet(
+          adminKey: adminKey,
+          moduleCode: _item.id,
+          passScore: _pendingExam!.passScore,
+          questions: _pendingExam!.questions,
+        );
+      }
+
       if (mounted) {
         setState(() {
           _dirty = false;
           _saving = false;
+          // 반영 완료 후 임시 변경 초기화
+          if (_pendingExam != null) {
+            _examPassScore = _pendingExam!.passScore;
+            _pendingExam = null;
+          }
         });
-        // 전역 목록 최신화(SWR)
+
         try {
           context.read<CurriculumProvider>().refresh(force: true);
-        } catch (_) {/* Provider 없으면 무시 */}
+        } catch (_) {}
 
-        // 단건도 갱신
         await _reloadFromServer();
+        await _loadExamPassScore();
 
         final pendingCount = _materials.where((m) => m.localPending).length;
         final msg = pendingCount > 0
@@ -785,7 +863,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       }
     } catch (e) {
       if (mounted) {
-        print(e);
+        print('저장 실패: $e');
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
       }
@@ -796,6 +874,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   @override
   Widget build(BuildContext context) {
     final counts = _examCounts(_item);
+    final shownPass = _pendingExam?.passScore ?? _examPassScore ?? 60;
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -1004,11 +1083,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      children: const [
-                                        Icon(Icons.check_circle_outline, size: 18, color: UiTokens.primaryBlue),
-                                        SizedBox(width: 8),
-                                        Text('통과 기준: 60점 / 100점',
-                                            style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+                                      children: [
+                                        const Icon(Icons.check_circle_outline, size: 18, color: UiTokens.primaryBlue),
+                                        const SizedBox(width: 8),
+                                        Text('통과 기준: $shownPass점 / 100점',
+                                            style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
                                       ],
                                     ),
                                     const SizedBox(height: 8),
@@ -1039,38 +1118,38 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
-                                    onPressed: () {
-                                      // 데모 문항
-                                      final demoQuestions = <ExamQuestion>[
-                                        ExamQuestion.mcq(
-                                          id: 'q_mcq_001',
-                                          prompt: '기본 케어에서 먼저 해야 하는 단계는?',
-                                          choices: ['베이스 코트', '손 소독', '탑 코트', '컬러 도포'],
-                                          correctIndex: 1,
-                                        ),
-                                        ExamQuestion.short(
-                                          id: 'q_sa_001',
-                                          prompt: '젤 제거 과정을 한 단어로? (영어)',
-                                          answers: ['soakoff', 'soak-off', 'soak off', 'off'],
-                                        ),
-                                        ExamQuestion.ordering(
-                                          id: 'q_order_001',
-                                          prompt: '올바른 순서로 배열하세요',
-                                          ordering: ['손 소독', '큐티클 정리', '베이스 코트'],
-                                        ),
-                                      ];
-                                      final demoExplanations = <String, String>{
-                                        'q_mcq_001': '시술 전 위생이 최우선이라 손 소독을 먼저 합니다.',
-                                        'q_sa_001': '젤 제거는 보통 Soak-off라고 부릅니다.',
-                                        'q_order_001': '위생 → 케어 → 도포의 흐름입니다.',
-                                      };
+                                    onPressed: () async {
+                                      final moduleCode = widget.item.id; // == code
+                                      final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+
+                                      // 1) 서버 세트 로드
+                                      final set = await ExamService.instance.getExamSet(moduleCode);
+                                      if (set == null || set.questions.isEmpty) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('등록된 시험이 없어요.')),
+                                        );
+                                        return;
+                                      }
+
+                                      // 2) 시험 페이지로 이동 (제출 콜백 포함)
+                                      if (!mounted) return;
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => ExamPage(
-                                            questions: demoQuestions,
-                                            passScore: 60,
-                                            explanations: demoExplanations,
+                                            questions: set.questions,
+                                            passScore: set.passScore,
+                                            explanations: const {},            // 해설은 아직 서버 스키마 없음
+                                            moduleCode: moduleCode,
+                                            loginKey: loginKey,
+                                            onSubmitted: (score, answers) async {
+                                              await ExamService.instance.menteeSubmitExam(
+                                                loginKey: loginKey,
+                                                moduleCode: moduleCode,
+                                                answers: answers,
+                                                score: score,
+                                              );
+                                            },
                                           ),
                                         ),
                                       );

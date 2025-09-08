@@ -4,7 +4,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
-import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
+import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 
 /// 필터

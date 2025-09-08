@@ -5,39 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 
-
-// /// =========================
-// /// 모델
-// /// =========================
-// enum ExamQuestionType { mcq, shortAnswer, ordering }
-//
-// class ExamQuestion {
-//   final String id;
-//   final ExamQuestionType type;
-//   final String prompt;
-//
-//   // 객관식
-//   final List<String>? choices;
-//   final int? correctIndex;
-//
-//   // 주관식
-//   final List<String>? answers; // 허용 답안 목록
-//
-//   // 순서 맞추기
-//   final List<String>? ordering; // 정답 순서
-//
-//   const ExamQuestion({
-//     required this.id,
-//     required this.type,
-//     required this.prompt,
-//     this.choices,
-//     this.correctIndex,
-//     this.answers,
-//     this.ordering,
-//   });
-// }
-
-
 /// =========================
 /// 멘티 시험 페이지
 /// =========================
@@ -48,6 +15,11 @@ class ExamPage extends StatefulWidget {
   final int? initialAttempts; // 누적 응시 횟수(이 페이지 들어오면 +1)
   final int? initialBestScore; // 기존 최고점
 
+  // ▼ 서버 제출을 위한 정보/콜백
+  final String? moduleCode;               // 서버 저장용(옵션)
+  final String? loginKey;                 // 서버 저장용(옵션)
+  final Future<void> Function(int score, Map<String, dynamic> answers)? onSubmitted;
+
   const ExamPage({
     super.key,
     required this.questions,
@@ -55,6 +27,9 @@ class ExamPage extends StatefulWidget {
     this.explanations = const {},
     this.initialAttempts,
     this.initialBestScore,
+    this.moduleCode,
+    this.loginKey,
+    this.onSubmitted,
   });
 
   @override
@@ -119,12 +94,6 @@ class _ExamPageState extends State<ExamPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Container(
-              //     width: 40,
-              //     height: 4,
-              //     decoration: BoxDecoration(
-              //         color: const Color(0xFFE6EAF0),
-              //         borderRadius: BorderRadius.circular(3))),
               const SizedBox(height: 12),
               const Text('시험을 종료할까요?',
                   style: TextStyle(
@@ -151,7 +120,10 @@ class _ExamPageState extends State<ExamPage> {
                             borderRadius: BorderRadius.circular(12)),
                       ),
                       child: const Text('계속 응시',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: UiTokens.title,)),
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: UiTokens.title,
+                          )),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -246,11 +218,32 @@ class _ExamPageState extends State<ExamPage> {
     return pct;
   }
 
-  void _submit() {
+  void _submit() async {
     _unfocus();
     final score = _calcScore();
     final newBest = (score > _bestScore) ? score : _bestScore;
 
+    // 질문 id -> 사용자 응답 맵 구성(서버 저장용)
+    final Map<String, dynamic> answerMap = {};
+    for (int i = 0; i < widget.questions.length; i++) {
+      final q = widget.questions[i];
+      answerMap[q.id] = _answers[i];
+    }
+
+    // 옵션: 제출 콜백이 주어졌고, moduleCode/loginKey가 있으면 서버에 기록
+    try {
+      if (widget.onSubmitted != null &&
+          (widget.moduleCode?.isNotEmpty ?? false) &&
+          (widget.loginKey?.isNotEmpty ?? false)) {
+        await widget.onSubmitted!(score, answerMap);
+      }
+    } catch (e) {
+      // 서버 오류가 나더라도 UX 흐름은 유지(결과 페이지로 이동)
+      // ignore: avoid_print
+      print('시험제출 :$e');
+    }
+
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => _ExamResultPage(
@@ -261,6 +254,10 @@ class _ExamPageState extends State<ExamPage> {
           passScore: widget.passScore,
           attempts: _attempts,
           bestScore: newBest,
+          // ▼ 재시험 시에도 서버 저장이 되도록 전달
+          moduleCode: widget.moduleCode,
+          loginKey: widget.loginKey,
+          onSubmitted: widget.onSubmitted,
         ),
       ),
     );
@@ -294,8 +291,8 @@ class _ExamPageState extends State<ExamPage> {
               },
             ),
             title: const Text('시험',
-                style:
-                TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+                style: TextStyle(
+                    color: UiTokens.title, fontWeight: FontWeight.w700)),
           ),
           body: SafeArea(
             child: Column(
@@ -307,7 +304,8 @@ class _ExamPageState extends State<ExamPage> {
                     children: [
                       Text('문항 ${_page + 1} / ${widget.questions.length}',
                           style: const TextStyle(
-                              color: UiTokens.title, fontWeight: FontWeight.w800)),
+                              color: UiTokens.title,
+                              fontWeight: FontWeight.w800)),
                       const Spacer(),
                     ],
                   ),
@@ -353,7 +351,8 @@ class _ExamPageState extends State<ExamPage> {
                         FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: UiTokens.primaryBlue,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: _page == 0 ? null : _goPrev,
                           child: const Text('이전'),
@@ -362,9 +361,11 @@ class _ExamPageState extends State<ExamPage> {
                         FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: UiTokens.primaryBlue,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
-                          onPressed: canProceed ? (isLast ? _submit : _goNext) : null,
+                          onPressed:
+                          canProceed ? (isLast ? _submit : _goNext) : null,
                           child: Text(isLast ? '제출하기' : '다음'),
                         ),
                       ],
@@ -416,6 +417,11 @@ class _ExamResultPage extends StatelessWidget {
   final int attempts;
   final int bestScore;
 
+  // ▼ 재시험 시 서버 저장을 위해 전달 유지
+  final String? moduleCode;
+  final String? loginKey;
+  final Future<void> Function(int score, Map<String, dynamic> answers)? onSubmitted;
+
   const _ExamResultPage({
     super.key,
     required this.questions,
@@ -425,6 +431,9 @@ class _ExamResultPage extends StatelessWidget {
     required this.passScore,
     required this.attempts,
     required this.bestScore,
+    this.moduleCode,
+    this.loginKey,
+    this.onSubmitted,
   });
 
   bool _isCorrect(int i) {
@@ -464,13 +473,6 @@ class _ExamResultPage extends StatelessWidget {
           title: const Text('결과',
               style:
               TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
-          // actions: [
-          //   IconButton(
-          //     tooltip: '닫기',
-          //     icon: const Icon(Icons.close, color: UiTokens.title),
-          //     onPressed: () => Navigator.pop(context), // 커리큘럼으로
-          //   ),
-          // ],
         ),
         bottomNavigationBar: SafeArea(
           top: false,
@@ -479,14 +481,19 @@ class _ExamResultPage extends StatelessWidget {
             child: Row(
               children: [
                 OutlinedButton(
-                  onPressed: () => Navigator.pop(context), // 닫기 -> 커리큘럼
-                  child: const Text('닫기', style: TextStyle(color: UiTokens.title),),
+                  // 부모가 await하는 경우를 위해 true 반환(응시 완료)
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text(
+                    '닫기',
+                    style: TextStyle(color: UiTokens.title),
+                  ),
                 ),
                 const Spacer(),
                 FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () {
                     // 재시험은 현재 결과 페이지를 교체(pushReplacement)
@@ -497,7 +504,12 @@ class _ExamResultPage extends StatelessWidget {
                           passScore: passScore,
                           explanations: explanations,
                           initialAttempts: attempts, // 새 페이지에서 +1
-                          initialBestScore: (score > bestScore) ? score : bestScore,
+                          initialBestScore:
+                          (score > bestScore) ? score : bestScore,
+                          // ▼ 전달 유지(이게 핵심!)
+                          moduleCode: moduleCode,
+                          loginKey: loginKey,
+                          onSubmitted: onSubmitted,
                         ),
                       ),
                     );
@@ -514,7 +526,11 @@ class _ExamResultPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _ResultSummaryCard(score: score, passScore: passScore, attempts: attempts, bestScore: bestScore),
+                _ResultSummaryCard(
+                    score: score,
+                    passScore: passScore,
+                    attempts: attempts,
+                    bestScore: bestScore),
                 const SizedBox(height: 12),
                 _QuestionList(
                   questions: questions,
@@ -602,7 +618,8 @@ class _ExamResultPage extends StatelessWidget {
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       backgroundColor: UiTokens.primaryBlue,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () => Navigator.pop(sheetCtx),
                     child: const Text('닫기'),
@@ -663,7 +680,9 @@ class _McqView extends StatelessWidget {
       children: [
         Text(prompt,
             style: const TextStyle(
-                color: UiTokens.title, fontWeight: FontWeight.w800, fontSize: 16)),
+                color: UiTokens.title,
+                fontWeight: FontWeight.w800,
+                fontSize: 16)),
         const SizedBox(height: 12),
         ...List.generate(choices.length, (i) {
           return Container(
@@ -704,14 +723,17 @@ class _ShortView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ctl = TextEditingController(text: value);
-    ctl.selection = TextSelection.fromPosition(TextPosition(offset: ctl.text.length));
+    ctl.selection =
+        TextSelection.fromPosition(TextPosition(offset: ctl.text.length));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(prompt,
             style: const TextStyle(
-                color: UiTokens.title, fontWeight: FontWeight.w800, fontSize: 16)),
+                color: UiTokens.title,
+                fontWeight: FontWeight.w800,
+                fontSize: 16)),
         const SizedBox(height: 12),
         TextField(
           controller: ctl,
@@ -776,7 +798,9 @@ class _OrderingViewState extends State<_OrderingView> {
       children: [
         Text(widget.prompt,
             style: const TextStyle(
-                color: UiTokens.title, fontWeight: FontWeight.w800, fontSize: 16)),
+                color: UiTokens.title,
+                fontWeight: FontWeight.w800,
+                fontSize: 16)),
         const SizedBox(height: 12),
         SizedBox(
           height: h,
@@ -792,12 +816,13 @@ class _OrderingViewState extends State<_OrderingView> {
                 builder: (context, _) {
                   return Material(
                     color: Colors.transparent,
-                    elevation: 8 * animation.value,                 // 드래그 중 살짝 뜨는 느낌
+                    elevation: 8 * animation.value, // 드래그 중 살짝 뜨는 느낌
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(radius),   // 둥근 그림자
+                      borderRadius: BorderRadius.circular(radius), // 둥근 그림자
                     ),
                     shadowColor: Colors.black26,
-                    child: ClipRRect(                                // 내용도 둥글게 클립
+                    child: ClipRRect(
+                      // 내용도 둥글게 클립
                       borderRadius: BorderRadius.circular(radius),
                       child: child,
                     ),
@@ -818,7 +843,8 @@ class _OrderingViewState extends State<_OrderingView> {
               return Container(
                 key: ValueKey('ord_${i}_${_items[i]}'),
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF7F9FC),
                   border: Border.all(color: const Color(0xFFE6ECF3)),
@@ -831,7 +857,8 @@ class _OrderingViewState extends State<_OrderingView> {
                       backgroundColor: Colors.white,
                       child: Text('${i + 1}',
                           style: const TextStyle(
-                              color: UiTokens.title, fontWeight: FontWeight.w800)),
+                              color: UiTokens.title,
+                              fontWeight: FontWeight.w800)),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -902,18 +929,25 @@ class _ResultSummaryCard extends StatelessWidget {
                       fontWeight: FontWeight.w900)),
               const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: passed ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                  color: passed
+                      ? const Color(0xFFDCFCE7)
+                      : const Color(0xFFFEE2E2),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: passed ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                    color: passed
+                        ? const Color(0xFF34D399)
+                        : const Color(0xFFF87171),
                   ),
                 ),
                 child: Text(
                   passed ? '통과' : '미통과',
                   style: TextStyle(
-                    color: passed ? const Color(0xFF065F46) : const Color(0xFF7F1D1D),
+                    color: passed
+                        ? const Color(0xFF065F46)
+                        : const Color(0xFF7F1D1D),
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -992,11 +1026,13 @@ class _QuestionList extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 16,
-                      backgroundColor: ok ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
+                      backgroundColor:
+                      ok ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
                       child: Icon(
                         ok ? Icons.check_rounded : Icons.close_rounded,
                         size: 18,
-                        color: ok ? const Color(0xFF065F46) : const Color(0xFF7F1D1D),
+                        color:
+                        ok ? const Color(0xFF065F46) : const Color(0xFF7F1D1D),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1006,7 +1042,8 @@ class _QuestionList extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: UiTokens.title, fontWeight: FontWeight.w800),
+                            color: UiTokens.title,
+                            fontWeight: FontWeight.w800),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -1039,7 +1076,8 @@ class _ReviewQuestion extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: border),
       ),
-      child: Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w900)),
+      child: Text(text,
+          style: TextStyle(color: fg, fontWeight: FontWeight.w900)),
     );
   }
 
@@ -1070,16 +1108,23 @@ class _ReviewQuestion extends StatelessWidget {
 
               final Color border = isCorrect
                   ? const Color(0xFF34D399)
-                  : (isSelected ? const Color(0xFFF87171) : const Color(0xFFE6ECF3));
+                  : (isSelected
+                  ? const Color(0xFFF87171)
+                  : const Color(0xFFE6ECF3));
 
               final Widget trailingBadges = Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (isCorrect)
-                    _statusChip('정답', const Color(0xFFDCFCE7), const Color(0xFF34D399), const Color(0xFF065F46)),
+                    _statusChip('정답', const Color(0xFFDCFCE7),
+                        const Color(0xFF34D399), const Color(0xFF065F46)),
                   if (isSelected && !isCorrect) ...[
                     const SizedBox(width: 6),
-                    _statusChip('내 선택', const Color(0xFFFEE2E2), const Color(0xFFF87171), const Color(0xFF7F1D1D)),
+                    _statusChip(
+                        '내 선택',
+                        const Color(0xFFFEE2E2),
+                        const Color(0xFFF87171),
+                        const Color(0xFF7F1D1D)),
                   ],
                 ],
               );
@@ -1095,10 +1140,14 @@ class _ReviewQuestion extends StatelessWidget {
                   leading: Icon(
                     isCorrect
                         ? Icons.check_circle_rounded
-                        : (isSelected ? Icons.cancel_rounded : Icons.circle_outlined),
+                        : (isSelected
+                        ? Icons.cancel_rounded
+                        : Icons.circle_outlined),
                     color: isCorrect
                         ? const Color(0xFF059669)
-                        : (isSelected ? const Color(0xFFDC2626) : UiTokens.actionIcon),
+                        : (isSelected
+                        ? const Color(0xFFDC2626)
+                        : UiTokens.actionIcon),
                   ),
                   title: Text(
                     q.choices![i],
@@ -1136,7 +1185,8 @@ class _ReviewQuestion extends StatelessWidget {
                 color: ok ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: ok ? const Color(0xFF34D399) : const Color(0xFFF87171),
+                  color:
+                  ok ? const Color(0xFF34D399) : const Color(0xFFF87171),
                   width: 1.2,
                 ),
               ),
@@ -1144,7 +1194,8 @@ class _ReviewQuestion extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('내 답: ${user.isEmpty ? '(빈 답변)' : user}',
-                      style: const TextStyle(fontWeight: FontWeight.w900, color: UiTokens.title)),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w900, color: UiTokens.title)),
                   const SizedBox(height: 6),
                   if (!ok)
                     Text('정답 예시: ${(q.answers ?? const []).join(', ')}',
@@ -1162,7 +1213,8 @@ class _ReviewQuestion extends StatelessWidget {
         final user = (answer as List<String>);
         final ans = (q.ordering ?? const []);
         final bool anyWrong = user.length != ans.length ||
-            List.generate(user.length, (i) => i < ans.length && user[i] == ans[i])
+            List.generate(user.length,
+                    (i) => i < ans.length && user[i] == ans[i])
                 .contains(false);
 
         return Column(
@@ -1181,15 +1233,22 @@ class _ReviewQuestion extends StatelessWidget {
                     color: UiTokens.title, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             ...List.generate(user.length, (i) {
-              final bool correctPos = (i < ans.length) && (user[i].trim() == ans[i].trim());
-              final Color bg = correctPos ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2);
-              final Color border = correctPos ? const Color(0xFF34D399) : const Color(0xFFF87171);
-              final IconData icon = correctPos ? Icons.check_rounded : Icons.close_rounded;
-              final Color iconColor = correctPos ? const Color(0xFF065F46) : const Color(0xFF7F1D1D);
+              final bool correctPos =
+                  (i < ans.length) && (user[i].trim() == ans[i].trim());
+              final Color bg =
+              correctPos ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2);
+              final Color border = correctPos
+                  ? const Color(0xFF34D399)
+                  : const Color(0xFFF87171);
+              final IconData icon =
+              correctPos ? Icons.check_rounded : Icons.close_rounded;
+              final Color iconColor =
+              correctPos ? const Color(0xFF065F46) : const Color(0xFF7F1D1D);
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
                   color: bg,
                   border: Border.all(color: border, width: 1.2),
@@ -1202,7 +1261,8 @@ class _ReviewQuestion extends StatelessWidget {
                       backgroundColor: Colors.white,
                       child: Text('${i + 1}',
                           style: const TextStyle(
-                              color: UiTokens.title, fontWeight: FontWeight.w800)),
+                              color: UiTokens.title,
+                              fontWeight: FontWeight.w800)),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1231,7 +1291,8 @@ class _ReviewQuestion extends StatelessWidget {
               ...List.generate(ans.length, (i) {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF7F9FC),
                     border: Border.all(color: const Color(0xFFE6ECF3)),
