@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 class CurriculumProvider extends ChangeNotifier {
   static const _kCacheVersionKey = 'curriculum.version';
-  static const _kCachePayloadKey = 'curriculum.payload.v2'; // ← 모델 변경으로 키 승격
+  static const _kCachePayloadKey = 'curriculum.payload.v3'; // 모델 변경 → 키 승격
 
   final List<CurriculumItem> _items = [];
   List<CurriculumItem> get items => List.unmodifiable(_items);
@@ -35,7 +35,6 @@ class CurriculumProvider extends ChangeNotifier {
     _initialized = true;
 
     await _loadFromCache();
-
     // 비차단 SWR
     // ignore: unawaited_futures
     _fetchFromServer();
@@ -56,7 +55,7 @@ class CurriculumProvider extends ChangeNotifier {
       if (cachedJson != null) {
         final List list = jsonDecode(cachedJson) as List;
         final parsed = list
-            .map((e) => _itemFromJson(e as Map<String, dynamic>))
+            .map((e) => _itemFromJson(Map<String, dynamic>.from(e as Map)))
             .toList()
           ..sort((a, b) => a.week.compareTo(b.week));
 
@@ -64,7 +63,6 @@ class CurriculumProvider extends ChangeNotifier {
       }
     } catch (e) {
       if (kDebugMode) {
-        // ignore: avoid_print
         print('Curriculum cache load error: $e');
       }
     }
@@ -78,7 +76,6 @@ class CurriculumProvider extends ChangeNotifier {
       await prefs.setString(_kCachePayloadKey, payload);
     } catch (e) {
       if (kDebugMode) {
-        // ignore: avoid_print
         print('Curriculum cache save error: $e');
       }
     }
@@ -89,17 +86,13 @@ class CurriculumProvider extends ChangeNotifier {
     _applyState(loading: true, error: null);
 
     try {
-      // 1) 최신 버전 먼저 파악(있으면 그 버전만 조회 → 일관성 보장)
+      // 1) 최신 버전 파악(있으면 그 버전만 조회)
       final latest = await SupabaseService.instance.latestCurriculumVersion();
 
-      // 2) 아이템 조회
+      // 2) 아이템 조회 (옵션 A: 뷰 사용)
       final items = await SupabaseService.instance.listCurriculumItems(version: latest);
 
       if (items.isEmpty) {
-        if (kDebugMode) {
-          // ignore: avoid_print
-          print('Curriculum items empty from server');
-        }
         _applyState(loading: false, error: '서버에서 커리큘럼을 찾을 수 없어요');
         return;
       }
@@ -148,15 +141,13 @@ class CurriculumProvider extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
-  // ---- 캐시 직렬화 유틸 ----
+  // ---- 캐시 직렬화 유틸 (옵션 A 스키마) ----
   CurriculumItem _itemFromJson(Map<String, dynamic> j) {
-    // goals: 캐시에 배열로 저장됨을 가정, 없으면 빈 배열
     final dynamic goalsRaw = j['goals'];
     final List<String> goals = (goalsRaw is List)
         ? goalsRaw.map((e) => e?.toString() ?? '').where((e) => e.isNotEmpty).toList()
         : const <String>[];
 
-    // resources: 캐시에 배열로 저장됨을 가정, 없으면 빈 배열
     final dynamic resourcesRaw = j['resources'];
     final List<Map<String, dynamic>> resources = (resourcesRaw is List)
         ? resourcesRaw
@@ -167,23 +158,18 @@ class CurriculumProvider extends ChangeNotifier {
         .toList(growable: false)
         : const <Map<String, dynamic>>[];
 
-    final String? examSetCode = (j['examSetCode'] as String?)?.trim();
-
-    // requiresExam: 캐시 값이 있으면 우선, 없으면 examSetCode로 파생
-    final bool requiresExam = (j['requiresExam'] == true) || ((examSetCode?.isNotEmpty ?? false));
-
     return CurriculumItem(
       id: j['id'] as String,
       week: j['week'] as int,
       title: j['title'] as String,
       summary: j['summary'] as String,
       goals: goals,
-      durationMinutes: (j['durationMinutes'] as int?) ?? 0,
       hasVideo: j['hasVideo'] == true,
       videoUrl: (j['videoUrl'] as String?)?.trim().isEmpty == true ? null : j['videoUrl'] as String?,
-      requiresExam: requiresExam,
-      examSetCode: examSetCode,
+      requiresExam: j['requiresExam'] == true,
       resources: resources,
+      durationMinutes: (j['durationMinutes'] as int?) ?? 0, // 호환용
+      version: j['version'] as int?,
     );
   }
 
@@ -194,12 +180,12 @@ class CurriculumProvider extends ChangeNotifier {
       'title': i.title,
       'summary': i.summary,
       'goals': i.goals,
-      'durationMinutes': i.durationMinutes,
       'hasVideo': i.hasVideo,
       'videoUrl': i.videoUrl,
       'requiresExam': i.requiresExam,
-      'examSetCode': i.examSetCode,
       'resources': i.resources,
+      'durationMinutes': i.durationMinutes, // 호환용
+      'version': i.version,
     };
   }
 

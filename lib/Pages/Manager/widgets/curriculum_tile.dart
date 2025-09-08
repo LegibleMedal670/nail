@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import '../models/curriculum_item.dart';
+import '../models/CurriculumItem.dart';
 
 class CurriculumTile extends StatelessWidget {
   final CurriculumItem item;
@@ -71,14 +71,14 @@ class CurriculumTile extends StatelessWidget {
                         const Icon(Icons.access_time_rounded,
                             size: 16, color: UiTokens.actionIcon),
                         const SizedBox(width: 6),
-                        Text(
-                          _mins(item.durationMinutes),
-                          style: const TextStyle(
-                            color: UiTokens.title,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                        // Text(
+                        //   _mins(item.durationMinutes),
+                        //   style: const TextStyle(
+                        //     color: UiTokens.title,
+                        //     fontSize: 13,
+                        //     fontWeight: FontWeight.w700,
+                        //   ),
+                        // ),
                         const SizedBox(width: 10),
                         if (item.hasVideo) _chip('영상'),
                         if (item.requiresExam) ...[

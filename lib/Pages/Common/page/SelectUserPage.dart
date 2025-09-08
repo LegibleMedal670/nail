@@ -1,6 +1,6 @@
 
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
 
 /// 공용 사용자 엔트리(멘토/멘티 모두 사용)

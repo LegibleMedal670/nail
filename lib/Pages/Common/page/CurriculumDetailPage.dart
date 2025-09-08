@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/widget/SectionTitle.dart';
-import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/page/ExamresultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';

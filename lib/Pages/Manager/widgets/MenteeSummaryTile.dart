@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 
 /// 간단 시험 기록 모델 (서버 연동 전 데모/요약용)
@@ -79,10 +79,9 @@ class MenteeSummaryTile extends StatelessWidget {
         week: 0,
         title: '커리큘럼 없음',
         summary: '',
-        durationMinutes: 0,
         hasVideo: false,
         requiresExam: false,
-          videoUrl: '', examSetCode: '', resources: [], goals: []
+          videoUrl: '', resources: [], goals: []
       ),
     );
 
@@ -313,27 +312,25 @@ List<CurriculumItem> _demoCurriculum() => const [
     week: 1,
     title: '기초 위생 및 도구 소개',
     summary: '필수 위생, 도구 종류, 기본 사용법',
-    durationMinutes: 60,
+
     hasVideo: true,
     requiresExam: true,
-      videoUrl: '', examSetCode: '', resources: [], goals: []
+      videoUrl: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w02',
     week: 2,
     title: '파일링과 큐티클 케어',
     summary: '안전한 큐티클 정리와 파일링 각도',
-    durationMinutes: 75,
     hasVideo: true,
-    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: true,videoUrl: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w03',
     week: 3,
     title: '베이스·컬러·탑 코트',
     summary: '도포 순서, 경화 시간, 흔한 실수',
-    durationMinutes: 90,
     hasVideo: true,
-    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: true,videoUrl: '', resources: [], goals: []
   ),
 ];

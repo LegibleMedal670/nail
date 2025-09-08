@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
-import 'package:nail/Pages/Manager/models/curriculum_item.dart';
+import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
 import 'package:nail/Pages/Manager/widgets/curriculum_tile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
@@ -451,44 +451,39 @@ List<CurriculumItem> _demoCurriculum() => const [
     week: 1,
     title: '기초 위생 및 도구 소개',
     summary: '필수 위생, 도구 종류, 기본 사용법',
-    durationMinutes: 60,
     hasVideo: true,
-    requiresExam: false,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: false,videoUrl: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w02',
     week: 2,
     title: '파일링과 큐티클 케어',
     summary: '안전한 큐티클 정리와 파일링 각도',
-    durationMinutes: 75,
     hasVideo: true,
-    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: true,videoUrl: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w03',
     week: 3,
     title: '베이스·컬러·탑 코트',
     summary: '도포 순서, 경화 시간, 흔한 실수',
-    durationMinutes: 90,
     hasVideo: true,
-    requiresExam: true,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: true,videoUrl: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w04',
     week: 4,
     title: '마감재 사용법',
     summary: '탑젤/매트탑, 경화 시간',
-    durationMinutes: 60,
     hasVideo: true,
-    requiresExam: false,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: false,videoUrl: '', resources: [], goals: []
   ),
   CurriculumItem(
     id: 'w05',
     week: 5,
     title: '간단 아트 1',
     summary: '도트, 스트라이프, 그라데이션',
-    durationMinutes: 80,
     hasVideo: true,
-    requiresExam: false,videoUrl: '', examSetCode: '', resources: [], goals: []
+    requiresExam: false,videoUrl: '', resources: [], goals: []
   ),
 ];
