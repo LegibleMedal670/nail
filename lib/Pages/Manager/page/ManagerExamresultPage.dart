@@ -1,4 +1,4 @@
-// lib/Pages/Manager/page/ExamresultPage.dart
+// lib/Pages/Manager/page/ManagerExamresultPage.dart
 
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -101,90 +101,6 @@ class ExamResultPage extends StatefulWidget {
     this.passScore,
     this.attempts,
   });
-
-  /// 데모 데이터로 바로 띄우는 팩토리
-  factory ExamResultPage.demo() {
-    final itemsA = <QuestionResult>[
-      QuestionResult(
-        id: 'q1',
-        type: QuestionType.mcq,
-        prompt: '기본 케어에서 가장 먼저 해야 하는 단계는?',
-        choices: const ['베이스 코트', '손 소독', '탑 코트', '컬러 도포'],
-        selectedIndex: 1,
-        correctIndex: 1,
-        isCorrect: true,
-        explanation: '위생이 최우선 → 손 소독 후 케어/도포 진행.',
-      ),
-      QuestionResult(
-        id: 'q2',
-        type: QuestionType.short,
-        prompt: '젤 제거를 한 단어로 (영문) 쓰세요.',
-        answerText: 'soakoff',
-        accepteds: const ['soakoff', 'soak-off', 'soak off'],
-        isCorrect: true,
-        explanation: 'Soak-off가 통용. 하이픈/띄어쓰기 허용.',
-      ),
-      QuestionResult(
-        id: 'q3',
-        type: QuestionType.ordering,
-        prompt: '올바른 순서를 고르세요.',
-        selectedOrdering: const ['손 소독', '큐티클 정리', '베이스 코트'],
-        correctOrdering: const ['손 소독', '큐티클 정리', '베이스 코트'],
-        isCorrect: true,
-        explanation: '위생 → 케어 → 도포.',
-      ),
-      QuestionResult(
-        id: 'q4',
-        type: QuestionType.mcq,
-        prompt: '피부 손상이 의심될 때 가장 먼저 할 행동은?',
-        choices: const ['계속 진행', '즉시 중단 후 상태 확인', '탑 코트 도포', '도구 소독'],
-        selectedIndex: 0,
-        correctIndex: 1,
-        isCorrect: false,
-        explanation: '안전이 최우선. 즉시 중단하고 상태를 확인해야 함.',
-      ),
-    ];
-
-    final itemsB = <QuestionResult>[
-      ...itemsA.sublist(0, 3),
-      QuestionResult(
-        id: 'q4',
-        type: QuestionType.mcq,
-        prompt: '피부 손상이 의심될 때 가장 먼저 할 행동은?',
-        choices: const ['계속 진행', '즉시 중단 후 상태 확인', '탑 코트 도포', '도구 소독'],
-        selectedIndex: 1,
-        correctIndex: 1,
-        isCorrect: true,
-        explanation: '안전이 최우선. 즉시 중단하고 상태를 확인해야 함.',
-      ),
-    ];
-
-    final attempts = <ExamAttemptResult>[
-      ExamAttemptResult(
-        id: 'try02',
-        takenAt: DateTime.now().subtract(const Duration(days: 1, hours: 2)),
-        score: 92,
-        passed: true,
-        duration: const Duration(minutes: 7, seconds: 11),
-        items: itemsB,
-      ),
-      ExamAttemptResult(
-        id: 'try01',
-        takenAt: DateTime.now().subtract(const Duration(days: 3, hours: 1)),
-        score: 58,
-        passed: false,
-        duration: const Duration(minutes: 10, seconds: 3),
-        items: itemsA,
-      ),
-    ];
-
-    return ExamResultPage(
-      menteeName: '한지민',
-      curriculumTitle: 'W1. 기초 위생 및 도구 소개',
-      passScore: 60,
-      attempts: attempts,
-    );
-  }
 
   @override
   State<ExamResultPage> createState() => _ExamResultPageState();
@@ -706,7 +622,7 @@ class _AttemptSummary extends StatelessWidget {
               border: Border.all(color: const Color(0xFFE6ECF3)),
             ),
             child: Text(
-              '${attempt.score}',
+              '${attempt.score}점',
               style: const TextStyle(
                 color: UiTokens.title,
                 fontSize: 22,
@@ -719,25 +635,12 @@ class _AttemptSummary extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    const Text('점수', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
-                    const Spacer(),
-                    _pill(attempt.passed ? '통과' : '미통과',
-                        attempt.passed ? const Color(0xFFECFDF5) : const Color(0xFFF5F3FF),
-                        attempt.passed ? const Color(0xFFA7F3D0) : const Color(0xFFE9D5FF),
-                        attempt.passed ? const Color(0xFF059669) : const Color(0xFF6D28D9)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    _iconText(Icons.event_rounded, _fmtDateTime(attempt.takenAt)),
-                    const SizedBox(width: 10),
-                    _iconText(Icons.timer_outlined,
-                        attempt.duration == Duration.zero ? '시간 정보 없음' : _fmtDuration(attempt.duration)),
-                  ],
-                ),
+                _pill(attempt.passed ? '통과' : '미통과',
+                    attempt.passed ? const Color(0xFFECFDF5) : const Color(0xFFF5F3FF),
+                    attempt.passed ? const Color(0xFFA7F3D0) : const Color(0xFFE9D5FF),
+                    attempt.passed ? const Color(0xFF059669) : const Color(0xFF6D28D9)),
+                const SizedBox(height: 12),
+                _iconText(Icons.event_rounded, _fmtDateTime(attempt.takenAt)),
               ],
             ),
           ),
@@ -762,7 +665,7 @@ class _AttemptSummary extends StatelessWidget {
     final da = d.day.toString().padLeft(2, '0');
     final hh = d.hour.toString().padLeft(2, '0');
     final mm = d.minute.toString().padLeft(2, '0');
-    return '$y-$m-$da $hh:$mm';
+    return '$y-$m-$da';
   }
 
   static String _fmtDuration(Duration d) {

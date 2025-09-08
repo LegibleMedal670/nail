@@ -6,7 +6,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/widgets/SectionTitle.dart';
 import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
-import 'package:nail/Pages/Manager/page/ExamresultPage.dart';
+import 'package:nail/Pages/Manager/page/ManagerExamresultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Pages/Mentee/page/ExamPage.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
@@ -79,7 +79,8 @@ class CurriculumDetailPage extends StatefulWidget {
   final Future<bool> Function()? onDeleteConfirm; // (adminEdit) 삭제 전 확인
   final VoidCallback? onOpenExamEditor;           // (adminEdit) 시험 편집 화면
   final VoidCallback? onOpenExamReport;           // (adminReview) 시험 결과/리포트 열기
-  final VoidCallback? onImpersonate;              // (adminReview) 멘티로 보기
+
+  final String? menteeUserId;
 
   const CurriculumDetailPage({
     super.key,
@@ -87,6 +88,7 @@ class CurriculumDetailPage extends StatefulWidget {
     this.mode = CurriculumViewMode.adminEdit,
     this.progress,
     this.menteeName,
+    this.menteeUserId,
     this.adminKey,
     this.onPlay,
     this.onContinueWatch,
@@ -94,7 +96,6 @@ class CurriculumDetailPage extends StatefulWidget {
     this.onDeleteConfirm,
     this.onOpenExamEditor,
     this.onOpenExamReport,
-    this.onImpersonate,
   });
 
   @override
@@ -188,6 +189,216 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     final base = 4 + (it.week % 3); // 4~6 (데모 표시용)
     return {'mcq': base + 4, 'sa': (base / 2).floor(), 'order': it.week % 2};
   }
+
+  Future<void> _openExamResults() async {
+    final user = context.read<UserProvider>();
+    final adminKey = user.adminKey ?? widget.adminKey;
+    final userId = widget.menteeUserId;
+    final moduleCode = widget.item.id;
+
+    if ((adminKey ?? '').isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('관리자 인증(adminKey)이 필요합니다. 상단에서 관리자 로그인 먼저 진행하세요.')),
+      );
+      return;
+    }
+    if ((userId ?? '').isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('멘티 식별자(user_id)가 없어 결과를 조회할 수 없어요.')),
+      );
+      return;
+    }
+
+    // 1) 시험 세트(문항/통과기준)
+    final set = await ExamService.instance.getExamSet(moduleCode);
+    if (set == null || set.questions.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('등록된 시험 세트가 없어요.')),
+      );
+      return;
+    }
+
+    // 2) 모든 시도 로드
+    final raws = await ExamService.instance.adminGetExamAttempts(
+      adminKey: adminKey!,
+      moduleCode: moduleCode,
+      userId: userId!,
+    );
+
+    if (!mounted) return;
+
+    if (raws.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('응시 기록이 없습니다.')),
+      );
+      return;
+    }
+
+    // 3) 화면 모델로 매핑
+    final attempts = _mapAttemptsForPage(
+      questions: set.questions,
+      attemptRows: raws,
+    );
+
+    // 4) 페이지로 이동
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ExamResultPage(
+          menteeName: widget.menteeName ?? '멘티',
+          curriculumTitle: 'W${_item.week}. ${_item.title}',
+          passScore: set.passScore,
+          attempts: attempts,
+        ),
+      ),
+    );
+  }
+
+  // ===== 매핑 유틸 =====
+
+  List<ExamAttemptResult> _mapAttemptsForPage({
+    required List<ExamQuestion> questions,
+    required List<RawExamAttempt> attemptRows,
+  }) {
+    // answers 구조가 Map 또는 List일 수 있으니 안전하게 처리
+    Map<String, dynamic> _asMap(dynamic v) =>
+        v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+
+    // 정규화 (단답 채점용)
+    String _norm(String s) =>
+        s.toLowerCase().trim().replaceAll(RegExp(r'[\s\-]'), '');
+
+    QuestionType _toResultType(ExamQuestionType t) {
+      switch (t) {
+        case ExamQuestionType.mcq:
+          return QuestionType.mcq;
+        case ExamQuestionType.shortAnswer:
+          return QuestionType.short;
+        case ExamQuestionType.ordering:
+          return QuestionType.ordering;
+      }
+    }
+
+    // 질문 id → 질문 맵
+    final Map<String, ExamQuestion> qById = {
+      for (final q in questions) q.id: q
+    };
+
+    return attemptRows.map((raw) {
+      final aTop = _asMap(raw.answers);
+
+      // duration 추출(없으면 0초)
+      int durSec = 0;
+      try {
+        final meta = _asMap(aTop['_meta']);
+        durSec = (meta['duration_sec'] ?? meta['duration'] ?? 0) as int? ?? 0;
+      } catch (_) {}
+
+      // 질문별 답맵: {qid: {...}} 또는 [{id:..., ...}]
+      Map<String, dynamic> ansById = {};
+      if (aTop.isNotEmpty && aTop.values.first is Map && aTop.containsKey('_meta')) {
+        // _meta 같이 있는 형태라면 나머지 키만 사용
+        ansById = Map.fromEntries(
+          aTop.entries.where((e) => e.key != '_meta'),
+        );
+      } else if (aTop.isNotEmpty) {
+        ansById = Map<String, dynamic>.from(aTop);
+      }
+      // 리스트 형태 지원
+      final listForm = raw.answers is List ? List.from(raw.answers as List) : null;
+      if (listForm != null) {
+        for (final e in listForm) {
+          final m = _asMap(e);
+          final id = (m['id'] ?? '').toString();
+          if (id.isNotEmpty) ansById[id] = m;
+        }
+      }
+
+      final itemResults = <QuestionResult>[];
+      for (final q in questions) {
+        final a = ansById[q.id];
+
+        // 공통 기본값
+        List<String>? choices;
+        int? selectedIndex;
+        int? correctIndex;
+        String? answerText;
+        List<String>? accepteds;
+        List<String>? selectedOrdering;
+        List<String>? correctOrdering;
+        bool isCorrect = false;
+
+        switch (q.type) {
+          case ExamQuestionType.mcq:
+            choices = q.choices ?? const <String>[];
+            correctIndex = q.correctIndex ?? 0;
+            // a가 int거나, {selectedIndex:index} 형태일 수 있음
+            if (a is int) {
+              selectedIndex = a;
+            } else if (a is Map) {
+              selectedIndex = (a['selectedIndex'] ?? a['index']) as int?;
+            }
+            isCorrect = (selectedIndex != null) && (selectedIndex == correctIndex);
+            break;
+
+          case ExamQuestionType.shortAnswer:
+            accepteds = (q.answers ?? const <String>[]);
+            if (a is String) {
+              answerText = a;
+            } else if (a is Map) {
+              answerText = (a['text'] ?? a['answer'])?.toString();
+            }
+            final ansNorm = answerText == null ? '' : _norm(answerText);
+            isCorrect = accepteds.any((acc) => _norm(acc) == ansNorm);
+            break;
+
+          case ExamQuestionType.ordering:
+            correctOrdering = q.ordering ?? const <String>[];
+            if (a is List) {
+              selectedOrdering = a.map((e) => e.toString()).toList();
+            } else if (a is Map) {
+              final ls = a['ordering'] as List?;
+              if (ls != null) {
+                selectedOrdering = ls.map((e) => e.toString()).toList();
+              }
+            }
+            isCorrect = (selectedOrdering != null) &&
+                selectedOrdering!.length == correctOrdering.length &&
+                List.generate(correctOrdering.length, (i) => i)
+                    .every((i) => correctOrdering![i] == selectedOrdering![i]);
+            break;
+        }
+
+        itemResults.add(
+          QuestionResult(
+            id: q.id,
+            type: _toResultType(q.type),
+            prompt: q.prompt,
+            choices: choices,
+            selectedIndex: selectedIndex,
+            correctIndex: correctIndex,
+            answerText: answerText,
+            accepteds: accepteds,
+            selectedOrdering: selectedOrdering,
+            correctOrdering: correctOrdering,
+            isCorrect: isCorrect,
+            explanation: null, // 현재 해설 스키마 없음
+          ),
+        );
+      }
+
+      return ExamAttemptResult(
+        id: raw.id,
+        takenAt: raw.createdAt,
+        score: raw.score,
+        passed: raw.passed,
+        duration: Duration(seconds: durSec),
+        items: itemResults,
+      );
+    }).toList();
+  }
+
 
   Future<void> _handleBack() async {
     if (_saving) {
@@ -1168,14 +1379,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 Padding(
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
-                                    onPressed: (){
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => ExamResultPage.demo(),
-                                        ),
-                                      );
-                                    },
+                                    onPressed: _openExamResults,
                                     style: FilledButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       minimumSize: const Size(0, 0),

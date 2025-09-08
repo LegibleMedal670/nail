@@ -1,4 +1,5 @@
 // lib/Services/ExamService.dart
+import 'package:nail/Pages/Manager/page/ManagerExamresultPage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 
@@ -46,6 +47,33 @@ class ExamService {
       'p_module_code': moduleCode,
     });
   }
+
+  Future<List<RawExamAttempt>> adminGetExamAttempts({
+    required String adminKey,
+    required String moduleCode,
+    required String userId, // uuid string
+  }) async {
+    final res = await _sb.rpc('admin_get_exam_attempts', params: {
+      'p_admin_key': adminKey,
+      'p_module_code': moduleCode,
+      'p_user_id': userId,
+    });
+
+    if (res == null) return <RawExamAttempt>[];
+
+    final List data = (res is List) ? res : <dynamic>[res];
+    return data.map((row) {
+      final m = Map<String, dynamic>.from(row as Map);
+      return RawExamAttempt(
+        id: (m['id'] ?? '').toString(),
+        createdAt: DateTime.parse(m['created_at'].toString()),
+        score: (m['score'] ?? 0) as int,
+        passed: (m['passed'] as bool?) ?? false,
+        answers: Map<String, dynamic>.from(m['answers'] ?? const {}),
+      );
+    }).toList();
+  }
+
 
   // ---------------------------------------------------------------------------
   // Mentee
@@ -242,3 +270,26 @@ class ExamSet {
     required this.questions,
   });
 }
+
+class AdminExamReport {
+  final int passScore;
+  final List<ExamAttemptResult> attempts;
+  const AdminExamReport({required this.passScore, required this.attempts});
+}
+
+class RawExamAttempt {
+  final String id;
+  final DateTime createdAt;
+  final int score;
+  final bool passed;
+  final Map<String, dynamic> answers;
+
+  RawExamAttempt({
+    required this.id,
+    required this.createdAt,
+    required this.score,
+    required this.passed,
+    required this.answers,
+  });
+}
+

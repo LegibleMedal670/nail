@@ -390,33 +390,13 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                                 item: item,
                                 mode: CurriculumViewMode.adminReview,
                                 progress: const CurriculumProgress(
-                                  watchedRatio: 0.35,
+                                  watchedRatio: 0.35, //TODO 멘티 수강 현황 서버와 연동할때 같이해야함
                                   attempts: 2,
                                   bestScore: 72,
                                   passed: true,
                                 ),
                                 menteeName: _mentee.name,
-                                onOpenExamReport: () {},
-                                onImpersonate: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => CurriculumDetailPage(
-                                        item: item,
-                                        mode: CurriculumViewMode.mentee,
-                                        progress: const CurriculumProgress(
-                                          watchedRatio: 0.35,
-                                          attempts: 2,
-                                          bestScore: 72,
-                                          passed: true,
-                                        ),
-                                        onPlay: () {},
-                                        onContinueWatch: () {},
-                                        onTakeExam: () {},
-                                      ),
-                                    ),
-                                  );
-                                },
+                                menteeUserId: _mentee.id,
                               ),
                             ),
                           );
