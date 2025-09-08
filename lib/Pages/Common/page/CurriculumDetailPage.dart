@@ -6,7 +6,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/widgets/SectionTitle.dart';
 import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
-import 'package:nail/Pages/Manager/page/ManagerExamresultPage.dart';
+import 'package:nail/Pages/Manager/page/ManagerExamResultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Pages/Mentee/page/ExamPage.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';

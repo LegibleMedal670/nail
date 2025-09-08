@@ -1,5 +1,5 @@
 // lib/Services/ExamService.dart
-import 'package:nail/Pages/Manager/page/ManagerExamresultPage.dart';
+import 'package:nail/Pages/Manager/page/ManagerExamResultPage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 

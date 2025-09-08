@@ -1,4 +1,4 @@
-// lib/Pages/Manager/page/ManagerExamresultPage.dart
+// lib/Pages/Manager/page/ManagerExamResultPage.dart
 
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
