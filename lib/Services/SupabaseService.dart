@@ -18,6 +18,8 @@ class SupabaseService {
   /// 관리자 편집용 키(관리자 접속코드). 로그인 성공 시 UserProvider가 주입.
   String? adminKey;
 
+  bool _adminLinkEnsured = false;
+
   // ---------------- 유저/멘티 관련 ----------------
   Future<Map<String, dynamic>?> loginWithKey(String loginKey) async {
     final res = await _sb.rpc('login_with_key', params: {'p_key': loginKey});
@@ -133,12 +135,13 @@ class SupabaseService {
     return int.tryParse(v?.toString() ?? '');
   }
 
-  /// (관리자) 목표/자료를 한 번에 저장 — 서버에서 p_admin_key 검증
+  /// (관리자) 목표/자료/비디오 경로를 한 번에 저장 — 서버에서 p_admin_key 검증
   Future<void> saveEditsViaRpc({
     required String code,
     required List<String> goals,
     required List<Map<String, dynamic>> resources,
-    String? adminKey, // 주입 없으면 필드 사용
+    String? videoPathOrNull,      // ★ 추가: Storage 경로(null=변경없음, ''=해제)
+    String? adminKey,             // 주입 없으면 필드 사용
   }) async {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) {
@@ -149,10 +152,33 @@ class SupabaseService {
       'p_code': code,
       'p_goals': goals,
       'p_resources': resources,
+      'p_video_url': videoPathOrNull, // ★ 전달
     });
   }
 
-  /// (선택) 커리큘럼 생성 RPC – 프로젝트에 이미 있으면 그대로 사용
+  Future<void> ensureAdminSessionLinked({String? adminKeyOverride}) async {
+    // 1) 세션이 없으면 익명 로그인
+    if (_sb.auth.currentSession == null || _sb.auth.currentUser == null) {
+      await _sb.auth.signInAnonymously();
+    }
+
+    // 2) 관리자 키 확인
+    final key = adminKeyOverride ?? adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing (관리자 접속코드가 필요합니다)');
+    }
+
+    // 3) 너무 자주 호출하지 않기 위한 1회캐시 (앱 재시작 전까지)
+    if (_adminLinkEnsured) return;
+
+    // 4) 로그인 RPC 호출 → app_user_auth_links에 (user_id, auth_user_id) 매핑 생성
+    await _sb.rpc('login_with_key', params: {'p_key': key});
+
+    _adminLinkEnsured = true;
+  }
+
+
+  /// (선택) 커리큘럼 생성 RPC – 프로젝트에 이미 있으면 그대로 사용 TODO 동영상
   Future<CurriculumItem> createCurriculumViaRpc({
     required String code,
     required int week,

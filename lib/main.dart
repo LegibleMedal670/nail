@@ -12,14 +12,27 @@ Future<void> main() async {
   await Supabase.initialize(
     url: Env.supabaseURL,
     anonKey: Env.supabaseAnonKey,
+    // 안전하게 명시(기본값도 true지만 확실히 해둠)
+    authOptions: const FlutterAuthClientOptions(
+      detectSessionInUri: true,
+      autoRefreshToken: true,
+    ),
   );
+
+  // ✅ 세션이 없을 때만 익명 로그인 (핵심 수정)
+  final auth = Supabase.instance.client.auth;
+  if (auth.currentSession == null) {
+    try {
+      await auth.signInAnonymously();
+    } catch (e) {
+      debugPrint('anonymous sign-in failed: $e');
+    }
+  }
 
   runApp(
     MultiProvider(
       providers: [
-        // 사용자 상태
         ChangeNotifierProvider(create: (_) => UserProvider()..hydrate()),
-        // 커리큘럼: 캐시 즉시 반영 + 서버 재검증(SWR) 백그라운드 수행
         ChangeNotifierProvider(create: (_) => CurriculumProvider()..ensureLoaded()),
       ],
       child: const MyApp(),
@@ -29,7 +42,6 @@ Future<void> main() async {
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
-
   @override
   State<MyApp> createState() => _MyAppState();
 }

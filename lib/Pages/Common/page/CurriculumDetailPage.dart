@@ -1,5 +1,8 @@
 // lib/Pages/Manager/page/CurriculumDetailPage.dart
 
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -12,8 +15,10 @@ import 'package:nail/Pages/Mentee/page/ExamPage.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/ExamService.dart';
+import 'package:nail/Services/StorageService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// 화면 모드: 관리자 편집 / 관리자 검토(멘티 진행 확인) / 멘티 수강
@@ -135,6 +140,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   bool get _isMentee      => widget.mode == CurriculumViewMode.mentee;
 
   CurriculumProgress get _pr => widget.progress ?? const CurriculumProgress();
+
+  File? _pendingVideoFile;         // ★ 저장 대기(미업로드) 로컬 파일
+  bool _videoRemovalRequested = false; // ★ 저장 시 비디오 제거 의도
 
   @override
   void initState() {
@@ -430,6 +438,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   Future<void> _editVideoSheet() async {
     if (!_isAdminEdit) return;
+
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -455,27 +464,32 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     _sheetGrabber(),
                     const SizedBox(height: 8),
                     const Text('영상 관리', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: UiTokens.title)),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+
                     ListTile(
                       leading: const Icon(Icons.video_library_outlined),
-                      title: Text(_videoUrl == null ? '영상 연결(데모)' : '영상 변경(데모)'),
-                      subtitle: Text(_videoUrl == null ? 'UI만 반영합니다(서버 저장은 하단 저장하기에서 일괄 처리 예정)' : 'UI만 변경합니다'),
-                      onTap: () {
+                      title: Text(_pendingVideoFile == null ? '영상 선택' : '다른 파일로 변경'),
+                      onTap: () async {
+                        final picked = await FilePicker.platform.pickFiles(type: FileType.video);
+                        if (picked == null || picked.files.isEmpty) return;
+                        final path = picked.files.single.path!;
                         setState(() {
-                          _videoUrl = 'uploaded://demo_video.mp4';
+                          _pendingVideoFile = File(path); // ★ 미업로드 로컬 파일로 보관
+                          _videoRemovalRequested = false;  // 제거 의도 초기화
                           _dirty = true;
                         });
-                        Navigator.pop(context);
+                        if (mounted) Navigator.pop(context);
                       },
                     ),
-                    if (_videoUrl != null)
+
+                    if (_videoUrl != null || _pendingVideoFile != null)
                       ListTile(
-                        leading: const Icon(Icons.delete_outline, color: Colors.red),
+                        leading: const Icon(Icons.link_off_rounded, color: Colors.red),
                         title: const Text('영상 연결 해제'),
-                        subtitle: const Text('UI에서만 제거됩니다'),
                         onTap: () {
                           setState(() {
-                            _videoUrl = null;
+                            _pendingVideoFile = null;        // 선택 무효화
+                            _videoRemovalRequested = true;   // 저장 시 제거
                             _dirty = true;
                           });
                           Navigator.pop(context);
@@ -1001,85 +1015,96 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
     setState(() => _saving = true);
 
-    // 아직 스토리지 업로드는 안 하므로, 서버로 보내는 resources는
-    // 원격 URL을 가진 항목만 포함 (localPending은 보류)
+    // 자료는 원격 URL만 반영(기존 로직 유지)
     final ready = _materials.where((m) => !m.localPending && (m.url?.trim().isNotEmpty ?? false)).toList();
-
     final resourcesJson = ready.map((m) {
       final name = m.name.trim().isEmpty ? '자료' : m.name.trim();
       final url  = (m.url ?? '').trim();
       final type = _guessType(url);
-      return {
-        'title': name,
-        'url': url,
-        'type': type,
-      };
+      return {'title': name, 'url': url, 'type': type};
     }).toList();
 
+    final storage = StorageService();
+    String? newUploadedPath;      // 방금 올린 새 파일(실패 시 롤백용)
+    final String? oldPath = _videoUrl; // 기존 DB에 있던 경로
+
     try {
-      // 1) 과정 메타(목표/자료) 저장
+      // ★ 업로드/정책 통과 전: 관리자 매핑 보장
+      await SupabaseService.instance.ensureAdminSessionLinked(
+        adminKeyOverride: adminKey,
+      );
+
+      // 1) (필요 시) 실제 업로드 수행
+      String? videoParam; // DB RPC로 넘길 값(null=변경없음, ''=해제, 'path'=설정)
+      if (_pendingVideoFile != null) {
+        final version = _item.version ?? (await SupabaseService.instance.latestCurriculumVersion() ?? 1);
+        newUploadedPath = await storage.uploadVideo(
+          file: _pendingVideoFile!,
+          moduleCode: _item.id,
+          version: version,
+          week: _item.week,
+          upsert: false, // 같은 경로 덮어쓸 계획이면 true
+        );
+        videoParam = newUploadedPath; // DB에 새 경로 반영
+      } else if (_videoRemovalRequested) {
+        videoParam = ''; // DB에서 해제
+      } else {
+        videoParam = null; // 비디오 변경 없음
+      }
+
+      // 2) 과정 메타 + 비디오 경로 업데이트
       await SupabaseService.instance.saveEditsViaRpc(
         code: _item.id,
         goals: _goals,
         resources: resourcesJson,
+        videoPathOrNull: videoParam,
         adminKey: adminKey,
       );
 
-// 2) OFF인 경우, 모듈의 시험 세트를 서버에서 삭제
-      if (!_requiresExam) {
-        try {
-          await ExamService.instance.adminDeleteExamSet(
-            adminKey: adminKey,
-            moduleCode: _item.id,
-          );
-        } catch (e) {
-          // 없으면(미생성) 에러 무시해도 됨
-          debugPrint('delete exam set skipped: $e');
-        }
-      }
-
-      // 2) ✅ 시험 세트가 임시 변경되어 있으면 이때 반영
-      if (_pendingExam != null) {
-        await ExamService.instance.adminUpsertExamSet(
-          adminKey: adminKey,
-          moduleCode: _item.id,
-          passScore: _pendingExam!.passScore,
-          questions: _pendingExam!.questions,
-        );
+      // 3) 커밋 후 정리: 이전 파일 삭제(베스트 에포트)
+      if (newUploadedPath != null && oldPath != null && oldPath.isNotEmpty && oldPath != newUploadedPath) {
+        try { await storage.deleteVideo(oldPath); } catch (_) {}
       }
 
       if (mounted) {
         setState(() {
+          // UI 상태 정리
+          if (_videoRemovalRequested) {
+            _videoUrl = null;
+          } else if (newUploadedPath != null) {
+            _videoUrl = newUploadedPath;
+          }
+          _pendingVideoFile = null;
+          _videoRemovalRequested = false;
+
           _dirty = false;
           _saving = false;
-          // 반영 완료 후 임시 변경 초기화
+
           if (_pendingExam != null) {
             _examPassScore = _pendingExam!.passScore;
             _pendingExam = null;
           }
         });
 
-        try {
-          context.read<CurriculumProvider>().refresh(force: true);
-        } catch (_) {}
-
+        try { context.read<CurriculumProvider>().refresh(force: true); } catch (_) {}
         await _reloadFromServer();
         await _loadExamPassScore();
 
-        final pendingCount = _materials.where((m) => m.localPending).length;
-        final msg = pendingCount > 0
-            ? '변경사항 저장 완료 (미업로드 ${pendingCount}개 보류)'
-            : '변경사항이 저장되었습니다';
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('변경사항이 저장되었습니다')));
       }
     } catch (e) {
+      // DB 반영 실패 등: 방금 올린 새 파일은 삭제(고아 방지)
+      if (newUploadedPath != null) {
+        try { await storage.deleteVideo(newUploadedPath); } catch (_) {}
+      }
       if (mounted) {
-        print('저장 실패: $e');
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
       }
     }
   }
+
+
 
   // ===== 뷰 =====
   @override

@@ -10,6 +10,7 @@ import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/CurriculumCreatePage.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CurriculumManageTab extends StatefulWidget {
   const CurriculumManageTab({super.key});
