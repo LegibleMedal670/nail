@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 

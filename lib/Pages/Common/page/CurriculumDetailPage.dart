@@ -1,13 +1,16 @@
 // lib/Pages/Manager/page/CurriculumDetailPage.dart
 
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
+import 'package:nail/Pages/Common/page/VideoPlayerPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/widgets/SectionTitle.dart';
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/page/ManagerExamResultPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
@@ -18,8 +21,8 @@ import 'package:nail/Services/ExamService.dart';
 import 'package:nail/Services/StorageService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 /// 화면 모드: 관리자 편집 / 관리자 검토(멘티 진행 확인) / 멘티 수강
 enum CurriculumViewMode { adminEdit, adminReview, mentee }
@@ -75,10 +78,6 @@ class CurriculumDetailPage extends StatefulWidget {
   final String? adminKey;
 
   /// 콜백들
-  // 멘티 인터랙션
-  final VoidCallback? onPlay;             // 동영상 재생
-  final VoidCallback? onContinueWatch;    // (멘티) 이어보기
-  final VoidCallback? onTakeExam;         // (멘티) 시험 보기
 
   // 관리자 편집/검토
   final Future<bool> Function()? onDeleteConfirm; // (adminEdit) 삭제 전 확인
@@ -95,9 +94,6 @@ class CurriculumDetailPage extends StatefulWidget {
     this.menteeName,
     this.menteeUserId,
     this.adminKey,
-    this.onPlay,
-    this.onContinueWatch,
-    this.onTakeExam,
     this.onDeleteConfirm,
     this.onOpenExamEditor,
     this.onOpenExamReport,
@@ -144,6 +140,15 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   File? _pendingVideoFile;         // ★ 저장 대기(미업로드) 로컬 파일
   bool _videoRemovalRequested = false; // ★ 저장 시 비디오 제거 의도
 
+  // 상태 필드(클래스 안)
+  final StorageService _storage = StorageService();
+  Future<String>? _thumbSignedFuture;   // 썸네일 서명 URL Future
+  File? _pendingLocalVideoFile;   // 저장 대기 중인 새 영상 파일
+  Uint8List? _pendingThumbBytes;  // 저장 전 임시 썸네일(메모리)
+
+// (선택) 미세 강제 리빌드용
+  int _pendingThumbRev = 0;
+
   @override
   void initState() {
     super.initState();
@@ -152,11 +157,64 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     _loadExamPassScore(); // ✅ 통과 기준 초기 로드
   }
 
+  // 로컬 동영상 파일로부터 임시 썸네일 바이트 생성
+  Future<Uint8List?> _generateLocalThumb(String filePath) async {
+    try {
+      return await VideoThumbnail.thumbnailData(
+        video: filePath,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 640, // 리스폰시브/메모리 절약
+        quality: 80,
+        timeMs: 3000,  // 3초 지점
+      ); // plugin 사용법: pub.dev/video_thumbnail
+    } catch (_) {
+      return null;
+    }
+  }
+
+// "새 영상 선택" → 임시 썸네일까지 즉시 반영
+  Future<void> _setPendingVideo(File file) async {
+    final thumb = await _generateLocalThumb(file.path);
+    if (!mounted) return;
+    setState(() {
+      _pendingLocalVideoFile = file;
+      _pendingThumbBytes = thumb;      // ★ 즉시 UI에 썸네일 반영
+      _videoUrl = null;                // 기존 원격 연결은 끊긴 UI 상태로
+      _thumbSignedFuture = null;       // 원격 썸네일 표시 중지
+      _dirty = true;
+      _pendingThumbRev++;              // 강제 리빌드 용(선택)
+    });
+  }
+
+// "영상 삭제" → 임시/원격 썸네일 모두 제거(즉시 플레이스홀더)
+  void _clearPendingVideo() {
+    setState(() {
+      _pendingLocalVideoFile = null;
+      _pendingThumbBytes = null;
+      _videoUrl = null;           // UI상 비디오 없음
+      _thumbSignedFuture = null;  // 원격 썸네일 사용 안 함
+      _dirty = true;
+      _pendingThumbRev++;
+    });
+  }
+
+
   void _hydrateFromItem(CurriculumItem it) {
     _item = it;
     _goals = List<String>.from(it.goals);
     _requiresExam = it.requiresExam;
     _videoUrl = it.videoUrl;
+
+    // ★ 편집 도중 남아있던 임시 상태 초기화(서버 최신 반영 시점)
+    _pendingLocalVideoFile = null;
+    _pendingThumbBytes = null;
+
+    // 원격 썸네일 Future 준비
+    if (it.thumbUrl != null && it.thumbUrl!.isNotEmpty) {
+      _thumbSignedFuture = _storage.getOrCreateSignedUrl(it.thumbUrl!);
+    } else {
+      _thumbSignedFuture = null;
+    }
 
     _materials = it.resources.map((m) {
       final title = (m['title'] ?? m['name'] ?? '').toString();
@@ -166,7 +224,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
         name: title.isEmpty ? '자료' : title,
         icon: _iconFromType(type, url),
         url: url.isEmpty ? null : url,
-        localPending: false, // 서버에서 온 자료는 업로드 완료 상태
+        localPending: false,
       );
     }).toList();
   }
@@ -179,7 +237,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     });
   }
 
-  // ✅ 서버의 시험 통과 기준(pass_score) 가져오기
   Future<void> _loadExamPassScore() async {
     try {
       final set = await ExamService.instance.getExamSet(_item.id);
@@ -258,6 +315,23 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
           curriculumTitle: 'W${_item.week}. ${_item.title}',
           passScore: set.passScore,
           attempts: attempts,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPlayer() async {
+    if (_videoUrl == null || _videoUrl!.isEmpty) return;
+    final title = 'W${_item.week}. ${_item.title}';
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VideoPlayerPage(
+          storageObjectPath: _videoUrl!,
+          title: title,
+          signedUrlTtlSec: 21600, // 6시간
+          minTtlBufferSec: 300,   // 만료 5분 전 재발급
         ),
       ),
     );
@@ -438,7 +512,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   Future<void> _editVideoSheet() async {
     if (!_isAdminEdit) return;
-
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -446,58 +519,45 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       isScrollControlled: false,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (sheetCtx) {
-        final bottomInset = MediaQuery.of(sheetCtx).viewInsets.bottom;
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: _unfocus,
-          child: AnimatedPadding(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            padding: EdgeInsets.only(bottom: bottomInset),
-            child: SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _sheetGrabber(),
-                    const SizedBox(height: 8),
-                    const Text('영상 관리', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: UiTokens.title)),
-                    const SizedBox(height: 12),
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _sheetGrabber(),
+                const SizedBox(height: 8),
+                const Text('영상 관리', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: UiTokens.title)),
+                const SizedBox(height: 16),
 
-                    ListTile(
-                      leading: const Icon(Icons.video_library_outlined),
-                      title: Text(_pendingVideoFile == null ? '영상 선택' : '다른 파일로 변경'),
-                      onTap: () async {
-                        final picked = await FilePicker.platform.pickFiles(type: FileType.video);
-                        if (picked == null || picked.files.isEmpty) return;
-                        final path = picked.files.single.path!;
-                        setState(() {
-                          _pendingVideoFile = File(path); // ★ 미업로드 로컬 파일로 보관
-                          _videoRemovalRequested = false;  // 제거 의도 초기화
-                          _dirty = true;
-                        });
-                        if (mounted) Navigator.pop(context);
-                      },
-                    ),
-
-                    if (_videoUrl != null || _pendingVideoFile != null)
-                      ListTile(
-                        leading: const Icon(Icons.link_off_rounded, color: Colors.red),
-                        title: const Text('영상 연결 해제'),
-                        onTap: () {
-                          setState(() {
-                            _pendingVideoFile = null;        // 선택 무효화
-                            _videoRemovalRequested = true;   // 저장 시 제거
-                            _dirty = true;
-                          });
-                          Navigator.pop(context);
-                        },
-                      ),
-                  ],
+                // 로컬 파일 선택(즉시 임시 썸네일까지 반영)
+                ListTile(
+                  leading: const Icon(Icons.video_library_outlined),
+                  title: const Text('영상 파일 선택(저장 시 업로드)'),
+                  onTap: () async {
+                    try {
+                      final pf = await SupabaseService.instance.pickOneFile();
+                      if (pf?.path == null) return;
+                      await _setPendingVideo(File(pf!.path!)); // ★ 즉시 썸네일 반영
+                      if (mounted) Navigator.pop(context);
+                    } catch (e) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('파일 선택 실패: $e')));
+                    }
+                  },
                 ),
-              ),
+
+                // 영상 연결 해제(즉시 플레이스홀더로)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline, color: Colors.red),
+                  title: const Text('영상 연결 해제'),
+                  onTap: () {
+                    _clearPendingVideo(); // ★ 즉시 반영
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
             ),
           ),
         );
@@ -1015,7 +1075,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
     setState(() => _saving = true);
 
-    // 자료는 원격 URL만 반영(기존 로직 유지)
+    // 원격 URL만 서버에 반영
     final ready = _materials.where((m) => !m.localPending && (m.url?.trim().isNotEmpty ?? false)).toList();
     final resourcesJson = ready.map((m) {
       final name = m.name.trim().isEmpty ? '자료' : m.name.trim();
@@ -1024,87 +1084,105 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       return {'title': name, 'url': url, 'type': type};
     }).toList();
 
-    final storage = StorageService();
-    String? newUploadedPath;      // 방금 올린 새 파일(실패 시 롤백용)
-    final String? oldPath = _videoUrl; // 기존 DB에 있던 경로
+    String? newVideoPath;   // null=변경없음, ''=해제, 'path'=설정
+    String? newThumbPath;
 
     try {
-      // ★ 업로드/정책 통과 전: 관리자 매핑 보장
-      await SupabaseService.instance.ensureAdminSessionLinked(
-        adminKeyOverride: adminKey,
-      );
-
-      // 1) (필요 시) 실제 업로드 수행
-      String? videoParam; // DB RPC로 넘길 값(null=변경없음, ''=해제, 'path'=설정)
-      if (_pendingVideoFile != null) {
-        final version = _item.version ?? (await SupabaseService.instance.latestCurriculumVersion() ?? 1);
-        newUploadedPath = await storage.uploadVideo(
-          file: _pendingVideoFile!,
-          moduleCode: _item.id,
-          version: version,
-          week: _item.week,
-          upsert: false, // 같은 경로 덮어쓸 계획이면 true
-        );
-        videoParam = newUploadedPath; // DB에 새 경로 반영
-      } else if (_videoRemovalRequested) {
-        videoParam = ''; // DB에서 해제
-      } else {
-        videoParam = null; // 비디오 변경 없음
+      // 1) 삭제 의도?
+      if (_videoUrl == null && _item.videoUrl != null && _pendingLocalVideoFile == null) {
+        newVideoPath = '';   // 해제
+        newThumbPath = '';   // 해제
       }
 
-      // 2) 과정 메타 + 비디오 경로 업데이트
+      // 2) 신규 업로드가 대기 중이면 업로드
+      if (_pendingLocalVideoFile != null) {
+        final storage = StorageService();
+
+        // (a) 비디오 업로드
+        newVideoPath = await storage.uploadVideo(
+          file: _pendingLocalVideoFile!,
+          moduleCode: _item.id,
+          version: _item.version ?? 1,
+          week: _item.week,
+        );
+
+        // (b) 썸네일 생성(3초 지점, 640px, JPEG 품질 80)
+        final Uint8List? thumbBytes = await VideoThumbnail.thumbnailData(
+          video: _pendingLocalVideoFile!.path,
+          imageFormat: ImageFormat.JPEG,
+          maxWidth: 640,
+          quality: 80,
+          timeMs: 3000,
+        ); // video_thumbnail 사용법 참고 :contentReference[oaicite:3]{index=3}
+
+        if (thumbBytes != null) {
+          newThumbPath = await storage.uploadThumbnailBytes(
+            bytes: thumbBytes,
+            moduleCode: _item.id,
+            version: _item.version ?? 1,
+            week: _item.week,
+            filename: 'thumb.jpg',
+            upsert: true,
+          );
+        } else {
+          newThumbPath = ''; // 생성 실패 시 비워두기(옵션)
+        }
+      }
+
+      // 3) RPC로 메타 한 번에 저장
       await SupabaseService.instance.saveEditsViaRpc(
         code: _item.id,
         goals: _goals,
         resources: resourcesJson,
-        videoPathOrNull: videoParam,
+        videoPathOrNull: newVideoPath,
+        thumbPathOrNull: newThumbPath,
         adminKey: adminKey,
       );
 
-      // 3) 커밋 후 정리: 이전 파일 삭제(베스트 에포트)
-      if (newUploadedPath != null && oldPath != null && oldPath.isNotEmpty && oldPath != newUploadedPath) {
-        try { await storage.deleteVideo(oldPath); } catch (_) {}
+      // 4) 기존 시험 세트 처리(네 프로젝트 로직 그대로)
+      if (!_requiresExam) {
+        try {
+          await ExamService.instance.adminDeleteExamSet(
+            adminKey: adminKey,
+            moduleCode: _item.id,
+          );
+        } catch (_) {}
+      }
+      if (_pendingExam != null) {
+        await ExamService.instance.adminUpsertExamSet(
+          adminKey: adminKey,
+          moduleCode: _item.id,
+          passScore: _pendingExam!.passScore,
+          questions: _pendingExam!.questions,
+        );
       }
 
-      if (mounted) {
-        setState(() {
-          // UI 상태 정리
-          if (_videoRemovalRequested) {
-            _videoUrl = null;
-          } else if (newUploadedPath != null) {
-            _videoUrl = newUploadedPath;
-          }
-          _pendingVideoFile = null;
-          _videoRemovalRequested = false;
+      if (!mounted) return;
+      setState(() {
+        _dirty = false;
+        _saving = false;
+        _pendingLocalVideoFile = null;
+        _pendingThumbBytes = null;   // ★ 임시 썸네일 제거 → 원격 썸네일 Future로 자연 전환
+        _pendingThumbRev++;
+        if (_pendingExam != null) {
+          _examPassScore = _pendingExam!.passScore;
+          _pendingExam = null;
+        }
+      });
 
-          _dirty = false;
-          _saving = false;
+      try { context.read<CurriculumProvider>().refresh(force: true); } catch (_) {}
+      await _reloadFromServer();
+      await _loadExamPassScore();
 
-          if (_pendingExam != null) {
-            _examPassScore = _pendingExam!.passScore;
-            _pendingExam = null;
-          }
-        });
-
-        try { context.read<CurriculumProvider>().refresh(force: true); } catch (_) {}
-        await _reloadFromServer();
-        await _loadExamPassScore();
-
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('변경사항이 저장되었습니다')));
-      }
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('변경사항이 저장되었습니다.')));
     } catch (e) {
-      // DB 반영 실패 등: 방금 올린 새 파일은 삭제(고아 방지)
-      if (newUploadedPath != null) {
-        try { await storage.deleteVideo(newUploadedPath); } catch (_) {}
-      }
+      print(e);
       if (mounted) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('저장 실패: $e')));
       }
     }
   }
-
-
 
   // ===== 뷰 =====
   @override
@@ -1192,7 +1270,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     onEdit: _isAdminEdit ? _editVideoSheet : null,
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: (_videoUrl != null && _isMentee) ? (widget.onPlay) : null,
+                      onTap: (_videoUrl != null && _isMentee)
+                          ? _openPlayer
+                          : null,
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
                         child: AspectRatio(
@@ -1201,25 +1281,16 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                             fit: StackFit.expand,
                             children: [
                               // 배경
-                              Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      UiTokens.primaryBlue.withOpacity(0.18),
-                                      const Color(0xFFCBD5E1).withOpacity(0.25),
-                                    ],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Icon(
-                                    _videoUrl == null ? Icons.videocam_off_rounded : Icons.videocam_rounded,
-                                    size: 72,
-                                    color: UiTokens.actionIcon,
-                                  ),
+                              // 배경: 썸네일(캐시 사용) → 실패/없음이면 그라디언트
+                              Positioned.fill(
+                                child: _ThumbOrGradient(
+                                  cacheKey: 'thumb:${_item.thumbUrl ?? ''}-${_pendingThumbRev}', // 강제리프레시용 rev 포함(선택)
+                                  overrideBytes: _pendingThumbBytes,          // ★ 있으면 최우선으로 표시
+                                  signedUrlFuture: _thumbSignedFuture,        // 원격(저장 반영 후)
+                                  fallback: _gradientPlaceholder(),
                                 ),
                               ),
+
 
                               // mentee 모드: 중앙 Play 버튼
                               if (_videoUrl != null && _isMentee)
@@ -1455,7 +1526,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     child: FilledButton(
                       onPressed: _isAdminEdit
                           ? (_dirty && !_saving ? _saveAllEdits : null)
-                          : (widget.onContinueWatch ?? widget.onPlay),
+                          : (_videoUrl != null) ? _openPlayer : null,
                       style: FilledButton.styleFrom(
                         backgroundColor: UiTokens.primaryBlue,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1735,6 +1806,67 @@ class _SheetGrabber extends StatelessWidget {
     );
   }
 }
+
+Widget _gradientPlaceholder() {
+  return Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: [UiTokens.primaryBlue.withOpacity(0.18), const Color(0xFFCBD5E1).withOpacity(0.25)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    ),
+  );
+}
+
+/// 미리보기(메모리) > 원격(서명 URL + 캐시) > 폴백 순서로 표시
+class _ThumbOrGradient extends StatelessWidget {
+  final String cacheKey;
+  final Uint8List? overrideBytes;       // ★ 편집 중 임시 썸네일
+  final Future<String>? signedUrlFuture;
+  final Widget fallback;
+
+  const _ThumbOrGradient({
+    required this.cacheKey,
+    required this.overrideBytes,
+    required this.signedUrlFuture,
+    required this.fallback,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // 1) 메모리 이미지가 있으면 최우선 표시(저장 전 미리보기)
+    if (overrideBytes != null && overrideBytes!.isNotEmpty) {
+      // 공식: Image.memory는 Uint8List로 즉시 이미지를 그린다.
+      return Image.memory(
+        overrideBytes!,
+        fit: BoxFit.cover,
+      ); // :contentReference[oaicite:4]{index=4}
+    }
+
+    // 2) 원격 썸네일(서명 URL) — 캐시 사용
+    if (signedUrlFuture != null) {
+      return FutureBuilder<String>(
+        future: signedUrlFuture,
+        builder: (context, snap) {
+          if (!snap.hasData || (snap.data ?? '').isEmpty) return fallback;
+          return CachedNetworkImage(
+            imageUrl: snap.data!,
+            cacheKey: cacheKey,            // 같은 오브젝트면 URL이 바뀌어도 캐시 재사용
+            fit: BoxFit.cover,
+            placeholder: (_, __) => fallback,
+            errorWidget: (_, __, ___) => fallback,
+          ); // :contentReference[oaicite:5]{index=5}
+        },
+      );
+    }
+
+    // 3) 폴백
+    return fallback;
+  }
+}
+
+
 
 InputDecoration _inputDeco(String label) => InputDecoration(
   labelText: label,

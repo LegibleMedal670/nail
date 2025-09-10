@@ -21,6 +21,8 @@ class CurriculumItem {
   /// (호환성 유지) 앱 일부에서 참조하던 필드 – DB엔 없음
   final int durationMinutes;
 
+  final String? thumbUrl;
+
   const CurriculumItem({
     required this.id,
     required this.week,
@@ -33,6 +35,7 @@ class CurriculumItem {
     required this.resources,
     required this.goals,
     this.durationMinutes = 0,
+    this.thumbUrl,
   });
 
   CurriculumItem copyWith({

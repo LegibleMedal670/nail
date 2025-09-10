@@ -1,6 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 
 /// UI에서 파일 업로드는 아직 하지 않으므로, 선택 결과만 담는 경량 모델
 class PickedLocalFile {
@@ -91,7 +91,7 @@ class SupabaseService {
   /// ✅ 뷰 curriculum_modules_v 사용 (has_exam 포함)
   Future<List<CurriculumItem>> listCurriculumItems({int? version}) async {
     const sel =
-        'code, week, title, summary, has_video, video_url, version, resources, goals, has_exam';
+        'code, week, title, summary, has_video, video_url, version, resources, goals, has_exam, thumb_url';
 
     PostgrestFilterBuilder<dynamic> q = _sb.from('curriculum_modules_v').select(sel);
     if (version != null) q = q.eq('version', version);
@@ -108,7 +108,7 @@ class SupabaseService {
   /// ✅ 단건 조회도 뷰 사용
   Future<CurriculumItem?> getCurriculumItemByCode(String code) async {
     const sel =
-        'code, week, title, summary, has_video, video_url, version, resources, goals, has_exam';
+        'code, week, title, summary, has_video, video_url, version, resources, goals, has_exam, thumb_url';
 
     final row = await _sb
         .from('curriculum_modules_v')
@@ -136,12 +136,16 @@ class SupabaseService {
   }
 
   /// (관리자) 목표/자료/비디오 경로를 한 번에 저장 — 서버에서 p_admin_key 검증
+  /// (관리자) 목표/자료 + 비디오/썸네일 경로 저장
+  /// - videoPathOrNull: null=변경없음, ''=해제, 'path'=설정
+  /// - thumbPathOrNull: 규칙 동일
   Future<void> saveEditsViaRpc({
     required String code,
     required List<String> goals,
     required List<Map<String, dynamic>> resources,
-    String? videoPathOrNull,      // ★ 추가: Storage 경로(null=변경없음, ''=해제)
-    String? adminKey,             // 주입 없으면 필드 사용
+    String? videoPathOrNull,
+    String? thumbPathOrNull,
+    String? adminKey,
   }) async {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) {
@@ -152,9 +156,11 @@ class SupabaseService {
       'p_code': code,
       'p_goals': goals,
       'p_resources': resources,
-      'p_video_url': videoPathOrNull, // ★ 전달
+      'p_video_url': videoPathOrNull,
+      'p_thumb_url': thumbPathOrNull,
     });
   }
+
 
   Future<void> ensureAdminSessionLinked({String? adminKeyOverride}) async {
     // 1) 세션이 없으면 익명 로그인
@@ -291,7 +297,6 @@ class SupabaseService {
     final bool hasVideo =
         (r['has_video'] == true) || (videoUrl != null && videoUrl.isNotEmpty);
 
-    // 옵션 A: requiresExam = has_exam
     final bool requiresExam = r['has_exam'] == true;
 
     final dynamic resourcesRaw = r['resources'];
@@ -313,6 +318,8 @@ class SupabaseService {
         ? r['version'] as int
         : int.tryParse('${r['version'] ?? ''}');
 
+    final String? thumbUrl = (r['thumb_url'] as String?)?.trim();
+
     return CurriculumItem(
       id: id,
       week: week,
@@ -324,7 +331,9 @@ class SupabaseService {
       version: version,
       resources: resources,
       goals: goals,
-      durationMinutes: 0, // 호환용
+      durationMinutes: 0,
+      thumbUrl: (thumbUrl?.isEmpty == true) ? null : thumbUrl,
     );
   }
+
 }

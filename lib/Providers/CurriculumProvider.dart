@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 class CurriculumProvider extends ChangeNotifier {
   static const _kCacheVersionKey = 'curriculum.version';
-  static const _kCachePayloadKey = 'curriculum.payload.v3'; // 모델 변경 → 키 승격
+  static const _kCachePayloadKey = 'curriculum.payload.v4'; // ✅ 모델 변경 → 키 승격
 
   final List<CurriculumItem> _items = [];
   List<CurriculumItem> get items => List.unmodifiable(_items);
@@ -170,6 +170,7 @@ class CurriculumProvider extends ChangeNotifier {
       resources: resources,
       durationMinutes: (j['durationMinutes'] as int?) ?? 0, // 호환용
       version: j['version'] as int?,
+      thumbUrl: (j['thumbUrl'] as String?)?.trim().isEmpty == true ? null : j['thumbUrl'] as String?, // ✅ 추가
     );
   }
 
@@ -186,6 +187,7 @@ class CurriculumProvider extends ChangeNotifier {
       'resources': i.resources,
       'durationMinutes': i.durationMinutes, // 호환용
       'version': i.version,
+      'thumbUrl': i.thumbUrl, // ✅ 추가
     };
   }
 

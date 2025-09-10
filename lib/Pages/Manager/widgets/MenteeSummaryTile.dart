@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 
 /// 간단 시험 기록 모델 (서버 연동 전 데모/요약용)

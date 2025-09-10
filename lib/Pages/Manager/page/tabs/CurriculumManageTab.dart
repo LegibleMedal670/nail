@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/CurriculumCreatePage.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';

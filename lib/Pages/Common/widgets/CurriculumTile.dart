@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Manager/models/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 
 class CurriculumTile extends StatelessWidget {
   final CurriculumItem item;
   final VoidCallback? onTap;
 
-  const CurriculumTile({
-    super.key,
-    required this.item,
-    this.onTap,
-  });
-
+  const CurriculumTile({super.key, required this.item, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -65,11 +60,11 @@ class CurriculumTile extends StatelessWidget {
                     // 하단 메타: 시간, 뱃지들
                     Row(
                       children: [
-                        if (item.hasVideo) _chip('영상'),
-                        if (item.requiresExam) ...[
+                        if (item.hasVideo) ...[
+                          _chip('영상'),
                           const SizedBox(width: 6),
-                          _chip('시험'),
                         ],
+                        if (item.requiresExam) _chip('시험'),
                       ],
                     ),
                   ],
