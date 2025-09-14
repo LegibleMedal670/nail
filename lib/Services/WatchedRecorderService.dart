@@ -5,16 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 import 'package:nail/Services/VideoProgressService.dart';
 
+/// Records watched buckets and periodically flushes them to the server.
+/// - Buckets are recorded while playing (not buffering).
+/// - Large seek jumps start a short cooldown to avoid bogus buckets.
+/// - Flush sends only *new* buckets since last ack to the RPC.
 class WatchedRecorderService {
   final VideoPlayerController controller;
   final String moduleCode;
+
+  /// Initial duration snapshot (seconds). May be 0 on iOS/streaming right after initialize().
+  /// We compute an effective duration at flush time using the controller's *current* duration.
   final int durationSec;
+
   final int bucketSize;
 
   final Duration tickInterval;
   final Duration flushInterval;
-  final int seekJumpThresholdSec;
-  final int seekResumeGuardSec;
+  final int seekJumpThresholdSec; // treat as seek if |Δpos| >= this
+  final int seekResumeGuardSec;   // after a seek, pause recording for N seconds
 
   final String loginKey;
 
@@ -28,7 +36,10 @@ class WatchedRecorderService {
   int? _lastPosSec;
   int _seekCooldownTicks = 0;
 
+  /// Buckets seen during this page session (for stats/force-full-cover on exit, if needed)
   final Set<int> _sessionBuckets = <int>{};
+
+  /// Buckets pending to be flushed to the server
   final Set<int> _pendingBuckets = <int>{};
 
   int? _lastFlushedPos;
@@ -37,8 +48,8 @@ class WatchedRecorderService {
     required this.controller,
     required this.moduleCode,
     required this.durationSec,
+    required this.loginKey,
     this.bucketSize = 5,
-    required this.loginKey, // ✅ 추가
     this.tickInterval = const Duration(seconds: 1),
     this.flushInterval = const Duration(seconds: 8),
     this.seekJumpThresholdSec = 8,
@@ -46,7 +57,7 @@ class WatchedRecorderService {
     this.onServerAck,
   });
 
-  /// 현재 세션에서 아직 서버로 안 보낸 신규 버킷들(강제 업서트에 활용)
+  /// Expose pending buckets for a final force-upsert when leaving the page
   Set<int> get pendingBuckets => Set.unmodifiable(_pendingBuckets);
 
   void start() {
@@ -67,64 +78,105 @@ class WatchedRecorderService {
     final buffering = v.isBuffering;
     final posSec = v.position.inSeconds;
 
+    // Seek detection → small cooldown to avoid false buckets
     if (_lastPosSec != null) {
       final diff = (posSec - _lastPosSec!).abs();
       if (diff >= seekJumpThresholdSec) {
         _seekCooldownTicks = math.max(1, (seekResumeGuardSec / tickInterval.inSeconds).ceil());
         if (kDebugMode) {
-          print('[WatchedRecorder] seek detected (+$diff s) → cooldown=$_seekCooldownTicks');
+          print('[WatchedRecorder] seek detected: Δ$diff s → cooldown ticks: $_seekCooldownTicks');
         }
       }
     }
 
-    if (playing && !buffering) {
-      if (_seekCooldownTicks > 0) {
-        _seekCooldownTicks -= 1;
-      } else {
-        final b = _bucketIndex(posSec);
-        if (_sessionBuckets.add(b)) {
-          _pendingBuckets.add(b);
-          if (kDebugMode) print('[WatchedRecorder] +bucket $b (pos=$posSec)');
+    final canRecord = playing && !buffering && _seekCooldownTicks <= 0;
+
+    if (canRecord) {
+      final idx = _bucketIndex(posSec);
+      if (!_sessionBuckets.contains(idx)) {
+        _sessionBuckets.add(idx);
+        _pendingBuckets.add(idx);
+        if (kDebugMode) {
+          print('[WatchedRecorder] +bucket $idx (pos=$posSec)');
         }
+      }
+    } else {
+      if (kDebugMode && (playing || buffering) && _seekCooldownTicks > 0) {
+        print('[WatchedRecorder] cooldown… ($_seekCooldownTicks)');
       }
     }
 
     _lastPosSec = posSec;
+    if (_seekCooldownTicks > 0) _seekCooldownTicks -= 1;
+  }
+
+  int _effectiveDurationSec() {
+    // Prefer the controller's latest duration if known (>0), else fall back to the initial snapshot.
+    final d = controller.value.duration.inSeconds;
+    if (d > 0) return d;
+    return math.max(0, durationSec);
   }
 
   Future<void> _flush() async {
     if (!_running) return;
 
-    final lastPos = _lastPosSec;
-    final hasNew = _pendingBuckets.isNotEmpty;
-    final posChanged = (lastPos != null && lastPos != _lastFlushedPos);
+    final v = controller.value;
+    if (!v.isInitialized) return;
 
+    final currentPos = v.position.inSeconds;
+    final posChanged = _lastFlushedPos == null || _lastFlushedPos != currentPos;
+    final hasNew = _pendingBuckets.isNotEmpty;
+
+    // Nothing to send
     if (!hasNew && !posChanged) return;
 
     if (loginKey.isEmpty) return;
 
+    // Copy payload and clear local buffer for at-least-once delivery semantics
     final payload = Set<int>.from(_pendingBuckets);
     _pendingBuckets.clear();
 
+    // Compute robust duration/lastPos
+    var effDuration = _effectiveDurationSec();
+
+    var lastPos = currentPos;
+    if (effDuration > 0 && lastPos >= effDuration) {
+      lastPos = effDuration - 1; // keep last_pos within [0, duration-1]
+    }
+
+    // Guard: if we are sending only a position update (no buckets) and position changed,
+    // include the current bucket so server always has ≥1 bucket when duration becomes known.
+    if (payload.isEmpty && posChanged) {
+      final idx = _bucketIndex(lastPos);
+      payload.add(idx);
+      if (kDebugMode) {
+        print('[WatchedRecorder] (guard) adding current bucket $idx because payload was empty');
+      }
+    }
+
     try {
-      // ✅ loginKey가 비었으면 호출하지 않음 (안전장치)
-      if (loginKey.isEmpty) return;
+      if (kDebugMode) {
+        print('[WatchedRecorder] flush → buckets=${payload.length} '
+            'effDuration=$effDuration lastPos=$lastPos loginKey=${loginKey.isNotEmpty}');
+      }
 
       final ack = await VideoProgressService.instance.menteeUpsertProgress(
-        loginKey: loginKey,            // ✅ 여기!
+        loginKey: loginKey,
         moduleCode: moduleCode,
-        durationSec: durationSec,
+        durationSec: effDuration,
         bucketSize: bucketSize,
         newBuckets: payload,
         lastPosSec: lastPos,
-        force: false,                  // 평시 flush는 false
+        force: false,
       );
+
       _lastFlushedPos = lastPos;
       onServerAck?.call(ack);
     } catch (e) {
       if (kDebugMode) {
         print('[WatchedRecorder] flush error: $e');
       }
+      // re-queue payload to try again later
       _pendingBuckets.addAll(payload);
     }
   }
