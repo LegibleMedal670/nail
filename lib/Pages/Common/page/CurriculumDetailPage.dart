@@ -5,7 +5,9 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/page/VideoPlayerPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -20,6 +22,7 @@ import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/ExamService.dart';
 import 'package:nail/Services/StorageService.dart';
 import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Services/VideoProgressService.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
@@ -27,25 +30,12 @@ import 'package:video_thumbnail/video_thumbnail.dart';
 /// 화면 모드: 관리자 편집 / 관리자 검토(멘티 진행 확인) / 멘티 수강
 enum CurriculumViewMode { adminEdit, adminReview, mentee }
 
-/// 멘티 진행/시험 상태(점수는 최고점만 유지)
-class CurriculumProgress {
-  final double watchedRatio;   // 0.0 ~ 1.0
-  final int attempts;          // 시험 시도 수
-  final int? bestScore;        // 최고 점수(없으면 null)
-  final bool passed;           // 통과 여부
-
-  const CurriculumProgress({
-    this.watchedRatio = 0.0,
-    this.attempts = 0,
-    this.bestScore,
-    this.passed = false,
-  });
-}
 
 class CurriculumDetailResult {
   final bool deleted;
   const CurriculumDetailResult({this.deleted = false});
 }
+
 
 /// 페이지 내부 전용 자료 모델
 class _EditMaterial {
@@ -149,13 +139,49 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 // (선택) 미세 강제 리빌드용
   int _pendingThumbRev = 0;
 
+  // 멘티 진행률(서버에서 직접 조회한 결과)
+  VideoProgressResult? _vp;
+
+  /// 화면에서 사용할 시청 비율:
+  /// - 우선 서버에서 가져온 값(_vp)
+  /// - 없으면 부모에서 내려준 데모용 CurriculumProgress
+  double get _watchedRatio => _vp?.watchedRatio ?? _pr.watchedRatio;
+
+  Future<void> _loadMenteeProgress() async {
+    if (!_isMentee) return;
+    try {
+      final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+      if (loginKey.isEmpty) return;
+
+      print('로그인키 $loginKey');
+
+      final res = await VideoProgressService.instance.menteeGetProgress(
+        loginKey: loginKey,
+        moduleCode: _item.id, // == code
+      );
+
+      if (!mounted) return;
+      setState(() => _vp = res);
+    } catch (e) {
+      // 실패는 무시(네트워크 일시 이슈 등)
+      if (kDebugMode) {
+        print('menteeGetProgress error: $e');
+      }
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
     _hydrateFromItem(widget.item);
-    _reloadFromServer(); // 단건 최신화(SWR) – 초기 1회
-    _loadExamPassScore(); // ✅ 통과 기준 초기 로드
+    _reloadFromServer();
+    _loadExamPassScore();
+
+    // ✅ 멘티 모드면 서버에서 진행률 로드(이어보기 퍼센트 반영)
+    if (_isMentee) _loadMenteeProgress();
   }
+
 
   // 로컬 동영상 파일로부터 임시 썸네일 바이트 생성
   Future<Uint8List?> _generateLocalThumb(String filePath) async {
@@ -332,9 +358,13 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
           title: title,
           signedUrlTtlSec: 21600, // 6시간
           minTtlBufferSec: 300,   // 만료 5분 전 재발급
+          moduleCode: widget.item.id,
         ),
       ),
     );
+    if (!mounted) return;
+    // ✅ 플레이어에서 보고 돌아오면 진행률 다시 로드
+    await _loadMenteeProgress();
   }
 
   // ===== 매핑 유틸 =====
@@ -1308,17 +1338,17 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 ),
 
                               // mentee 모드: 하단 진행바 + 이어보기
-                              if (_isMentee && _pr.watchedRatio > 0)
+                              if (_isMentee && _watchedRatio > 0)
                                 Positioned(
                                   left: 0, right: 0, bottom: 0,
                                   child: LinearProgressIndicator(
                                     minHeight: 4,
-                                    value: _pr.watchedRatio.clamp(0.0, 1.0),
+                                    value: _watchedRatio.clamp(0.0, 1.0).toDouble(),
                                     backgroundColor: Colors.white.withOpacity(0.35),
                                     valueColor: const AlwaysStoppedAnimation(UiTokens.primaryBlue),
                                   ),
                                 ),
-                              if (_isMentee && _pr.watchedRatio > 0 && _pr.watchedRatio < 1)
+                              if (_isMentee && _watchedRatio > 0 && _watchedRatio < 1)
                                 Positioned(
                                   right: 10, bottom: 10,
                                   child: Container(
@@ -1330,7 +1360,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                       border: Border.all(color: UiTokens.cardBorder),
                                     ),
                                     child: Text(
-                                      '이어보기 ${(_pr.watchedRatio * 100).round()}%',
+                                      '이어보기 ${(_watchedRatio * 100).round()}%',
                                       style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800, fontSize: 12),
                                     ),
                                   ),
@@ -1534,7 +1564,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                       child: Text(
                         _isAdminEdit
                             ? (_saving ? '저장 중...' : (_dirty ? '저장하기' : '변경 없음'))
-                            : (_pr.watchedRatio <= 0 ? '시청하기' : (_pr.watchedRatio < 1 ? '이어보기' : '다시보기')),
+                            : _watchedRatio <= 0 ? '시청하기' : (_watchedRatio < 1 ? '이어보기' : '다시보기'),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ),

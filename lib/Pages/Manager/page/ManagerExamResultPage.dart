@@ -76,8 +76,7 @@ class QuestionResult {
 ///     // passScore 를 안 넘기면 서버(get_exam_set)에서 가져옵니다.
 ///   )
 ///
-/// - (데모/프리뷰용)
-///   ExamResultPage.demo()
+
 class ExamResultPage extends StatefulWidget {
   final String menteeName;              // 예: 한지민
   final String curriculumTitle;         // 예: W1. 기초 위생 및 도구 소개

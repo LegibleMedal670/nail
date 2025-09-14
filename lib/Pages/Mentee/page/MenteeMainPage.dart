@@ -1,5 +1,6 @@
 // lib/Pages/Mentee/page/MenteeMainPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
