@@ -17,6 +17,8 @@ class MostProgressedMenteeTab extends StatefulWidget {
   final String name;
   final DateTime startedAt;
   final String? photoUrl;
+  final String mentor;           // <- 새로 추가
+  final String? menteeUserId;    // <- (시험결과 버튼에서 필요)
 
   /// 커리큘럼 전체
   final List<CurriculumItem> curriculum;
@@ -35,7 +37,10 @@ class MostProgressedMenteeTab extends StatefulWidget {
     this.photoUrl,
     this.completedIds = const {},
     this.progressRatio = const {},
+    this.mentor = '미배정',          // <- 추가
+    this.menteeUserId,               // <- 추가
   });
+
 
   @override
   State<MostProgressedMenteeTab> createState() => _MostProgressedMenteeTabState();
@@ -120,26 +125,6 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
     if (result != null && mounted) setState(() => _filter = result);
   }
 
-  void _continueLearning() {
-    final target = _nextIncomplete;
-    if (target == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('모든 강의를 완료했어요!')));
-      return;
-    }
-    final idx = widget.curriculum.indexOf(target);
-    // 대충 해당 카드 위치로 스크롤
-    _listController.animateTo(
-      (idx * 120).toDouble(), // 카드 높이 대략치
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
-    // 상세 열기 대신 스낵바
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('이어 학습: W${target.week}. ${target.title}')),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +185,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '멘토 : 김선생',
+                                '멘토 : ${widget.mentor}',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,
@@ -260,7 +245,9 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                 width: double.infinity,
                 height: 48,
                 child: FilledButton(
-                  onPressed: _continueLearning,
+                  onPressed: (){
+                    print('레포트생성');
+                  },
                   style: FilledButton.styleFrom(
                     backgroundColor: UiTokens.primaryBlue,
                     shape: RoundedRectangleBorder(
@@ -336,10 +323,10 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                             MaterialPageRoute(
                               builder: (_) => CurriculumDetailPage(
                                 item: item,
-                                mode: CurriculumViewMode.adminReview,   // ✅ 멘토(검토) 모드로
-                                menteeName: widget.name,                // ✅ 상단 '검토 대상'에 표시
-                                progress: pr,                           // ✅ 시청률/합격 여부 전달
-                                // onOpenExamReport: () { ... }          // (선택) 리포트 화면 연결 시
+                                mode: CurriculumViewMode.adminReview,
+                                menteeName: widget.name,
+                                progress: pr,
+                                menteeUserId: widget.menteeUserId,   // <- 추가
                               ),
                             ),
                           );

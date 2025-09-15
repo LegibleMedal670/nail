@@ -1,9 +1,13 @@
 // lib/Pages/Manager/page/ManagerMainPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MenteeManageTab.dart';
+import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:nail/Services/AdminMenteeService.dart';
+import 'package:provider/provider.dart';
 
 class ManagerMainPage extends StatefulWidget {
   const ManagerMainPage({super.key});
@@ -14,6 +18,86 @@ class ManagerMainPage extends StatefulWidget {
 
 class _ManagerMainPageState extends State<ManagerMainPage> {
   int _currentIndex = 0;
+
+  bool _loadingTop = true;
+  String? _errTop;
+  Map<String, dynamic>? _topRow;
+
+  List<CurriculumItem> _curriculum = const [];
+  Set<String> _completed = const {};
+  Map<String, double> _ratios = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTopMentee();
+  }
+
+  Future<void> _loadTopMentee() async {
+    try {
+      // 1) 상위 멘티 한 명
+      final row = await AdminMenteeService.instance.fetchTopMenteeRow();
+      if (row == null) {
+        setState(() { _errTop = '데이터가 없습니다'; _loadingTop = false; });
+        return;
+      }
+
+      // 2) 커리큘럼: 전역 Provider에서 (최신 보장)
+      final cp = context.read<CurriculumProvider>();
+      await cp.ensureLoaded();                 // 캐시→SWR
+      if (cp.items.isEmpty) {
+        await cp.refresh(force: true);         // 정말 없으면 강제 페치
+      }
+      final items = cp.items;                  // 정렬은 Provider가 week ASC로 이미 보장
+
+      // 3) 진행도: RPC에서
+      final loginKey = (row['login_key'] ?? '') as String;
+      final prog = await AdminMenteeService.instance.fetchMenteeProgress(loginKey);
+
+      setState(() {
+        _topRow = row;
+        _curriculum = items;
+        _completed = prog.completedIds;
+        _ratios = prog.progressRatio;
+        _loadingTop = false;
+      });
+    } catch (e) {
+      setState(() { _errTop = e.toString(); _loadingTop = false; });
+    }
+  }
+
+
+  Widget _buildTopMenteePage() {
+    if (_loadingTop) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errTop != null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('불러오기 실패: $_errTop'),
+            const SizedBox(height: 8),
+            FilledButton(
+              onPressed: _loadTopMentee,
+              child: const Text('다시 시도'),
+            ),
+          ],
+        ),
+      );
+    }
+    final r = _topRow!;
+    return MostProgressedMenteeTab(
+      name: (r['nickname'] ?? '이름없음') as String,
+      mentor: (r['mentor'] ?? '미배정') as String,
+      startedAt: DateTime.tryParse((r['joined_at'] ?? '').toString()) ?? DateTime.now(),
+      photoUrl: r['photo_url'] as String?,
+      menteeUserId: (r['id'] ?? '') as String?,
+      curriculum: _curriculum,          // ✅ Provider에서 온 “진짜” 커리큘럼
+      completedIds: _completed,         // ✅ RPC 진행도/완료
+      progressRatio: _ratios,           // ✅ RPC 진행도
+    );
+  }
 
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: '대시보드'),
@@ -38,16 +122,8 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
     final menteesPerMentorAvg = totalMentors == 0 ? 0.0 : (totalMentees / totalMentors);
 
     final pages = <Widget>[
-      MostProgressedMenteeTab(
-        name: '김순돌',
-        startedAt: DateTime.now(),
-        // ← 대시보드 데모는 그대로 둡니다. (차후 서버 연동)
-        curriculum: const [],
-        completedIds: const {},
-        progressRatio: const {},
-      ),
+      _buildTopMenteePage(),     // <- 기존 더미 대신 서버 데이터 주입
       MenteeManageTab(),
-      // ✅ 하드코딩 제거 → 탭 내부에서 CurriculumProvider 사용
       const CurriculumManageTab(),
     ];
 
