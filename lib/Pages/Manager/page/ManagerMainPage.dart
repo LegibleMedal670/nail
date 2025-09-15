@@ -21,18 +21,75 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   int _currentIndex = 0;
 
   bool _loadingTop = true;
-  String? _errTop;
+  String? _errorTop;
   Map<String, dynamic>? _topRow;
+
+  String _topName = '-';
+  DateTime _topStartedAt = DateTime.now();
+  String? _topPhotoUrl;
+
+  List<CurriculumItem> _topCurriculum = const [];
+  Set<String> _topCompleted = {};
+  Map<String, double> _topProgressRatio = {};
 
   List<CurriculumItem> _curriculum = const [];
   Set<String> _completed = const {};
   Map<String, double> _ratios = const {};
   Map<String, CurriculumProgress> _progressMap = const {};
 
+  Future<void> _loadTopMenteeAndCourse() async {
+    setState(() {
+      _loadingTop = true;
+      _errorTop = null;
+    });
+
+    try {
+      // 1) 상위 멘티 1명 (admin RPC)
+      final row = await AdminMenteeService.instance.fetchTopMenteeRow();
+      if (row == null) {
+        throw '랭킹 데이터가 없습니다';
+      }
+
+      final String loginKey = (row['login_key'] ?? '').toString();
+      if (loginKey.isEmpty) {
+        throw '해당 멘티의 로그인 키가 없습니다';
+      }
+
+      // 표시용 기본 정보
+      final String nickname = (row['nickname'] ?? '이름없음').toString();
+      final DateTime startedAt = DateTime.tryParse((row['joined_at'] ?? '').toString()) ?? DateTime.now();
+      final String? photoUrl = row['photo_url'] as String?;
+
+      // 2) 모듈별 진행 (기존 mentee_course_progress RPC 사용)
+      final data = await AdminMenteeService.instance.fetchMenteeCourseData(loginKey);
+
+      if (!mounted) return;
+      setState(() {
+        _topName = nickname;
+        _topStartedAt = startedAt;
+        _topPhotoUrl = photoUrl;
+
+        _topCurriculum = data.curriculum;
+        _topCompleted = data.completedIds;
+        _topProgressRatio = data.progressRatio;
+
+        _loadingTop = false;
+        _errorTop = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingTop = false;
+        _errorTop = '$e';
+      });
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
-    _loadTopMentee();
+    _loadTopMenteeAndCourse();
   }
 
   Future<void> _loadTopMentee() async {
@@ -40,7 +97,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
       // 1) 상위 멘티 한 명
       final row = await AdminMenteeService.instance.fetchTopMenteeRow();
       if (row == null) {
-        setState(() { _errTop = '데이터가 없습니다'; _loadingTop = false; });
+        setState(() { _errorTop = '데이터가 없습니다'; _loadingTop = false; });
         return;
       }
 
@@ -65,41 +122,41 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         _loadingTop = false;
       });
     } catch (e) {
-      setState(() { _errTop = e.toString(); _loadingTop = false; });
+      setState(() { _errorTop = e.toString(); _loadingTop = false; });
     }
   }
 
 
-  Widget _buildTopMenteePage() {
+  Widget _buildTopMenteeTab() {
     if (_loadingTop) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_errTop != null) {
+    if (_errorTop != null) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('불러오기 실패: $_errTop'),
+            Text('불러오기 실패: $_errorTop',
+                style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             FilledButton(
-              onPressed: _loadTopMentee,
+              onPressed: _loadTopMenteeAndCourse,
+              style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
               child: const Text('다시 시도'),
             ),
           ],
         ),
       );
     }
-    final r = _topRow!;
+
     return MostProgressedMenteeTab(
-      name: (r['nickname'] ?? '이름없음') as String,
-      mentor: (r['mentor'] ?? '미배정') as String,
-      startedAt: DateTime.tryParse((r['joined_at'] ?? '').toString()) ?? DateTime.now(),
-      photoUrl: r['photo_url'] as String?,
-      menteeUserId: (r['id'] ?? '') as String?,
-      curriculum: _curriculum,          // ✅ Provider에서 온 “진짜” 커리큘럼
-      completedIds: _completed,         // ✅ RPC 진행도/완료
-      progressRatio: _ratios,           // ✅ RPC 진행도
-      progressMap: _progressMap,
+      name: _topName,
+      startedAt: _topStartedAt,
+      photoUrl: _topPhotoUrl,
+      curriculum: _topCurriculum,
+      completedIds: _topCompleted,
+      progressRatio: _topProgressRatio,
+      onRefresh: _loadTopMenteeAndCourse, // ✅ 여기 연결!
     );
   }
 
@@ -126,7 +183,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
     final menteesPerMentorAvg = totalMentors == 0 ? 0.0 : (totalMentees / totalMentors);
 
     final pages = <Widget>[
-      _buildTopMenteePage(),     // <- 기존 더미 대신 서버 데이터 주입
+      _buildTopMenteeTab(),     // <- 기존 더미 대신 서버 데이터 주입
       MenteeManageTab(),
       const CurriculumManageTab(),
     ];

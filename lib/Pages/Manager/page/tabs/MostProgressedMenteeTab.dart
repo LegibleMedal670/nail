@@ -31,6 +31,8 @@ class MostProgressedMenteeTab extends StatefulWidget {
 
   final Map<String, CurriculumProgress> progressMap;
 
+  final Future<void> Function()? onRefresh;
+
   const MostProgressedMenteeTab({
     super.key,
     required this.name,
@@ -42,6 +44,7 @@ class MostProgressedMenteeTab extends StatefulWidget {
     this.mentor = '미배정',          // <- 추가
     this.menteeUserId,               // <- 추가
     this.progressMap = const {},
+    this.onRefresh,
   });
 
 
@@ -52,6 +55,8 @@ class MostProgressedMenteeTab extends StatefulWidget {
 class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
   final _listController = ScrollController();
   LessonFilter _filter = LessonFilter.all;
+
+  bool _refreshing = false; // ✅ 추가
 
   /// 전체 진행률: 완료=1, 진행중=ratio, 시작전=0 의 평균
   double get _progress {
@@ -272,7 +277,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                 child: Row(
                   children: [
                     const Text(
-                      '내 학습',
+                      '학습 목록',
                       style: TextStyle(
                         color: UiTokens.title,
                         fontSize: 20,
@@ -280,6 +285,42 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                       ),
                     ),
                     const Spacer(),
+
+                    // ✅ 새로고침 아이콘 버튼 추가 (필터 버튼 왼쪽)
+                    IconButton(
+                      tooltip: '새로고침',
+                      iconSize: 18,
+                      padding: const EdgeInsets.all(6),
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                      onPressed: _refreshing
+                          ? null
+                          : () async {
+                        setState(() => _refreshing = true);
+                        try {
+                          if (widget.onRefresh != null) {
+                            await widget.onRefresh!(); // 부모가 실데이터 재조회
+                          } else {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('상위 화면에서 새로고침을 연결해 주세요.')),
+                            );
+                          }
+                        } finally {
+                          if (mounted) setState(() => _refreshing = false);
+                        }
+                      },
+                      icon: _refreshing
+                          ? const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                          : const Icon(Icons.refresh_rounded, color: UiTokens.actionIcon),
+                      style: IconButton.styleFrom( // (선택) 일관된 터치 영역/배경감 유지
+                        foregroundColor: UiTokens.actionIcon,
+                      ),
+                    ),
+
+                    // 기존 필터 버튼 그대로 유지
                     TextButton.icon(
                       onPressed: _showFilterSheet,
                       icon: const Icon(
