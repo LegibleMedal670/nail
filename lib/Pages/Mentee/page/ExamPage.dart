@@ -5,8 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 
+/// 내부 플로우 모드
+enum _FlowMode { taking, result }
+
 /// =========================
-/// 멘티 시험 페이지
+/// 멘티 시험 페이지 (A안: 단일 라우트 내부 전환, 안전 인덱싱 개선)
 /// =========================
 class ExamPage extends StatefulWidget {
   final List<ExamQuestion> questions;
@@ -46,6 +49,11 @@ class _ExamPageState extends State<ExamPage> {
   // 진행 통계
   late int _attempts;
   late int _bestScore;
+
+  // 단일 라우트 내부 전환용
+  _FlowMode _mode = _FlowMode.taking;
+  List<dynamic>? _resultAnswers; // 제출 시점의 스냅샷(리뷰용)
+  int? _resultScore;
 
   void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
 
@@ -168,8 +176,11 @@ class _ExamPageState extends State<ExamPage> {
     _unfocus();
     if (_page < widget.questions.length - 1) {
       setState(() => _page++);
-      _pager.animateToPage(_page,
-          duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      if (_pager.hasClients) {
+        _pager.animateToPage(_page,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut);
+      }
     }
   }
 
@@ -177,8 +188,11 @@ class _ExamPageState extends State<ExamPage> {
     _unfocus();
     if (_page > 0) {
       setState(() => _page--);
-      _pager.animateToPage(_page,
-          duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      if (_pager.hasClients) {
+        _pager.animateToPage(_page,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut);
+      }
     }
   }
 
@@ -218,337 +232,7 @@ class _ExamPageState extends State<ExamPage> {
     return pct;
   }
 
-  void _submit() async {
-    _unfocus();
-    final score = _calcScore();
-    final newBest = (score > _bestScore) ? score : _bestScore;
-
-    // 질문 id -> 사용자 응답 맵 구성(서버 저장용)
-    final Map<String, dynamic> answerMap = {};
-    for (int i = 0; i < widget.questions.length; i++) {
-      final q = widget.questions[i];
-      answerMap[q.id] = _answers[i];
-    }
-
-    // 옵션: 제출 콜백이 주어졌고, moduleCode/loginKey가 있으면 서버에 기록
-    try {
-      if (widget.onSubmitted != null &&
-          (widget.moduleCode?.isNotEmpty ?? false) &&
-          (widget.loginKey?.isNotEmpty ?? false)) {
-        await widget.onSubmitted!(score, answerMap);
-      }
-    } catch (e) {
-      // 서버 오류가 나더라도 UX 흐름은 유지(결과 페이지로 이동)
-      // ignore: avoid_print
-      print('시험제출 :$e');
-    }
-
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => _ExamResultPage(
-          questions: widget.questions,
-          answers: _answers,
-          explanations: widget.explanations,
-          score: score,
-          passScore: widget.passScore,
-          attempts: _attempts,
-          bestScore: newBest,
-          // ▼ 재시험 시에도 서버 저장이 되도록 전달
-          moduleCode: widget.moduleCode,
-          loginKey: widget.loginKey,
-          onSubmitted: widget.onSubmitted,
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isLast = _page == widget.questions.length - 1;
-    final canProceed = _answeredCurrent();
-
-    return GestureDetector(
-      onTap: _unfocus,
-      child: PopScope(
-        canPop: false,
-        onPopInvoked: (didPop) async {
-          if (didPop) return;
-          final leave = await _confirmLeave();
-          if (leave && mounted) Navigator.pop(context);
-        },
-        child: Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            backgroundColor: Colors.white,
-            elevation: 0,
-            leading: IconButton(
-              tooltip: '나가기',
-              icon: const Icon(Icons.close, color: UiTokens.title),
-              onPressed: () async {
-                final ok = await _confirmLeave();
-                if (ok && mounted) Navigator.pop(context);
-              },
-            ),
-            title: const Text('시험',
-                style: TextStyle(
-                    color: UiTokens.title, fontWeight: FontWeight.w700)),
-          ),
-          body: SafeArea(
-            child: Column(
-              children: [
-                // 상단 진행 바
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  child: Row(
-                    children: [
-                      Text('문항 ${_page + 1} / ${widget.questions.length}',
-                          style: const TextStyle(
-                              color: UiTokens.title,
-                              fontWeight: FontWeight.w800)),
-                      const Spacer(),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: LinearProgressIndicator(
-                    borderRadius: BorderRadius.circular(8),
-                    value: (_page + 1) / widget.questions.length,
-                    minHeight: 6,
-                    backgroundColor: const Color(0xFFE6ECF3),
-                    valueColor:
-                    const AlwaysStoppedAnimation(UiTokens.primaryBlue),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // 문제 페이지
-                Expanded(
-                  child: PageView.builder(
-                    controller: _pager,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: widget.questions.length,
-                    itemBuilder: (_, i) {
-                      final q = widget.questions[i];
-                      return SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: _QuestionCard(
-                          child: _buildQuestion(q, i),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-
-                // 하단 네비게이션
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Row(
-                      children: [
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: UiTokens.primaryBlue,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: _page == 0 ? null : _goPrev,
-                          child: const Text('이전'),
-                        ),
-                        const Spacer(),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: UiTokens.primaryBlue,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed:
-                          canProceed ? (isLast ? _submit : _goNext) : null,
-                          child: Text(isLast ? '제출하기' : '다음'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQuestion(ExamQuestion q, int i) {
-    switch (q.type) {
-      case ExamQuestionType.mcq:
-        return _McqView(
-          prompt: q.prompt,
-          choices: q.choices ?? const [],
-          value: _answers[i] as int?,
-          onChanged: (v) => setState(() => _answers[i] = v),
-        );
-      case ExamQuestionType.shortAnswer:
-        return _ShortView(
-          prompt: q.prompt,
-          value: _answers[i] as String,
-          onChanged: (v) => setState(() => _answers[i] = v),
-        );
-      case ExamQuestionType.ordering:
-        return _OrderingView(
-          prompt: q.prompt,
-          items: List<String>.from(_answers[i] as List<String>),
-          onChanged: (v) => setState(() => _answers[i] = v),
-        );
-    }
-  }
-}
-
-/// =========================
-/// 결과 페이지
-/// =========================
-class _ExamResultPage extends StatelessWidget {
-  final List<ExamQuestion> questions;
-  final List<dynamic> answers;
-  final Map<String, String> explanations;
-  final int score;
-  final int passScore;
-  final int attempts;
-  final int bestScore;
-
-  // ▼ 재시험 시 서버 저장을 위해 전달 유지
-  final String? moduleCode;
-  final String? loginKey;
-  final Future<void> Function(int score, Map<String, dynamic> answers)? onSubmitted;
-
-  const _ExamResultPage({
-    super.key,
-    required this.questions,
-    required this.answers,
-    required this.explanations,
-    required this.score,
-    required this.passScore,
-    required this.attempts,
-    required this.bestScore,
-    this.moduleCode,
-    this.loginKey,
-    this.onSubmitted,
-  });
-
-  bool _isCorrect(int i) {
-    final q = questions[i];
-    final a = answers[i];
-    switch (q.type) {
-      case ExamQuestionType.mcq:
-        return a is int && a == q.correctIndex;
-      case ExamQuestionType.shortAnswer:
-        final user = (a is String) ? a.trim().toLowerCase() : '';
-        return (q.answers ?? const [])
-            .map((e) => e.trim().toLowerCase())
-            .any((x) => x == user);
-      case ExamQuestionType.ordering:
-        final user = (a as List<String>).map((e) => e.trim()).toList();
-        final ans = (q.ordering ?? const []).map((e) => e.trim()).toList();
-        if (user.length != ans.length) return false;
-        for (int k = 0; k < user.length; k++) {
-          if (user[k] != ans[k]) return false;
-        }
-        return true;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final passed = score >= passScore;
-
-    return PopScope(
-      canPop: false,
-      child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
-          elevation: 0,
-          backgroundColor: Colors.white,
-          leading: const SizedBox.shrink(), // 스와이프/뒤로막기 + 닫기는 오른쪽
-          title: const Text('결과',
-              style:
-              TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
-        ),
-        bottomNavigationBar: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Row(
-              children: [
-                OutlinedButton(
-                  // 부모가 await하는 경우를 위해 true 반환(응시 완료)
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text(
-                    '닫기',
-                    style: TextStyle(color: UiTokens.title),
-                  ),
-                ),
-                const Spacer(),
-                FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () {
-                    // 재시험은 현재 결과 페이지를 교체(pushReplacement)
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) => ExamPage(
-                          questions: questions,
-                          passScore: passScore,
-                          explanations: explanations,
-                          initialAttempts: attempts, // 새 페이지에서 +1
-                          initialBestScore:
-                          (score > bestScore) ? score : bestScore,
-                          // ▼ 전달 유지(이게 핵심!)
-                          moduleCode: moduleCode,
-                          loginKey: loginKey,
-                          onSubmitted: onSubmitted,
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text('재시험'),
-                ),
-              ],
-            ),
-          ),
-        ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _ResultSummaryCard(
-                    score: score,
-                    passScore: passScore,
-                    attempts: attempts,
-                    bestScore: bestScore),
-                const SizedBox(height: 12),
-                _QuestionList(
-                  questions: questions,
-                  answers: answers,
-                  isCorrect: _isCorrect,
-                  onTap: (i) {
-                    _showExplanationSheet(context, questions[i], answers[i],
-                        explanations[questions[i].id]);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
+  /// 결과 모드에서 문항 해설 시트
   void _showExplanationSheet(
       BuildContext context, ExamQuestion q, dynamic a, String? exp) {
     showModalBottomSheet<void>(
@@ -633,10 +317,348 @@ class _ExamResultPage extends StatelessWidget {
       },
     );
   }
+
+
+  Future<void> _submit() async {
+    _unfocus();
+    final score = _calcScore();
+    final newBest = (score > _bestScore) ? score : _bestScore;
+
+    // 질문 id -> 사용자 응답 맵 구성(서버 저장용)
+    final Map<String, dynamic> answerMap = {};
+    for (int i = 0; i < widget.questions.length; i++) {
+      final q = widget.questions[i];
+      answerMap[q.id] = _answers[i];
+    }
+
+    // 옵션: 제출 콜백이 주어졌고, moduleCode/loginKey가 있으면 서버에 기록
+    try {
+      if (widget.onSubmitted != null &&
+          (widget.moduleCode?.isNotEmpty ?? false) &&
+          (widget.loginKey?.isNotEmpty ?? false)) {
+        await widget.onSubmitted!(score, answerMap);
+      }
+    } catch (e) {
+      // 서버 오류가 나더라도 UX 흐름은 유지(결과 모드로 전환)
+      // ignore: avoid_print
+      print('시험제출 :$e');
+    }
+
+    if (!mounted) return;
+
+    // 결과 모드로 내부 전환(라우팅 X)
+    setState(() {
+      _bestScore = newBest;
+      _resultScore = score;
+      // 딥-copy로 결과 스냅샷 보관(리뷰 시 표시용)
+      _resultAnswers = List<dynamic>.generate(_answers.length, (i) {
+        final a = _answers[i];
+        if (a is List<String>) return List<String>.from(a);
+        return a;
+      });
+      _mode = _FlowMode.result;
+    });
+  }
+
+  /// 재시험: 내부 상태만 초기화하고 taking 모드로 복귀
+  void _retake() {
+    // 응시 횟수 증가 및 답안/페이지 초기화
+    _attempts += 1;
+
+    _answers = widget.questions.map((q) {
+      switch (q.type) {
+        case ExamQuestionType.mcq:
+          return null;
+        case ExamQuestionType.shortAnswer:
+          return '';
+        case ExamQuestionType.ordering:
+          final items = List<String>.from(q.ordering ?? const []);
+          final seed = DateTime.now().millisecondsSinceEpoch ^ q.id.hashCode;
+          items.shuffle(Random(seed));
+          return items;
+      }
+    }).toList();
+
+    // 내부 상태 초기화
+    _page = 0;
+
+    // 먼저 taking 모드로 전환해서 PageView가 다시 트리에 올라오게 함
+    setState(() {
+      _mode = _FlowMode.taking;
+    });
+
+    // ⚠️ PageView가 attach된 다음 프레임에서 안전하게 0페이지로 점프
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_pager.hasClients) {
+        _pager.jumpToPage(0);
+      }
+    });
+  }
+
+  /// 결과 모드에서 정오 판정(안전 인덱싱)
+  bool _isCorrectOnResult(int i) {
+    if (_resultAnswers == null || i >= _resultAnswers!.length) return false;
+    final q = widget.questions[i];
+    final a = _resultAnswers![i];
+    switch (q.type) {
+      case ExamQuestionType.mcq:
+        return a is int && a == q.correctIndex;
+      case ExamQuestionType.shortAnswer:
+        final user = (a is String) ? a.trim().toLowerCase() : '';
+        return (q.answers ?? const [])
+            .map((e) => e.trim().toLowerCase())
+            .any((x) => x == user);
+      case ExamQuestionType.ordering:
+        if (a is! List<String>) return false;
+        final user = a.map((e) => e.trim()).toList();
+        final ans = (q.ordering ?? const []).map((e) => e.trim()).toList();
+        if (user.length != ans.length) return false;
+        for (int k = 0; k < user.length; k++) {
+          if (user[k] != ans[k]) return false;
+        }
+        return true;
+    }
+  }
+
+  /// 결과 모드에서 answers 안전 접근
+  dynamic _answerAtForResult(int i) {
+    if (_resultAnswers == null) return null;
+    if (i < 0 || i >= _resultAnswers!.length) return null;
+    return _resultAnswers![i];
+  }
+
+  /// taking 모드 UI
+  Widget _buildTakingScaffold() {
+    final isLast = _page == widget.questions.length - 1;
+    final canProceed = _answeredCurrent();
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        final leave = await _confirmLeave();
+        if (leave && mounted) Navigator.pop(context);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            tooltip: '나가기',
+            icon: const Icon(Icons.close, color: UiTokens.title),
+            onPressed: () async {
+              final ok = await _confirmLeave();
+              if (ok && mounted) Navigator.pop(context);
+            },
+          ),
+          title: const Text('시험',
+              style: TextStyle(
+                  color: UiTokens.title, fontWeight: FontWeight.w700)),
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              // 상단 진행 바
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                child: Row(
+                  children: [
+                    Text('문항 ${_page + 1} / ${widget.questions.length}',
+                        style: const TextStyle(
+                            color: UiTokens.title,
+                            fontWeight: FontWeight.w800)),
+                    const Spacer(),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LinearProgressIndicator(
+                  borderRadius: BorderRadius.circular(8),
+                  value: (_page + 1) / widget.questions.length,
+                  minHeight: 6,
+                  backgroundColor: const Color(0xFFE6ECF3),
+                  valueColor:
+                  const AlwaysStoppedAnimation(UiTokens.primaryBlue),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // 문제 페이지
+              Expanded(
+                child: PageView.builder(
+                  controller: _pager,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: widget.questions.length,
+                  itemBuilder: (_, i) {
+                    final q = widget.questions[i];
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: _QuestionCard(
+                        child: _buildQuestion(q, i),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // 하단 네비게이션
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Row(
+                    children: [
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: UiTokens.primaryBlue,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: _page == 0 ? null : _goPrev,
+                        child: const Text('이전'),
+                      ),
+                      const Spacer(),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: UiTokens.primaryBlue,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed:
+                        canProceed ? (isLast ? _submit : _goNext) : null,
+                        child: Text(isLast ? '제출하기' : '다음'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// result 모드 UI (조건부 렌더링 + 안전 인덱싱)
+  Widget _buildResultScaffold() {
+    final score = _resultScore ?? 0;
+
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (!didPop) Navigator.pop(context, true);
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          elevation: 0,
+          backgroundColor: Colors.white,
+          leading: const SizedBox.shrink(), // 스와이프/뒤로막기 + 닫기는 아래 버튼
+          title: const Text('결과',
+              style:
+              TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+        ),
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              children: [
+                OutlinedButton(
+                  // 부모가 await하는 경우를 위해 true 반환(응시 완료)
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text(
+                    '닫기',
+                    style: TextStyle(color: UiTokens.title),
+                  ),
+                ),
+                const Spacer(),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: UiTokens.primaryBlue,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: _retake,
+                  child: const Text('재시험'),
+                ),
+              ],
+            ),
+          ),
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ResultSummaryCard(
+                    score: score,
+                    passScore: widget.passScore,
+                    attempts: _attempts,
+                    bestScore: _bestScore),
+                const SizedBox(height: 12),
+                _QuestionList(
+                  questions: widget.questions,
+                  // answers는 길이가 다를 수 있으므로 안전 접근 콜백과 함께 전달
+                  answers: _resultAnswers ?? const <dynamic>[],
+                  isCorrect: _isCorrectOnResult,
+                  onTap: (i, dynamic _aFromList) {
+                    final a = _answerAtForResult(i);
+                    _showExplanationSheet(
+                      context,
+                      widget.questions[i],
+                      a,
+                      widget.explanations[widget.questions[i].id],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ▶ IndexedStack 대신 조건부 렌더링으로 현재 모드만 빌드 (RangeError 방지)
+    return _mode == _FlowMode.taking
+        ? _buildTakingScaffold()
+        : _buildResultScaffold();
+  }
+
+  Widget _buildQuestion(ExamQuestion q, int i) {
+    switch (q.type) {
+      case ExamQuestionType.mcq:
+        return _McqView(
+          prompt: q.prompt,
+          choices: q.choices ?? const [],
+          value: _answers[i] as int?,
+          onChanged: (v) => setState(() => _answers[i] = v),
+        );
+      case ExamQuestionType.shortAnswer:
+        return _ShortView(
+          prompt: q.prompt,
+          value: _answers[i] as String,
+          onChanged: (v) => setState(() => _answers[i] = v),
+        );
+      case ExamQuestionType.ordering:
+        return _OrderingView(
+          prompt: q.prompt,
+          items: List<String>.from(_answers[i] as List<String>),
+          onChanged: (v) => setState(() => _answers[i] = v),
+        );
+    }
+  }
 }
 
 /// =========================
-/// 문제 뷰 (응시용)
+/// 문제 뷰 (응시용) — 기존 UI 유지
 /// =========================
 
 // 카드 공통
@@ -791,7 +813,7 @@ class _OrderingViewState extends State<_OrderingView> {
   @override
   Widget build(BuildContext context) {
     // 항목 수에 따른 적당한 영역 확보(드래그 제스처 충돌 방지)
-    final double h = (56.0 * _items.length + 16).clamp(200.0, 360.0);
+    final double h = (56.0 * _items.length + 16).clamp(200.0, 360.0).toDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -885,7 +907,7 @@ class _OrderingViewState extends State<_OrderingView> {
 }
 
 /// =========================
-/// 결과 요약/리스트/리뷰 UI
+/// 결과 요약/리스트/리뷰 UI — 안전 인덱싱 반영
 /// =========================
 
 class _ResultSummaryCard extends StatelessWidget {
@@ -932,14 +954,12 @@ class _ResultSummaryCard extends StatelessWidget {
                 padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: passed
-                      ? const Color(0xFFDCFCE7)
-                      : const Color(0xFFFEE2E2),
+                  color:
+                  passed ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
-                    color: passed
-                        ? const Color(0xFF34D399)
-                        : const Color(0xFFF87171),
+                    color:
+                    passed ? const Color(0xFF34D399) : const Color(0xFFF87171),
                   ),
                 ),
                 child: Text(
@@ -978,7 +998,8 @@ class _QuestionList extends StatelessWidget {
   final List<ExamQuestion> questions;
   final List<dynamic> answers;
   final bool Function(int idx) isCorrect;
-  final ValueChanged<int> onTap;
+  /// onTap: (index, answerAtIndexSafely)
+  final void Function(int idx, dynamic answer) onTap;
 
   const _QuestionList({
     required this.questions,
@@ -1011,8 +1032,10 @@ class _QuestionList extends StatelessWidget {
           ...List.generate(questions.length, (i) {
             final q = questions[i];
             final ok = isCorrect(i);
+            final dynamic safeA = (i >= 0 && i < answers.length) ? answers[i] : null;
+
             return InkWell(
-              onTap: () => onTap(i),
+              onTap: () => onTap(i, safeA),
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
@@ -1031,8 +1054,9 @@ class _QuestionList extends StatelessWidget {
                       child: Icon(
                         ok ? Icons.check_rounded : Icons.close_rounded,
                         size: 18,
-                        color:
-                        ok ? const Color(0xFF065F46) : const Color(0xFF7F1D1D),
+                        color: ok
+                            ? const Color(0xFF065F46)
+                            : const Color(0xFF7F1D1D),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1042,8 +1066,7 @@ class _QuestionList extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: UiTokens.title,
-                            fontWeight: FontWeight.w800),
+                            color: UiTokens.title, fontWeight: FontWeight.w800),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -1210,12 +1233,13 @@ class _ReviewQuestion extends StatelessWidget {
         );
 
       case ExamQuestionType.ordering:
-        final user = (answer as List<String>);
+        final user = (answer is List<String>) ? answer : const <String>[];
         final ans = (q.ordering ?? const []);
         final bool anyWrong = user.length != ans.length ||
-            List.generate(user.length,
-                    (i) => i < ans.length && user[i] == ans[i])
-                .contains(false);
+            List.generate(
+              user.length,
+                  (i) => i < ans.length && user[i].trim() == ans[i].trim(),
+            ).contains(false);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1237,9 +1261,8 @@ class _ReviewQuestion extends StatelessWidget {
                   (i < ans.length) && (user[i].trim() == ans[i].trim());
               final Color bg =
               correctPos ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2);
-              final Color border = correctPos
-                  ? const Color(0xFF34D399)
-                  : const Color(0xFFF87171);
+              final Color border =
+              correctPos ? const Color(0xFF34D399) : const Color(0xFFF87171);
               final IconData icon =
               correctPos ? Icons.check_rounded : Icons.close_rounded;
               final Color iconColor =

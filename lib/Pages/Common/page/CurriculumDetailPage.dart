@@ -1624,11 +1624,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                         } catch (_) {}
                                         await _loadMenteeProgress();
                                         _progressChanged = true;
-                                        if (mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('시험 결과가 반영되었습니다.')),
-                                          );
-                                        }
+                                        // if (mounted) {
+                                        //   ScaffoldMessenger.of(context).showSnackBar(
+                                        //     const SnackBar(content: Text('시험 결과가 반영되었습니다.')),
+                                        //   );
+                                        // }
                                       }
                                     },
 
