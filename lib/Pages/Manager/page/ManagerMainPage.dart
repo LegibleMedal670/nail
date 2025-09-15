@@ -1,6 +1,7 @@
 // lib/Pages/Manager/page/ManagerMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
+import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart';
@@ -26,6 +27,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   List<CurriculumItem> _curriculum = const [];
   Set<String> _completed = const {};
   Map<String, double> _ratios = const {};
+  Map<String, CurriculumProgress> _progressMap = const {};
 
   @override
   void initState() {
@@ -52,13 +54,14 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
 
       // 3) 진행도: RPC에서
       final loginKey = (row['login_key'] ?? '') as String;
-      final prog = await AdminMenteeService.instance.fetchMenteeProgress(loginKey);
+      final prog = await AdminMenteeService.instance.fetchMenteeCourseData(loginKey);
 
       setState(() {
         _topRow = row;
         _curriculum = items;
         _completed = prog.completedIds;
         _ratios = prog.progressRatio;
+        _progressMap = prog.progressMap;
         _loadingTop = false;
       });
     } catch (e) {
@@ -96,6 +99,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
       curriculum: _curriculum,          // ✅ Provider에서 온 “진짜” 커리큘럼
       completedIds: _completed,         // ✅ RPC 진행도/완료
       progressRatio: _ratios,           // ✅ RPC 진행도
+      progressMap: _progressMap,
     );
   }
 

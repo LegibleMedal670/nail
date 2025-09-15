@@ -77,7 +77,7 @@ class QuestionResult {
 ///   )
 ///
 
-class ExamResultPage extends StatefulWidget {
+class ManagerExamResultPage extends StatefulWidget {
   final String menteeName;              // 예: 한지민
   final String curriculumTitle;         // 예: W1. 기초 위생 및 도구 소개
 
@@ -91,7 +91,7 @@ class ExamResultPage extends StatefulWidget {
   /// 수동 주입 시도 목록(옵션). 이 값이 있으면 우선 렌더링하고, 서버 파라미터가 있다면 백그라운드로 새로 고쳐 반영합니다.
   final List<ExamAttemptResult>? attempts;
 
-  const ExamResultPage({
+  const ManagerExamResultPage({
     super.key,
     required this.menteeName,
     required this.curriculumTitle,
@@ -102,10 +102,10 @@ class ExamResultPage extends StatefulWidget {
   });
 
   @override
-  State<ExamResultPage> createState() => _ExamResultPageState();
+  State<ManagerExamResultPage> createState() => _ManagerExamResultPageState();
 }
 
-class _ExamResultPageState extends State<ExamResultPage> {
+class _ManagerExamResultPageState extends State<ManagerExamResultPage> {
   bool _loading = false;
   String? _error;
 
@@ -565,9 +565,9 @@ class _AttemptPicker extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            a.passed ? Icons.verified_rounded : Icons.hourglass_bottom_rounded,
+                            a.passed ? Icons.verified_rounded : Icons.sms_failed,
                             size: 16,
-                            color: a.passed ? const Color(0xFF059669) : UiTokens.actionIcon,
+                            color: a.passed ? const Color(0xFF059669) : Colors.red,
                           ),
                           const SizedBox(width: 6),
                           Text(

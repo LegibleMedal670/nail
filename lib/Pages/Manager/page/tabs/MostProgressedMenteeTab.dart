@@ -29,6 +29,8 @@ class MostProgressedMenteeTab extends StatefulWidget {
   /// 진행중 강의의 진행률(0.0~1.0). 키가 없으면 '시작 전'으로 간주.
   final Map<String, double> progressRatio;
 
+  final Map<String, CurriculumProgress> progressMap;
+
   const MostProgressedMenteeTab({
     super.key,
     required this.name,
@@ -39,6 +41,7 @@ class MostProgressedMenteeTab extends StatefulWidget {
     this.progressRatio = const {},
     this.mentor = '미배정',          // <- 추가
     this.menteeUserId,               // <- 추가
+    this.progressMap = const {},
   });
 
 
@@ -352,19 +355,35 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
     );
   }
 
-  // MostProgressedMenteeTab의 State 클래스 내부에 추가
   CurriculumProgress _progressFor(CurriculumItem item) {
-    // 완료로 표시된 항목이면 시청률=1로 간주
+    final p = widget.progressMap[item.id];
+    if (p != null) {
+      // 서버 맵이 있으면 그대로 사용 (attempts/bestScore/examPassed까지 반영)
+      return CurriculumProgress(
+        watchedRatio: p.watchedRatio,
+        attempts: p.attempts,
+        bestScore: p.bestScore,
+        passed: p.examPassed ?? p.passed,
+        hasVideo: p.hasVideo,
+        hasExam: p.hasExam,
+        videoCompleted: p.videoCompleted,
+        examPassed: p.examPassed,
+        moduleCompleted: p.moduleCompleted,
+      );
+    }
+
+    // ⬇︎ 서버 맵이 아직 없으면 기존 Fallback 로직
     final passed = widget.completedIds.contains(item.id);
     final watched = passed ? 1.0 : (widget.progressRatio[item.id] ?? 0.0);
 
     return CurriculumProgress(
       watchedRatio: watched.clamp(0.0, 1.0),
-      attempts: passed ? 1 : 0,  // 점수 데이터가 없으니 '1회 응시'로 표기해 통과/미응시 모순 방지
-      bestScore: null,           // (있다면 채워 넣으세요)
+      attempts: passed ? 1 : 0,   // 임시(기존 더미)
+      bestScore: null,
       passed: passed,
     );
   }
+
 
 
   /// 상태 뱃지 (완료/수강중). '시작 전' 상태는 이 위젯을 호출하지 마세요.

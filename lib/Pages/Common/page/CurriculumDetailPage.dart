@@ -379,7 +379,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ExamResultPage(
+        builder: (_) => ManagerExamResultPage(
           menteeName: widget.menteeName ?? '멘티',
           curriculumTitle: 'W${_item.week}. ${_item.title}',
           passScore: set.passScore,
