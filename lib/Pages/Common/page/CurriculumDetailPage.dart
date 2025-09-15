@@ -1377,6 +1377,37 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 ),
                               ),
 
+                              // (추가) 영상이 없을 때 중앙 안내 오버레이
+                              if (_videoUrl == null)
+                                Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.videocam_off_rounded, size: 36, color: UiTokens.actionIcon),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '영상이 등록되지 않았어요',
+                                        style: TextStyle(
+                                          color: UiTokens.title.withOpacity(0.75),
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      if (_isAdminEdit) ...[
+                                        const SizedBox(height: 10),
+                                        OutlinedButton.icon(
+                                          onPressed: _editVideoSheet,
+                                          icon: const Icon(Icons.add_rounded),
+                                          label: const Text('영상 추가'),
+                                          style: OutlinedButton.styleFrom(
+                                            backgroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+
 
                               // mentee 모드: 중앙 Play 버튼
                               if (_videoUrl != null && _isMentee)
@@ -1394,7 +1425,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 ),
 
                               // mentee 모드: 하단 진행바 + 이어보기
-                              if (_isMentee && _watchedRatio > 0)
+                              if (_videoUrl != null && _isMentee && _watchedRatio > 0)
                                 Positioned(
                                   left: 0, right: 0, bottom: 0,
                                   child: LinearProgressIndicator(
@@ -1404,7 +1435,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                     valueColor: const AlwaysStoppedAnimation(UiTokens.primaryBlue),
                                   ),
                                 ),
-                              if (_isMentee && _watchedRatio > 0 && _watchedRatio < 1)
+                              if (_videoUrl != null && _isMentee && _watchedRatio > 0 && _watchedRatio < 1)
                                 Positioned(
                                   right: 10, bottom: 10,
                                   child: Container(
@@ -1422,7 +1453,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   ),
                                 ),
 
-                              if (_isMentee && _watchedRatio == 1)
+                              if (_videoUrl != null && _isMentee && _watchedRatio == 1)
                                 Positioned(
                                   right: 10, bottom: 10,
                                   child: Container(
