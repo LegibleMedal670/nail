@@ -19,6 +19,7 @@ import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Pages/Mentee/page/ExamPage.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/CourseProgressService.dart';
 import 'package:nail/Services/ExamService.dart';
 import 'package:nail/Services/StorageService.dart';
 import 'package:nail/Services/SupabaseService.dart';
@@ -112,8 +113,18 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   // ✅ 시험 세트 변경 임시 저장 (에디터에서 나온 결과만 담아둠)
   ExamEditResult? _pendingExam;
 
-  // ✅ 현재 서버 통과기준(초기 로드용 / 실패 시 null)
-  int? _examPassScore;
+  // 시험 메타 캐시 (질문 리스트/개수/패스스코어)
+  List<ExamQuestion>? _examQuestionsCache;     // 서버에서 받아온 질문들
+  Map<String, int>? _examCountsCache;          // {'mcq':n, 'sa':n, 'order':n}
+
+  // ▼ 추가: 시험/영상 후 화면 내 진행도 즉시 반영용
+  CurriculumProgress? _prOverride;
+
+// ▼ 추가: 이 페이지에서 진행도가 바뀌었는지 상위 화면에 알리기 위한 플래그
+  bool _progressChanged = false;
+
+
+  int? _examPassScore;                         // 그대로 재사용
 
   bool _dirty = false; // 변경사항 여부
   bool _saving = false;
@@ -125,7 +136,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   bool get _isAdminReview => widget.mode == CurriculumViewMode.adminReview;
   bool get _isMentee      => widget.mode == CurriculumViewMode.mentee;
 
-  CurriculumProgress get _pr => widget.progress ?? const CurriculumProgress();
+  // ▼ 수정: 서버에서 재조회한 값(_prOverride)이 있으면 그것을 우선 사용
+  CurriculumProgress get _pr => _prOverride ?? widget.progress ?? const CurriculumProgress();
+
 
   File? _pendingVideoFile;         // ★ 저장 대기(미업로드) 로컬 파일
   bool _videoRemovalRequested = false; // ★ 저장 시 비디오 제거 의도
@@ -170,13 +183,26 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }
   }
 
+  Map<String, int> _countByType(List<ExamQuestion> qs) {
+    int mcq = 0, sa = 0, ord = 0;
+    for (final q in qs) {
+      switch (q.type) {
+        case ExamQuestionType.mcq: mcq++; break;
+        case ExamQuestionType.shortAnswer: sa++; break;
+        case ExamQuestionType.ordering: ord++; break;
+      }
+    }
+    return {'mcq': mcq, 'sa': sa, 'order': ord};
+  }
+
+
 
   @override
   void initState() {
     super.initState();
     _hydrateFromItem(widget.item);
     _reloadFromServer();
-    _loadExamPassScore();
+    _loadExamMeta();
 
     // ✅ 멘티 모드면 서버에서 진행률 로드(이어보기 퍼센트 반영)
     if (_isMentee) _loadMenteeProgress();
@@ -263,23 +289,40 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     });
   }
 
-  Future<void> _loadExamPassScore() async {
+  Future<void> _loadExamMeta() async {
     try {
       final set = await ExamService.instance.getExamSet(_item.id);
       if (!mounted) return;
+
       setState(() {
-        _examPassScore = set?.passScore;
+        _examPassScore     = set?.passScore;
+        _examQuestionsCache = set?.questions;
+        _examCountsCache    = (set?.questions != null)
+            ? _countByType(set!.questions)
+            : {'mcq': 0, 'sa': 0, 'order': 0};
       });
     } catch (_) {
-      // 실패는 무시
+      // 실패는 조용히 무시(초기엔 0으로 보이고, 시험보기 눌렀을 때도 로드됨)
     }
   }
 
+
   Map<String, int> _examCounts(CurriculumItem it) {
     if (!_requiresExam) return {'mcq': 0, 'sa': 0, 'order': 0};
-    final base = 4 + (it.week % 3); // 4~6 (데모 표시용)
-    return {'mcq': base + 4, 'sa': (base / 2).floor(), 'order': it.week % 2};
+
+    // ❶ (관리자 편집 중 임시 세트가 있으면 그걸 우선)
+    if (_pendingExam != null) {
+      // ExamEditResult의 questions 타입이 ExamQuestion과 동일(또는 변환 가능)하다고 가정
+      return _countByType(_pendingExam!.questions);
+    }
+
+    // ❷ 서버 캐시 있으면 그걸 사용
+    if (_examCountsCache != null) return _examCountsCache!;
+
+    // ❸ 아직 로드 전이면 0 표시(초기 렌더), 곧 아래 로더가 채울 것
+    return {'mcq': 0, 'sa': 0, 'order': 0};
   }
+
 
   Future<void> _openExamResults() async {
     final user = context.read<UserProvider>();
@@ -511,6 +554,18 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }).toList();
   }
 
+  // ▼ 모드별로 올바른 타입으로 pop
+  void _popSelf() {
+    if (!mounted) return;
+    if (_isMentee) {
+      // 멘티 모드: 진행도 갱신 여부를 bool로 반환
+      Navigator.pop<bool>(context, _progressChanged);
+    } else {
+      // 관리자 모드: 특별한 결과 없으면 null (삭제시엔 기존 코드대로 별도 CurriculumDetailResult 반환)
+      Navigator.pop<CurriculumDetailResult?>(context, null);
+    }
+  }
+
 
   Future<void> _handleBack() async {
     if (_saving) {
@@ -524,9 +579,10 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }
     _unfocus();
     if (!_dirty || !_isAdminEdit) {
-      if (mounted) Navigator.pop(context);
+      _popSelf();
       return;
     }
+
     final leave = await showDiscardChangesDialog(
       context,
       title: '변경사항을 저장하지 않고 나갈까요?',
@@ -535,7 +591,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       leaveText: '나가기',
       barrierDismissible: true,
     );
-    if (leave && mounted) Navigator.pop(context);
+    if (leave) _popSelf();
   }
 
   // ====== 편집 시트들 (모두 "로컬 변경만" 반영) ======
@@ -1202,7 +1258,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
       try { context.read<CurriculumProvider>().refresh(force: true); } catch (_) {}
       await _reloadFromServer();
-      await _loadExamPassScore();
+      await _loadExamMeta();
 
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('변경사항이 저장되었습니다.')));
     } catch (e) {
@@ -1474,27 +1530,41 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   padding: const EdgeInsets.only(top: 8.0),
                                   child: FilledButton.tonal(
                                     onPressed: () async {
-                                      final moduleCode = widget.item.id; // == code
+                                      final moduleCode = widget.item.id;
                                       final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
 
-                                      // 1) 서버 세트 로드
-                                      final set = await ExamService.instance.getExamSet(moduleCode);
-                                      if (set == null || set.questions.isEmpty) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('등록된 시험이 없어요.')),
-                                        );
-                                        return;
+                                      // 1) 캐시 우선 — 없으면 로드 & 캐시
+                                      List<ExamQuestion>? qs = _examQuestionsCache;
+                                      int pass = _examPassScore ?? 60;
+
+                                      if (qs == null) {
+                                        final set = await ExamService.instance.getExamSet(moduleCode);
+                                        if (set == null || set.questions.isEmpty) {
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('등록된 시험이 없어요.')),
+                                          );
+                                          return;
+                                        }
+                                        qs = set.questions;
+                                        pass = set.passScore;
+                                        if (mounted) {
+                                          setState(() {
+                                            _examQuestionsCache = qs;
+                                            _examPassScore = pass;
+                                            _examCountsCache = _countByType(qs!); // 상단 요약 즉시 반영
+                                          });
+                                        }
                                       }
 
-                                      // 2) 시험 페이지로 이동 (제출 콜백 포함)
-                                      if (!mounted) return;
-                                      Navigator.push(
+                                      // 2) ExamPage로 이동 (여기서 onSubmitted는 서버 저장만)
+                                      final bool? submitted = await Navigator.push<bool>(
                                         context,
                                         MaterialPageRoute(
                                           builder: (_) => ExamPage(
-                                            questions: set.questions,
-                                            passScore: set.passScore,
-                                            explanations: const {},            // 해설은 아직 서버 스키마 없음
+                                            questions: qs!,
+                                            passScore: pass,
+                                            explanations: const {},
                                             moduleCode: moduleCode,
                                             loginKey: loginKey,
                                             onSubmitted: (score, answers) async {
@@ -1508,7 +1578,27 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                           ),
                                         ),
                                       );
+
+                                      // 3) 결과페이지 '닫기'로 돌아오면 디테일/메인 갱신 트리거는 이전 지시대로
+                                      if (submitted == true) {
+                                        // (필요 시) 서버 최신 재확인
+                                        try {
+                                          final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
+                                          final fresh = map[moduleCode];
+                                          if (fresh != null && mounted) {
+                                            setState(() => _prOverride = fresh);
+                                          }
+                                        } catch (_) {}
+                                        await _loadMenteeProgress();
+                                        _progressChanged = true;
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('시험 결과가 반영되었습니다.')),
+                                          );
+                                        }
+                                      }
                                     },
+
                                     style: FilledButton.styleFrom(
                                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       minimumSize: const Size(0, 0),
