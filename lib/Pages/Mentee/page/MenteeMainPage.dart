@@ -9,6 +9,7 @@ import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:nail/Services/CourseProgressService.dart';
 import 'package:provider/provider.dart';
 
 enum LessonFilter { all, incomplete }
@@ -25,15 +26,72 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   final _listController = ScrollController();
   LessonFilter _filter = LessonFilter.all;
 
-  // ======= 진행률 계산 유틸 (현재는 서버 진행도 미연동 → 기본 0 처리) =======
-  double _progressForAll(List<CurriculumItem> items) {
-    if (items.isEmpty) return 0;
-    // TODO: 진행도/완료 집계 연동되면 여기에 반영
-    return 0;
+  // ===== 진행도 상태 (RPC 연동) =====
+  double _courseRatio = 0.0;                         // 게이지 값(0.0~1.0)
+  final Set<String> _completed = <String>{};         // 완료된 모듈 코드
+  final Set<String> _partial = <String>{};           // 부분진척(영상 또는 시험만 완료)
+  Map<String, CurriculumProgress> _progressById = {}; // 모듈코드 -> 진행객체
+  bool _progLoading = false;
+  bool _progError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 첫 렌더 뒤 진행도 로드
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadProgress();
+    });
   }
 
+  // 진행도 불러오기 (게이지/뱃지용 스냅샷 + 상세 맵)
+  Future<void> _loadProgress() async {
+    final user = context.read<UserProvider>();
+    // UserProvider에 노출된 loginKey 사용 (프로젝트 구조에 맞춰 노출되어 있음)
+    final String loginKey = (user.current?.loginKey ?? '').toString();
+    if (loginKey.isEmpty) return;
+
+    setState(() {
+      _progLoading = true;
+      _progError = false;
+    });
+
+    try {
+      final snap = await CourseProgressService.getCompletionSnapshot(loginKey: loginKey);
+      final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
+
+      setState(() {
+        _courseRatio = snap.moduleCompletionRatio;
+        _completed
+          ..clear()
+          ..addAll(snap.completed);
+        _partial
+          ..clear()
+          ..addAll(snap.partial);
+        _progressById = map;
+        _progLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _progError = true;
+        _progLoading = false;
+      });
+    }
+  }
+
+  // 커리큘럼 새로고침(목록 새로고침 후 진행도도 재조회)
+  Future<void> _refreshAll() async {
+    final curri = context.read<CurriculumProvider>();
+    await curri.refresh(force: true);
+    await _loadProgress();
+  }
+
+  // ======= 진행률 계산 유틸 (게이지/뱃지) =======
+  double _progressForAll(List<CurriculumItem> _) => _courseRatio;
+
   Progress _progressOf(String id) {
-    // TODO: 진행도 연동되면 id 기반으로 완료/진행중 판단
+    if (_completed.contains(id)) return Progress.done;
+    if (_partial.contains(id)) return Progress.inProgress;
     return Progress.notStarted;
   }
 
@@ -93,6 +151,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     final String displayName = user.nickname.isNotEmpty ? user.nickname : '사용자';
     final DateTime startedAt = user.joinedAt ?? DateTime.now();
     final String? photoUrl = user.photoUrl;
+    final String? mentorName = user.mentor;
 
     // 커리큘럼 상태
     final bool loading = curri.loading;
@@ -126,7 +185,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                   style: TextStyle(color: UiTokens.title, fontSize: 16, fontWeight: FontWeight.w700)),
               const SizedBox(height: 12),
               FilledButton(
-                onPressed: () => curri.refresh(force: true),
+                onPressed: _refreshAll,
                 style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
                 child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
               ),
@@ -146,6 +205,11 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
         centerTitle: false,
         iconTheme: const IconThemeData(color: UiTokens.title),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: _refreshAll,
+            tooltip: '진행도 새로고침',
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded),
             onPressed: () async {
@@ -200,7 +264,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '멘토 : 김선생', // TODO: 멘토명 연동되면 교체
+                                mentorName != null ? '멘토 : $mentorName' : '멘토 : 없음',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,
@@ -281,6 +345,17 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                     const Text('내 학습',
                         style: TextStyle(color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w700)),
                     const Spacer(),
+                    if (_progLoading)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    if (_progError)
+                      TextButton(
+                        onPressed: _loadProgress,
+                        child: const Text('진행도 재시도'),
+                      ),
                     TextButton.icon(
                       onPressed: _showFilterSheet,
                       icon: const Icon(Icons.filter_list_rounded, color: UiTokens.actionIcon, size: 18),
@@ -307,6 +382,13 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                 itemBuilder: (_, i) {
                   final item = list[i];
                   final state = _progressOf(item.id);
+                  final prog = _progressById[item.id] ??
+                      const CurriculumProgress(
+                        watchedRatio: 0.0,
+                        attempts: 0,
+                        bestScore: null,
+                        passed: false,
+                      );
 
                   return Stack(
                     children: [
@@ -318,12 +400,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                               builder: (_) => CurriculumDetailPage(
                                 item: item,
                                 mode: CurriculumViewMode.mentee,
-                                progress: const CurriculumProgress(
-                                  watchedRatio: 0.0, // TODO: 연동
-                                  attempts: 0,
-                                  bestScore: 0,
-                                  passed: false,
-                                ),
+                                progress: prog, // 실제 진행 객체 전달
                               ),
                             ),
                           );

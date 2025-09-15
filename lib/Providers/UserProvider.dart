@@ -8,9 +8,9 @@ class UserAccount {
   final String userId;
   final String nickname;
   final bool isAdmin;
-  /// 멘티 접속코드(관리자는 영구 저장하지 않으므로 빈 문자열 유지)
   final String loginKey;
   final DateTime joinedAt;
+  final String? mentor;
   final String? photoUrl;
 
   const UserAccount({
@@ -19,6 +19,7 @@ class UserAccount {
     required this.isAdmin,
     required this.loginKey,
     required this.joinedAt,
+    this.mentor,
     this.photoUrl,
   });
 
@@ -28,6 +29,7 @@ class UserAccount {
     bool? isAdmin,
     String? loginKey,
     DateTime? joinedAt,
+    String? mentor,
     String? photoUrl,
   }) {
     return UserAccount(
@@ -36,6 +38,7 @@ class UserAccount {
       isAdmin: isAdmin ?? this.isAdmin,
       loginKey: loginKey ?? this.loginKey,
       joinedAt: joinedAt ?? this.joinedAt,
+      mentor: mentor ?? this.mentor,
       photoUrl: photoUrl ?? this.photoUrl,
     );
   }
@@ -60,6 +63,7 @@ class UserProvider extends ChangeNotifier {
   bool get isAdmin => _current?.isAdmin == true;
   String get nickname => _current?.nickname ?? '';
   DateTime get joinedAt => _current?.joinedAt ?? DateTime.now();
+  String? get mentor => current?.mentor;
   String? get photoUrl => _current?.photoUrl;
 
   /// 현재 세션이 관리자라면 adminKey, 아니라면 null
@@ -129,6 +133,7 @@ class UserProvider extends ChangeNotifier {
         isAdmin: false,
         loginKey: savedKey,
         joinedAt: _parseDate(row['joined_at']) ?? DateTime.now(),
+        mentor: row['mentor'] as String?,
         photoUrl: row['photo_url'] as String?,
       );
 
@@ -159,6 +164,7 @@ class UserProvider extends ChangeNotifier {
         isAdmin: isAdmin,
         loginKey: isAdmin ? '' : code, // 관리자는 로컬에 저장하지 않음
         joinedAt: _parseDate(row['joined_at']) ?? DateTime.now(),
+        mentor: row['mentor'] as String?,
         photoUrl: row['photo_url'] as String?,
       );
 
