@@ -1366,6 +1366,24 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   ),
                                 ),
 
+                              if (_isMentee && _watchedRatio == 1)
+                                Positioned(
+                                  right: 10, bottom: 10,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(999),
+                                      boxShadow: [UiTokens.cardShadow],
+                                      border: Border.all(color: UiTokens.cardBorder),
+                                    ),
+                                    child: Text(
+                                      '시청 완료',
+                                      style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800, fontSize: 12),
+                                    ),
+                                  ),
+                                ),
+
                               // adminReview 모드: 우상단 시청률 뱃지
                               if (_isAdminReview)
                                 Positioned(
