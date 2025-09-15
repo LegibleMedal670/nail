@@ -394,8 +394,8 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                     children: [
                       CurriculumTile(
                         item: item,
-                        onTap: () {
-                          Navigator.of(context).push(
+                        onTap: () async {
+                          final changed = await Navigator.of(context).push<bool>(
                             MaterialPageRoute(
                               builder: (_) => CurriculumDetailPage(
                                 item: item,
@@ -404,6 +404,11 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                               ),
                             ),
                           );
+
+                          // 디테일에서 진행도 변화가 있었다면(true), 즉시 최신화
+                          if (changed == true) {
+                            await _refreshAll(); // 내부에서 provider.refresh(force: true) + _loadProgress()
+                          }
                         },
                       ),
                       if (state != Progress.notStarted)
