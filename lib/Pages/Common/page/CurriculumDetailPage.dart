@@ -1598,6 +1598,8 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                             explanations: const {},
                                             moduleCode: moduleCode,
                                             loginKey: loginKey,
+                                            initialAttempts: _pr.attempts,
+                                            initialBestScore: _pr.bestScore,
                                             onSubmitted: (score, answers) async {
                                               await ExamService.instance.menteeSubmitExam(
                                                 loginKey: loginKey,
