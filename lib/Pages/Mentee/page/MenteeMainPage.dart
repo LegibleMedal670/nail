@@ -27,7 +27,6 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   LessonFilter _filter = LessonFilter.all;
 
   // ===== 진행도 상태 (RPC 연동) =====
-  double _courseRatio = 0.0;                         // 게이지 값(0.0~1.0)
   final Set<String> _completed = <String>{};         // 완료된 모듈 코드
   final Set<String> _partial = <String>{};           // 부분진척(영상 또는 시험만 완료)
   Map<String, CurriculumProgress> _progressById = {}; // 모듈코드 -> 진행객체
@@ -60,7 +59,6 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
       final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
 
       setState(() {
-        _courseRatio = snap.moduleCompletionRatio;
         _completed
           ..clear()
           ..addAll(snap.completed);
@@ -87,7 +85,19 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   }
 
   // ======= 진행률 계산 유틸 (게이지/뱃지) =======
-  double _progressForAll(List<CurriculumItem> _) => _courseRatio;
+  double _progressForAll(List<CurriculumItem> items) {
+    if (items.isEmpty) return 0.0;
+    double sum = 0.0;
+    for (final it in items) {
+      if (_completed.contains(it.id)) {
+        sum += 1.0;
+      } else {
+        final watched = _progressById[it.id]?.watchedRatio ?? 0.0;
+        sum += watched.clamp(0.0, 1.0);
+      }
+    }
+    return (sum / items.length).clamp(0.0, 1.0);
+  }
 
   Progress _progressOf(String id) {
     if (_completed.contains(id)) return Progress.done;
