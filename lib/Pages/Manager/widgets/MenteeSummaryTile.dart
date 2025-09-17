@@ -37,25 +37,6 @@ class MenteeSummaryTile extends StatelessWidget {
     this.onDetail,
   });
 
-  /// 데모용 팩토리 (빠른 미리보기)
-  factory MenteeSummaryTile.demo(Mentee mentee) {
-    final demoCur = _demoCurriculum();
-    return MenteeSummaryTile(
-      mentee: mentee,
-      curriculum: demoCur,
-      watchRatio: const {
-        'w01': 1.0, // 완료
-        'w02': 0.6, // 시청중
-        // 나머지 0으로 간주
-      },
-      examMap: const {
-        'w01': ExamRecord(attempts: 1, bestScore: 88, passed: true),
-        'w02': ExamRecord(attempts: 0, bestScore: null, passed: false),
-      },
-      onDetail: null,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final bool useFallback = curriculum.isEmpty;
@@ -82,16 +63,6 @@ class MenteeSummaryTile extends StatelessWidget {
       ),
     );
 
-    final videoRatio = (watchRatio[current.id] ?? 0.0).clamp(0.0, 1.0);
-    final videoLabel = (videoRatio >= 1.0) ? '완료' : '시청률 ${_toPercent(videoRatio)}%';
-    final examInfo = examMap[current.id];
-    final examLabel = current.requiresExam
-        ? (examInfo == null || examInfo.attempts == 0)
-        ? '미응시'
-        : (examInfo.passed
-        ? '합격'
-        : '응시 ${examInfo.attempts}회 · 최고 ${examInfo.bestScore ?? 0}점')
-        : '없음';
 
     return Container(
       decoration: BoxDecoration(
@@ -154,6 +125,7 @@ class MenteeSummaryTile extends StatelessWidget {
 
           // ===== 현재 모듈 진행(영상+시험 통합 카드) =====
           Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               color: const Color(0xFFF8FAFF),
               borderRadius: BorderRadius.circular(14),
@@ -166,50 +138,21 @@ class MenteeSummaryTile extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                        color: UiTokens.title, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    // 영상 상태
-                    Expanded(
-                      child: _pill(
-                        title: '교육 진행',
-                        value: videoLabel,
-                        icon: Icons.play_circle_outline,
-                        bg: const Color(0xFFEFF6FF),
-                        fg: const Color(0xFF2563EB),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // 시험 상태
-                    Expanded(
-                      child: _pill(
-                        title: '시험 결과',
-                        value: examLabel,
-                        icon: Icons.assignment_turned_in_outlined,
-                        bg: const Color(0xFFECFDF5),
-                        fg: const Color(0xFF059669),
-                      ),
-                    ),
-                  ],
+                        color: UiTokens.title, fontWeight: FontWeight.w800,),),
+                SizedBox(height: 15,),
+                Text(
+                  '교육 진행: $doneCount/$totalCount 완료  ·  시험: $examPass/$examTotal 합격',
+                  style: TextStyle(
+                    color: UiTokens.title.withOpacity(0.7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 8),
-
-          // ===== 전체 집계 =====
-          Text(
-            '교육 진행: $doneCount/$totalCount 완료  ·  시험 결과: $examPass/$examTotal 합격',
-            style: TextStyle(
-              color: UiTokens.title.withOpacity(0.7),
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 5),
 
           // ===== 푸터 =====
           Row(

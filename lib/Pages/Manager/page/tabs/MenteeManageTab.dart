@@ -6,8 +6,11 @@ import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
 import 'package:nail/Pages/Manager/widgets/MenteeSummaryTile.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/AdminMenteeService.dart';
+import 'package:nail/Services/CourseProgressService.dart';
 import 'package:nail/Services/SupabaseService.dart';
+import 'package:provider/provider.dart';
 
 /// 정렬 옵션
 enum MenteeSort { latest, name, progress, lowScore }
@@ -32,6 +35,49 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
   bool _loading = false;
   String? _error;
 
+  final Map<String, Map<String, double>> _watchRatioByUser = {};
+  final Map<String, Map<String, ExamRecord>> _examMapByUser = {};
+  final Set<String> _inflightUsers = {}; // 중복 호출 방지
+
+  Future<void> _ensurePerMenteeProgress(Mentee m) async {
+    // 이미 로드했거나 요청중이면 스킵
+    if (_watchRatioByUser.containsKey(m.id) || _inflightUsers.contains(m.id)) return;
+
+    // login_key(=accessCode)가 없으면 패스
+    if (m.accessCode.isEmpty) return;
+
+    _inflightUsers.add(m.id);
+    try {
+      // mentee_course_progress 기반: 모듈별 진행 맵
+      final progMap = await CourseProgressService.listCurriculumProgress(
+        loginKey: m.accessCode,
+      );
+
+      final wr = <String, double>{};
+      final ex = <String, ExamRecord>{};
+
+      progMap.forEach((code, pr) {
+        wr[code] = pr.watchedRatio.clamp(0.0, 1.0);
+        ex[code] = ExamRecord(
+          attempts: pr.attempts,
+          bestScore: pr.bestScore,
+          passed: (pr.examPassed ?? pr.passed),
+        );
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _watchRatioByUser[m.id] = wr;
+        _examMapByUser[m.id] = ex;
+      });
+    } catch (e) {
+      debugPrint('per-mentee progress load failed for ${m.id}: $e');
+    } finally {
+      _inflightUsers.remove(m.id);
+    }
+  }
+
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +89,11 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     setState(() { _loading = true; _error = null; });
 
     try {
+
+      _watchRatioByUser.clear();
+      _examMapByUser.clear();
+      _inflightUsers.clear();
+
 // 1) 기본 목록
       final baseRows = await SupabaseService.instance.listMentees();
 
@@ -107,54 +158,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
       if (mounted) setState(() => _loading = false);
     }
   }
-
-  // Mentee _menteeFromRow(Map<String, dynamic> r) {
-  //   String _asS(dynamic v, {String or = ''}) => (v == null) ? or : v.toString();
-  //
-  //   DateTime _asT(dynamic v) {
-  //     if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
-  //     if (v is DateTime) return v.toLocal();
-  //     if (v is String) return DateTime.tryParse(v)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
-  //     return DateTime.fromMillisecondsSinceEpoch(0);
-  //   }
-  //
-  //   double _asD(dynamic v, {double or = 0}) {
-  //     if (v == null) return or;
-  //     if (v is num) return v.toDouble();
-  //     if (v is String) return double.tryParse(v) ?? or;
-  //     return or;
-  //   }
-  //
-  //   int _asI(dynamic v, {int or = 0}) {
-  //     if (v == null) return or;
-  //     if (v is num) return v.toInt();
-  //     if (v is String) return int.tryParse(v) ?? or;
-  //     return or;
-  //   }
-  //
-  //   final name = _asS(r['nickname'], or: '이름없음');
-  //   final mentor = _asS(r['mentor'], or: '미배정');
-  //   final joinedAt = _asT(r['joined_at']); // String이든 DateTime이든 모두 처리
-  //   final photoUrl = (r['photo_url'] == null) ? null : _asS(r['photo_url']);
-  //   final accessCode = _asS(r['login_key']); // 숫자여도 문자열로 변환
-  //
-  //   return Mentee(
-  //     id: _asS(r['id']),
-  //     name: name,
-  //     mentor: mentor.isEmpty ? '미배정' : mentor,
-  //     startedAt: joinedAt,
-  //     photoUrl: photoUrl,
-  //     accessCode: accessCode,
-  //     // 서버 메트릭 반영
-  //     progress: _asD(r['progress']),
-  //     courseDone: _asI(r['course_done']),
-  //     courseTotal: _asI(r['course_total']),
-  //     examDone: _asI(r['exam_done']),
-  //     examTotal: _asI(r['exam_total']),
-  //     score: (r['avg_score'] == null) ? null : _asD(r['avg_score']),
-  //   );
-  // }
-
 
   Future<void> _onPullRefresh() => _fetch();
 
@@ -382,15 +385,23 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
               itemBuilder: (itemCtx, i) {
                 final m = _sorted[i];
 
+                // 커리큘럼: 앱 전역의 CurriculumProvider에서 공유 (없으면 빈 리스트)
+                final curriculum = context.watch<CurriculumProvider>().items;
+
+                // 멘티별 진행: 캐시에 없으면 비동기로 로드(한 번만)
+                _ensurePerMenteeProgress(m);
+
+                final watchRatio = _watchRatioByUser[m.id] ?? const <String, double>{};
+                final examMap    = _examMapByUser[m.id]    ?? const <String, ExamRecord>{};
+
                 return MenteeSummaryTile(
                   mentee: m,
-                  curriculum: const [],
-                  watchRatio: {},
-                  examMap: const {},
+                  curriculum: curriculum,   // ← 이제 빈 배열 아님
+                  watchRatio: watchRatio,   // ← 모듈별 시청률
+                  examMap: examMap,         // ← 모듈별 시험기록
 
-                  // ✅ 상세 페이지 결과 대기 후, 페이지의 context(this.context)만 사용
                   onDetail: () async {
-                    final pageCtx = this.context; // State의 안정적인 컨텍스트
+                    final pageCtx = this.context;
 
                     final res = await Navigator.of(pageCtx).push<MenteeEditResult?>(
                       MaterialPageRoute(builder: (_) => MenteeDetailPage.demoFromEntry(m)),
@@ -406,15 +417,11 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                       );
                     } else if (res?.mentee != null) {
                       await _fetch();
-                      if (!mounted) return;
-                      // 필요하면 수정 완료 스낵바도 여기서 띄우면 됨
-                      // ScaffoldMessenger.of(pageCtx).showSnackBar(
-                      //   const SnackBar(content: Text('멘티 정보가 저장되었습니다')),
-                      // );
                     }
                   },
                 );
               },
+
             ),
             const SizedBox(height: 12),
           ],

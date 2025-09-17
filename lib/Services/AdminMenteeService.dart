@@ -91,8 +91,6 @@ class AdminMenteeService {
     if (res == null) return <Map<String, dynamic>>[];
     final rows = (res is List) ? res : [res];
 
-    print(rows.map((e) => Map<String, dynamic>.from(e as Map)).toList());
-
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
