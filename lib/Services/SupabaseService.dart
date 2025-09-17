@@ -184,7 +184,7 @@ class SupabaseService {
   }
 
 
-  /// (선택) 커리큘럼 생성 RPC – 프로젝트에 이미 있으면 그대로 사용 TODO 동영상
+  /// (선택) 커리큘럼 생성 RPC – 프로젝트에 이미 있으면 그대로 사용
   Future<CurriculumItem> createCurriculumViaRpc({
     required String code,
     required int week,

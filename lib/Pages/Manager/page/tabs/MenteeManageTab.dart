@@ -6,6 +6,7 @@ import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
 import 'package:nail/Pages/Manager/widgets/MenteeSummaryTile.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+import 'package:nail/Services/AdminMenteeService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 /// 정렬 옵션
@@ -22,7 +23,11 @@ class MenteeManageTab extends StatefulWidget {
 class _MenteeManageTabState extends State<MenteeManageTab> {
   List<Mentee> _data = [];
   MenteeSort _sort = MenteeSort.latest;
-  String? _expandedId;
+
+  // _MenteeManageTabState
+  Map<String, Map<String, dynamic>> _metricsByUser = {};
+  int _keyPeopleCount = 0; // 서버 기준 “주요 인물” 카운트
+
 
   bool _loading = false;
   String? _error;
@@ -35,71 +40,144 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
   // ===== Supabase: 목록 가져오기 =====
   Future<void> _fetch() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    setState(() { _loading = true; _error = null; });
+
     try {
-      final rows = await SupabaseService.instance.listMentees();
-      final list = rows.map(_menteeFromRow).toList();
+// 1) 기본 목록
+      final baseRows = await SupabaseService.instance.listMentees();
+
+// 2) 메트릭 목록 (관리자용 RPC)
+      final metrics = await AdminMenteeService.instance.listMenteesMetrics(
+        days: 30,
+        lowScore: 60,
+        maxAttempts: 5,
+      );
+
+// 3) 메트릭을 id -> row 맵으로 (id 또는 user_id 어느 쪽이 와도 커버)
+      final metricsById = <String, Map<String, dynamic>>{};
+      for (final raw in metrics) {
+        final m = Map<String, dynamic>.from(raw as Map);
+        final uidAny = m['id'] ?? m['user_id']; // ← 함수는 'id'를 리턴함
+        if (uidAny == null) continue;
+        final uid = uidAny.toString();
+        if (uid.isEmpty) continue;
+        metricsById[uid] = m;
+      }
+
+// 4) 두 소스를 합쳐 Mentee 리스트 구성
+      final list = <Mentee>[];
+      for (final raw in baseRows) {
+        final r = Map<String, dynamic>.from(raw as Map);
+
+        final uid = (r['id'] ?? '').toString();
+        final extra = metricsById[uid];
+
+        list.add(
+          Mentee(
+            id: uid,
+            name: (r['nickname'] ?? '이름없음').toString(),
+            mentor: (r['mentor'] ?? '미배정').toString(),
+            startedAt: DateTime.tryParse((r['joined_at'] ?? '').toString())
+                ?? DateTime.fromMillisecondsSinceEpoch(0),
+            photoUrl: r['photo_url'] as String?,
+            accessCode: (r['login_key'] ?? '').toString(),
+
+            // ↓ 메트릭이 없을 수도 있으니 방어적으로 num? -> toDouble()/toInt()
+            progress:    (extra?['progress']     as num?)?.toDouble() ?? 0.0,
+            courseDone:  (extra?['course_done']  as num?)?.toInt()    ?? 0,
+            courseTotal: (extra?['course_total'] as num?)?.toInt()    ?? 0,
+            examDone:    (extra?['exam_done']    as num?)?.toInt()    ?? 0,
+            examTotal:   (extra?['exam_total']   as num?)?.toInt()    ?? 0,
+            score:       (extra?['avg_score']    as num?)?.toDouble(),
+          ),
+        );
+      }
+
+// 5) setState로 반영
       if (!mounted) return;
       setState(() {
         _data = list;
       });
-    } catch (e) {
+    } catch (e, st) {
       if (!mounted) return;
+      print(e);
+      print(st);
       setState(() => _error = '불러오기 실패: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Mentee _menteeFromRow(Map<String, dynamic> r) {
-    return Mentee(
-      id: r['id'] as String,
-      name: r['nickname'] as String,
-      mentor: (r['mentor'] as String?) ?? '미배정',
-      startedAt: DateTime.parse(r['joined_at'] as String),
-      photoUrl: r['photo_url'] as String?,
-      accessCode: (r['login_key'] as String?) ?? '',
-      // 아직 진행/시험 통계는 서버 미연동이므로 0으로 둔다
-      progress: 0,
-      courseDone: 0,
-      courseTotal: 0,
-      examDone: 0,
-      examTotal: 0,
-      score: null,
-    );
-  }
+  // Mentee _menteeFromRow(Map<String, dynamic> r) {
+  //   String _asS(dynamic v, {String or = ''}) => (v == null) ? or : v.toString();
+  //
+  //   DateTime _asT(dynamic v) {
+  //     if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
+  //     if (v is DateTime) return v.toLocal();
+  //     if (v is String) return DateTime.tryParse(v)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
+  //     return DateTime.fromMillisecondsSinceEpoch(0);
+  //   }
+  //
+  //   double _asD(dynamic v, {double or = 0}) {
+  //     if (v == null) return or;
+  //     if (v is num) return v.toDouble();
+  //     if (v is String) return double.tryParse(v) ?? or;
+  //     return or;
+  //   }
+  //
+  //   int _asI(dynamic v, {int or = 0}) {
+  //     if (v == null) return or;
+  //     if (v is num) return v.toInt();
+  //     if (v is String) return int.tryParse(v) ?? or;
+  //     return or;
+  //   }
+  //
+  //   final name = _asS(r['nickname'], or: '이름없음');
+  //   final mentor = _asS(r['mentor'], or: '미배정');
+  //   final joinedAt = _asT(r['joined_at']); // String이든 DateTime이든 모두 처리
+  //   final photoUrl = (r['photo_url'] == null) ? null : _asS(r['photo_url']);
+  //   final accessCode = _asS(r['login_key']); // 숫자여도 문자열로 변환
+  //
+  //   return Mentee(
+  //     id: _asS(r['id']),
+  //     name: name,
+  //     mentor: mentor.isEmpty ? '미배정' : mentor,
+  //     startedAt: joinedAt,
+  //     photoUrl: photoUrl,
+  //     accessCode: accessCode,
+  //     // 서버 메트릭 반영
+  //     progress: _asD(r['progress']),
+  //     courseDone: _asI(r['course_done']),
+  //     courseTotal: _asI(r['course_total']),
+  //     examDone: _asI(r['exam_done']),
+  //     examTotal: _asI(r['exam_total']),
+  //     score: (r['avg_score'] == null) ? null : _asD(r['avg_score']),
+  //   );
+  // }
+
 
   Future<void> _onPullRefresh() => _fetch();
 
-  // ===== KPI 계산 (_data 기준) =====
   int get _totalMentees => _data.length;
+
+  double get _avgScore {
+    final xs = _data.map((m) => m.score).whereType<double>().toList();
+    if (xs.isEmpty) return 0;
+    return xs.reduce((a,b)=>a+b) / xs.length;
+  }
+
+  // “주요 인물”: 서버 판정값 사용
+  int get _keyPeopleCountView => _keyPeopleCount;
+
 
   int get _unassignedCount =>
       _data.where((m) => m.mentor.trim().isEmpty || m.mentor.trim() == '미배정').length;
-
-  double get _avgScore {
-    final scores = _data.map((m) => m.score).whereType<double>().toList();
-    if (scores.isEmpty) return 0;
-    return scores.reduce((a, b) => a + b) / scores.length;
-  }
 
   double get _avgEducationDays {
     if (_data.isEmpty) return 0;
     final now = DateTime.now();
     final days = _data.map((m) => now.difference(m.startedAt).inDays).toList();
     return days.reduce((a, b) => a + b) / _data.length;
-  }
-
-  int get _keyPeopleCount {
-    final now = DateTime.now();
-    return _data.where((m) {
-      final lowScore = (m.score ?? 101) < 60;
-      final slow = now.difference(m.startedAt).inDays >= 21 && m.progress < 0.4;
-      return lowScore || slow;
-    }).length;
   }
 
   // ===== 정렬 =====
@@ -181,7 +259,9 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
               style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           FilledButton(
-            onPressed: _fetch,
+            onPressed: (){
+              _fetch();
+            },
             style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
             child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
@@ -241,17 +321,19 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                       icon: Icons.grade_outlined,
                       title: '멘티 평균 점수',
                       value: _avgScore.toStringAsFixed(0),
-                      unit: '점'),
+                      unit: '점',),
                   MetricCard.simple(
                       icon: Icons.hourglass_bottom_outlined,
                       title: '최종 평가를 기다리는 멘티',
                       value: '18',
-                      unit: '명'),
+                      unit: '명',),
                   MetricCard.simple(
-                      icon: Icons.priority_high_rounded,
-                      title: '주요 인물',
-                      value: '$_keyPeopleCount',
-                      unit: '명'),
+                    icon: Icons.priority_high_rounded,
+                    title: '주요 인물',
+                    value: '$_keyPeopleCountView',
+                    unit: '명',
+                  ),
+
                 ],
               ),
             ),

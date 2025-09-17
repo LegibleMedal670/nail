@@ -73,4 +73,27 @@ class AdminMenteeService {
 
     return (curriculum: items, completedIds: completed, progressRatio: ratios, progressMap: progressMap);
   }
+
+  // === NEW === 멘티 메트릭 목록 (관리자용)
+  Future<List<Map<String, dynamic>>> listMenteesMetrics({
+    int days = 30,
+    int lowScore = 60,
+    int maxAttempts = 10,
+  }) async {
+    if (_adminKey.isEmpty) throw 'admin key missing';
+    final res = await _client.rpc('admin_list_mentees_metrics', params: {
+      'p_admin_key': _adminKey,
+      'p_days': days,
+      'p_low_score': lowScore,
+      'p_max_attempts': maxAttempts,
+    });
+
+    if (res == null) return <Map<String, dynamic>>[];
+    final rows = (res is List) ? res : [res];
+
+    print(rows.map((e) => Map<String, dynamic>.from(e as Map)).toList());
+
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
 }

@@ -58,18 +58,15 @@ class MenteeSummaryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 전체 진행률(= 모든 모듈 완료율). 완료 정의: 영상 완료 && (시험이 있으면 합격)
-    final doneCount = curriculum.where(_isModuleDone).length;
-    final totalCount = curriculum.length;
-    final progress = (totalCount == 0) ? 0.0 : (doneCount / totalCount);
-    final percentText = '${(progress * 100).round()}%';
+    final bool useFallback = curriculum.isEmpty;
 
-    // 전체 시험 집계
-    final examTotal = curriculum.where((e) => e.requiresExam).length;
-    final examPass = curriculum
-        .where((e) => e.requiresExam)
-        .where((e) => (examMap[e.id]?.passed ?? false))
-        .length;
+    final int doneCount   = useFallback ? mentee.courseDone  : curriculum.where(_isModuleDone).length;
+    final int totalCount  = useFallback ? mentee.courseTotal : curriculum.length;
+    final double progress = (totalCount == 0) ? 0.0 : (doneCount / totalCount);
+    final String percentText = '${(progress * 100).round()}%';
+
+    final int examPass  = useFallback ? mentee.examDone  : curriculum.where((e) => e.requiresExam).where((e) => (examMap[e.id]?.passed ?? false)).length;
+    final int examTotal = useFallback ? mentee.examTotal : curriculum.where((e) => e.requiresExam).length;
 
     // 현재 모듈(처음으로 완료가 아닌 항목)
     final current = curriculum.firstWhere(
@@ -92,7 +89,7 @@ class MenteeSummaryTile extends StatelessWidget {
         ? (examInfo == null || examInfo.attempts == 0)
         ? '미응시'
         : (examInfo.passed
-        ? '합격 · 최고 ${examInfo.bestScore ?? 0}점'
+        ? '합격'
         : '응시 ${examInfo.attempts}회 · 최고 ${examInfo.bestScore ?? 0}점')
         : '없음';
 

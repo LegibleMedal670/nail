@@ -62,19 +62,42 @@ class Mentee {
 
   /// Supabase row -> model
   static Mentee fromRow(Map<String, dynamic> row) {
+    String _asS(dynamic v, {String or = ''}) => (v == null) ? or : v.toString();
+
+    DateTime _asT(dynamic v) {
+      if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
+      if (v is DateTime) return v.toLocal();
+      if (v is String) return DateTime.tryParse(v)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    double? _asDOrNull(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+
+    int _asI(dynamic v, {int or = 0}) {
+      if (v == null) return or;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v) ?? or;
+      return or;
+    }
+
     return Mentee(
-      id: row['id'] as String,
-      name: (row['nickname'] as String?) ?? '이름없음',
-      mentor: (row['mentor'] as String?) ?? '미배정',
-      startedAt: DateTime.tryParse((row['joined_at'] ?? '').toString()) ?? DateTime.fromMillisecondsSinceEpoch(0),
-      progress: (row['progress'] as num?)?.toDouble() ?? 0.0,
-      courseDone: (row['course_done'] as num?)?.toInt() ?? 0,
-      courseTotal: (row['course_total'] as num?)?.toInt() ?? 0,
-      examDone: (row['exam_done'] as num?)?.toInt() ?? 0,
-      examTotal: (row['exam_total'] as num?)?.toInt() ?? 0,
-      score: (row['avg_score'] as num?)?.toDouble(),
-      photoUrl: row['photo_url'] as String?,
-      accessCode: (row['login_key'] as String?) ?? '',
+      id: _asS(row['id']),
+      name: _asS(row['nickname'], or: '이름없음'),
+      mentor: _asS(row['mentor'], or: '미배정'),
+      startedAt: _asT(row['joined_at']),
+      progress: (_asDOrNull(row['progress']) ?? 0.0),
+      courseDone: _asI(row['course_done']),
+      courseTotal: _asI(row['course_total']),
+      examDone: _asI(row['exam_done']),
+      examTotal: _asI(row['exam_total']),
+      score: _asDOrNull(row['avg_score']),
+      photoUrl: (row['photo_url'] == null) ? null : _asS(row['photo_url']),
+      accessCode: _asS(row['login_key']), // 숫자여도 문자열로 통일
     );
   }
 }
