@@ -81,8 +81,17 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
   @override
   void initState() {
     super.initState();
-    _fetch(); // 서버 데이터로 교체
+
+    // 커리큘럼 프리로드 (첫 프레임 후)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<CurriculumProvider>().ensureLoaded();
+      }
+    });
+
+    _fetch(); // 목록/메트릭 로드
   }
+
 
   // ===== Supabase: 목록 가져오기 =====
   Future<void> _fetch() async {
@@ -403,22 +412,36 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                   onDetail: () async {
                     final pageCtx = this.context;
 
+                    // 다른 멘티들의 login_key 모음(수정 페이지에서 중복 체크용)
+                    final existing = _data
+                        .where((x) => x.id != m.id)
+                        .map((x) => x.accessCode)
+                        .where((s) => s.isNotEmpty)
+                        .toSet();
+
+                    // ✅ 실제 데이터 연동된 상세 페이지로 이동
                     final res = await Navigator.of(pageCtx).push<MenteeEditResult?>(
-                      MaterialPageRoute(builder: (_) => MenteeDetailPage.demoFromEntry(m)),
+                      MaterialPageRoute(
+                        builder: (_) => MenteeDetailPage(
+                          mentee: m,
+                          existingCodes: existing,
+                        ),
+                      ),
                     );
 
                     if (!mounted) return;
 
+                    // ✅ 돌아오면 무조건 서버에서 재조회해서 목록/타일 최신화
+                    await _fetch();
+
+                    // (선택) 삭제만 스낵바 노출
                     if (res?.deleted == true) {
-                      await _fetch();
-                      if (!mounted) return;
                       ScaffoldMessenger.of(pageCtx).showSnackBar(
                         const SnackBar(content: Text('멘티가 삭제되었습니다')),
                       );
-                    } else if (res?.mentee != null) {
-                      await _fetch();
                     }
                   },
+
                 );
               },
 
