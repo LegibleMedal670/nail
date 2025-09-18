@@ -1,6 +1,5 @@
 // lib/Pages/Manager/page/MenteeDetailPage.dart
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -11,6 +10,7 @@ import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
+import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/CourseProgressService.dart';
@@ -77,7 +77,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
 
       if (!mounted) return;
       setState(() {
-        _ratio = ov.moduleCompletionRatio;
+        _ratio = (ov.moduleCompletionRatio).clamp(0.0, 1.0);
         _byId = map;
         _loadingProg = false;
       });
@@ -100,11 +100,10 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
   _RowState _stateOf(CurriculumItem it) {
     final pr = _byId[it.id];
     if (pr == null) return _RowState.notStarted;
-
     if (pr.moduleCompleted == true) return _RowState.done;
 
-    final partial = (pr.hasVideo && pr.videoCompleted) ||
-        (pr.hasExam && pr.examPassed) ||
+    final partial = (pr.hasVideo && (pr.videoCompleted ?? false)) ||
+        (pr.hasExam && (pr.examPassed ?? false)) ||
         (pr.watchedRatio > 0);
 
     return partial ? _RowState.inProgress : _RowState.notStarted;
@@ -205,6 +204,21 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
               style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
         ],
       ),
+    );
+  }
+
+  CurriculumProgress _clampProgress(CurriculumProgress p) {
+    // UI 일관성 보장: 오버슈팅(>100%) 방지
+    return CurriculumProgress(
+      watchedRatio: p.watchedRatio.clamp(0.0, 1.0),
+      attempts: p.attempts,
+      bestScore: p.bestScore,
+      passed: p.examPassed ?? p.passed,
+      hasVideo: p.hasVideo,
+      hasExam: p.hasExam,
+      videoCompleted: p.videoCompleted,
+      examPassed: p.examPassed,
+      moduleCompleted: p.moduleCompleted,
     );
   }
 
@@ -369,37 +383,6 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
 
               const SizedBox(height: 12),
 
-              // ===== 이어하기 버튼 ===== (관리자 검토에서도 멘티 현재 위치로 스크롤만)
-              // SizedBox(
-              //   width: double.infinity,
-              //   height: 48,
-              //   child: FilledButton(
-              //     onPressed: () {
-              //       final t = _nextIncomplete(items);
-              //       if (t == null) {
-              //         ScaffoldMessenger.of(context)
-              //             .showSnackBar(const SnackBar(content: Text('모든 강의를 완료했어요!')));
-              //         return;
-              //       }
-              //       final idx = items.indexOf(t);
-              //       _listController.animateTo(
-              //         (idx * 120).toDouble(),
-              //         duration: const Duration(milliseconds: 300),
-              //         curve: Curves.easeOut,
-              //       );
-              //       ScaffoldMessenger.of(context)
-              //           .showSnackBar(SnackBar(content: Text('이어 학습: W${t.week}. ${t.title}')));
-              //     },
-              //     style: FilledButton.styleFrom(
-              //       backgroundColor: UiTokens.primaryBlue,
-              //       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              //     ),
-              //     child: const Text('이어보기', style: TextStyle(fontWeight: FontWeight.w800)),
-              //   ),
-              // ),
-
-              const SizedBox(height: 8),
-
               // ===== 목록 헤더 + 필터 =====
               Row(
                 children: [
@@ -432,18 +415,20 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                 itemBuilder: (_, i) {
                   final item = filtered[i];
                   final state = _stateOf(item);
-                  final prog = _byId[item.id] ??
-                      const CurriculumProgress(
-                        watchedRatio: 0,
-                        attempts: 0,
-                        bestScore: null,
-                        passed: false,
-                        hasVideo: false,
-                        hasExam: false,
-                        videoCompleted: false,
-                        examPassed: false,
-                        moduleCompleted: false,
-                      );
+                  final raw = _byId[item.id];
+                  final prog = raw == null
+                      ? const CurriculumProgress(
+                    watchedRatio: 0,
+                    attempts: 0,
+                    bestScore: null,
+                    passed: false,
+                    hasVideo: false,
+                    hasExam: false,
+                    videoCompleted: false,
+                    examPassed: false,
+                    moduleCompleted: false,
+                  )
+                      : _clampProgress(raw); // ⛑️ 항상 0..1로 클램프
 
                   return Stack(
                     children: [

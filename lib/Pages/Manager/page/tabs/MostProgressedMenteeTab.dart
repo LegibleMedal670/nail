@@ -1,4 +1,7 @@
+// lib/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -6,47 +9,20 @@ import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
 
+import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:nail/Providers/AdminProgressProvider.dart';
+import 'package:nail/Pages/Manager/models/Mentee.dart';
+
 /// 필터
 enum LessonFilter { all, incomplete }
 
 /// 강의 진행 상태
 enum Progress { notStarted, inProgress, done }
 
-/// 멘티 학습 홈
+/// 관리자 홈의 “진도 1등 멘티” 섹션
+/// - 별도 props 없이 Provider에서 직접 읽는다.
 class MostProgressedMenteeTab extends StatefulWidget {
-  final String name;
-  final DateTime startedAt;
-  final String? photoUrl;
-  final String mentor;           // <- 새로 추가
-  final String? menteeUserId;    // <- (시험결과 버튼에서 필요)
-
-  /// 커리큘럼 전체
-  final List<CurriculumItem> curriculum;
-
-  /// 수강 완료한 아이템 id 집합
-  final Set<String> completedIds;
-
-  /// 진행중 강의의 진행률(0.0~1.0). 키가 없으면 '시작 전'으로 간주.
-  final Map<String, double> progressRatio;
-
-  final Map<String, CurriculumProgress> progressMap;
-
-  final Future<void> Function()? onRefresh;
-
-  const MostProgressedMenteeTab({
-    super.key,
-    required this.name,
-    required this.startedAt,
-    required this.curriculum,
-    this.photoUrl,
-    this.completedIds = const {},
-    this.progressRatio = const {},
-    this.mentor = '미배정',          // <- 추가
-    this.menteeUserId,               // <- 추가
-    this.progressMap = const {},
-    this.onRefresh,
-  });
-
+  const MostProgressedMenteeTab({super.key});
 
   @override
   State<MostProgressedMenteeTab> createState() => _MostProgressedMenteeTabState();
@@ -55,90 +31,111 @@ class MostProgressedMenteeTab extends StatefulWidget {
 class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
   final _listController = ScrollController();
   LessonFilter _filter = LessonFilter.all;
+  bool _refreshing = false;
 
-  bool _refreshing = false; // ✅ 추가
+  @override
+  void initState() {
+    super.initState();
+    // 첫 프레임 후 안전한 로드 보장
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CurriculumProvider>().ensureLoaded();
+      context.read<AdminProgressProvider>().ensureLoaded();
+    });
+  }
 
-  /// 전체 진행률: 완료=1, 진행중=ratio, 시작전=0 의 평균
-  double get _progress {
-    final items = widget.curriculum;
-    if (items.isEmpty) return 0;
-
-    double sum = 0;
-    for (final it in items) {
-      if (widget.completedIds.contains(it.id)) {
-        sum += 1.0;
-      } else {
-        final r = widget.progressRatio[it.id];
-        if (r != null && r > 0) {
-          sum += r.clamp(0.0, 1.0);
-        }
-      }
+  Future<void> _onRefresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await context.read<AdminProgressProvider>().refreshAll();
+      // (선택) 커리큘럼 변경 가능성이 있으면 동기화
+      await context.read<CurriculumProvider>().refresh(force: true);
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
     }
-    return (sum / items.length).clamp(0.0, 1.0);
   }
 
-  String get _filterLabel => _filter == LessonFilter.all ? '전체' : '미완료 강의';
-
-  List<CurriculumItem> get _filtered {
-    if (_filter == LessonFilter.all) return widget.curriculum;
-    return widget.curriculum
-        .where((e) => !widget.completedIds.contains(e.id))
-        .toList();
-  }
-
-  /// 아이템별 상태 계산
-  Progress _progressOf(String id) {
-    if (widget.completedIds.contains(id)) return Progress.done;
-    final r = widget.progressRatio[id];
-    if (r != null && r > 0) return Progress.inProgress;
-    return Progress.notStarted; // 서버에 기록이 전혀 없는 경우
-  }
-
-  /// 이어 학습 대상: 우선 '진행중' 중 첫 번째, 없으면 '시작전' 중 첫 번째
-  CurriculumItem? get _nextIncomplete {
-    for (final e in widget.curriculum) {
-      if (_progressOf(e.id) == Progress.inProgress) return e;
-    }
-    for (final e in widget.curriculum) {
-      if (_progressOf(e.id) == Progress.notStarted) return e;
-    }
-    return null; // 전부 완료
-  }
-
-  Future<void> _showFilterSheet() async {
-    final result = await showModalBottomSheet<LessonFilter>(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder:
-          (_) => SortBottomSheet<LessonFilter>(
-        title: '필터',
-        current: _filter,
-        options: [
-          SortOption(
-            value: LessonFilter.all,
-            label: '전체',
-            icon: Icons.list_alt,
-          ),
-          SortOption(
-            value: LessonFilter.incomplete,
-            label: '미완료 강의',
-            icon: Icons.hourglass_bottom_rounded,
-          ),
-        ],
-      ),
-    );
-    if (result != null && mounted) setState(() => _filter = result);
-  }
-
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
+    final admin = context.watch<AdminProgressProvider>();
+    final curri = context.watch<CurriculumProvider>();
+
+    // 로딩/에러/데이터 확보
+    if (admin.loading && admin.mentees.isEmpty) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (admin.error != null && admin.mentees.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(admin.error!, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 10),
+              FilledButton(
+                onPressed: _onRefresh,
+                style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
+                child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (admin.mentees.isEmpty) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: Text('표시할 멘티가 없어요')),
+      );
+    }
+
+    // 1) Top mentee 선정 (provider의 퍼센트 기준으로 정렬)
+    final List<Mentee> mentees = [...admin.mentees];
+    mentees.sort((a, b) =>
+        admin.progressOfUser(b.id).compareTo(admin.progressOfUser(a.id)));
+    final top = mentees.first;
+
+    // 2) 동일 데이터 소스: 커리큘럼/모듈별 진행 맵
+    final List<CurriculumItem> items = curri.items;
+    final Map<String, CurriculumProgress> pm =
+        admin.progressMapFor(top.id) ?? const {};
+
+    // 3) 게이지 퍼센트(단일 공식)
+    final double progress = admin.progressOfUser(top.id).clamp(0.0, 1.0);
+    final String progressPercentText = '${(progress * 100).round()}%';
+
+    // 4) 상태(완료/진행/미시작) 계산을 모듈별 맵으로 통일
+    bool _isDone(String id) => (pm[id]?.moduleCompleted ?? false);
+    bool _isInProgress(String id) {
+      final p = pm[id];
+      if (p == null) return false;
+      final vc = (p.hasVideo && (p.videoCompleted ?? false));
+      final ep = (p.hasExam && (p.examPassed ?? false));
+      final someWatch = p.watchedRatio > 0;
+      return (!p.moduleCompleted) && (vc || ep || someWatch);
+    }
+
+    Progress _progressOf(String id) {
+      if (_isDone(id)) return Progress.done;
+      if (_isInProgress(id)) return Progress.inProgress;
+      return Progress.notStarted;
+    }
+
+    // 5) 필터 목록
+    final List<CurriculumItem> list = (_filter == LessonFilter.all)
+        ? items
+        : items.where((e) => !_isDone(e.id)).toList();
+
     final gaugeColor = UiTokens.primaryBlue;
-    final started = _fmtDate(widget.startedAt);
-    final progressPercentText = '${(_progress * 100).round()}%';
+    final started = _fmtDate(top.startedAt);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -168,15 +165,9 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                             radius: 26,
                             backgroundColor: Colors.grey[300],
                             backgroundImage:
-                            widget.photoUrl != null
-                                ? NetworkImage(widget.photoUrl!)
-                                : null,
-                            child:
-                            widget.photoUrl == null
-                                ? const Icon(
-                              Icons.person,
-                              color: Color(0xFF8C96A1),
-                            )
+                            top.photoUrl != null ? NetworkImage(top.photoUrl!) : null,
+                            child: top.photoUrl == null
+                                ? const Icon(Icons.person, color: Color(0xFF8C96A1))
                                 : null,
                           ),
                           const SizedBox(width: 12),
@@ -184,7 +175,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                widget.name,
+                                top.name,
                                 style: const TextStyle(
                                   color: UiTokens.title,
                                   fontSize: 18,
@@ -193,7 +184,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                '멘토 : ${widget.mentor}',
+                                '멘토 : ${top.mentor}',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,
@@ -214,7 +205,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                         ],
                       ),
                     ),
-                    // 오른쪽: 원형 게이지
+                    // 오른쪽: 원형 게이지 (provider 값 그대로)
                     SizedBox(
                       width: 84,
                       height: 84,
@@ -225,7 +216,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                             width: 84,
                             height: 84,
                             child: CircularProgressIndicator(
-                              value: _progress,
+                              value: progress,
                               strokeWidth: 10,
                               backgroundColor: const Color(0xFFE9EEF6),
                               valueColor: AlwaysStoppedAnimation(gaugeColor),
@@ -248,137 +239,128 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
 
               const SizedBox(height: 12),
 
-              // ===== 이어하기 버튼 =====
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton(
-                  onPressed: (){
-                    print('레포트생성');
-                  },
-                  style: FilledButton.styleFrom(
-                    backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    '레포트 생성하기',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ===== 목록 헤더 + 필터 =====
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Row(
-                  children: [
-                    const Text(
-                      '학습 목록',
-                      style: TextStyle(
-                        color: UiTokens.title,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-
-                    // ✅ 새로고침 아이콘 버튼 추가 (필터 버튼 왼쪽)
-                    IconButton(
-                      tooltip: '새로고침',
-                      iconSize: 18,
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                      onPressed: _refreshing
-                          ? null
-                          : () async {
-                        setState(() => _refreshing = true);
-                        try {
-                          if (widget.onRefresh != null) {
-                            await widget.onRefresh!(); // 부모가 실데이터 재조회
-                          } else {
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('상위 화면에서 새로고침을 연결해 주세요.')),
-                            );
-                          }
-                        } finally {
-                          if (mounted) setState(() => _refreshing = false);
-                        }
-                      },
-                      icon: _refreshing
-                          ? const SizedBox(
-                        width: 18, height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                          : const Icon(Icons.refresh_rounded, color: UiTokens.actionIcon),
-                      style: IconButton.styleFrom( // (선택) 일관된 터치 영역/배경감 유지
-                        foregroundColor: UiTokens.actionIcon,
-                      ),
-                    ),
-
-                    // 기존 필터 버튼 그대로 유지
-                    TextButton.icon(
-                      onPressed: _showFilterSheet,
-                      icon: const Icon(
-                        Icons.filter_list_rounded,
-                        color: UiTokens.actionIcon,
-                        size: 18,
-                      ),
-                      label: Text(
-                        _filterLabel,
-                        style: const TextStyle(
-                          color: UiTokens.actionIcon,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+              // ===== 레포트(임시) / 새로고침 / 필터 =====
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('레포트 생성(데모)')),
+                          );
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: UiTokens.primaryBlue,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        foregroundColor: UiTokens.actionIcon,
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        child: const Text('레포트 생성하기',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: '새로고침',
+                    iconSize: 20,
+                    onPressed: _refreshing ? null : _onRefresh,
+                    icon: _refreshing
+                        ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Icon(Icons.refresh_rounded, color: UiTokens.actionIcon),
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final result = await showModalBottomSheet<LessonFilter>(
+                        context: context,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                        ),
+                        builder: (_) => SortBottomSheet<LessonFilter>(
+                          title: '필터',
+                          current: _filter,
+                          options: const [
+                            SortOption(value: LessonFilter.all, label: '전체', icon: Icons.list_alt),
+                            SortOption(value: LessonFilter.incomplete, label: '미완료 강의', icon: Icons.hourglass_bottom_rounded),
+                          ],
+                        ),
+                      );
+                      if (result != null && mounted) setState(() => _filter = result);
+                    },
+                    icon: const Icon(Icons.filter_list_rounded, color: UiTokens.actionIcon, size: 18),
+                    label: Text(
+                      _filter == LessonFilter.all ? '전체' : '미완료 강의',
+                      style: const TextStyle(color: UiTokens.actionIcon, fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
               ),
 
-              // ===== 커리큘럼 목록 (기존 CurriculumTile 재사용) =====
+              const SizedBox(height: 12),
+
+              // ===== 커리큘럼 목록 =====
               ListView.separated(
-                itemCount: _filtered.length,
+                itemCount: list.length,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (_, i) {
-                  final item = _filtered[i];
+                  final item = list[i];
                   final state = _progressOf(item.id);
+
+                  CurriculumProgress _progressForItem() {
+                    final p = pm[item.id];
+                    if (p != null) {
+                      // ⛑️ 125% 같은 오버슈팅 방지: 항상 0..1로 클램프
+                      return CurriculumProgress(
+                        watchedRatio: p.watchedRatio.clamp(0.0, 1.0),
+                        attempts: p.attempts,
+                        bestScore: p.bestScore,
+                        passed: p.examPassed ?? p.passed,
+                        hasVideo: p.hasVideo,
+                        hasExam: p.hasExam,
+                        videoCompleted: p.videoCompleted,
+                        examPassed: p.examPassed,
+                        moduleCompleted: p.moduleCompleted,
+                      );
+                    }
+                    // 맵이 아직 없으면 완전 미시작으로 간주
+                    return const CurriculumProgress(
+                      watchedRatio: 0.0,
+                      attempts: 0,
+                      bestScore: null,
+                      passed: false,
+                    );
+                  }
 
                   return Stack(
                     children: [
                       CurriculumTile(
                         item: item,
                         onTap: () {
-                          final pr = _progressFor(item); // ⬇︎ 2번에서 추가할 헬퍼
+                          final pr = _progressForItem();
                           Navigator.of(context).push<CurriculumDetailResult>(
                             MaterialPageRoute(
                               builder: (_) => CurriculumDetailPage(
                                 item: item,
                                 mode: CurriculumViewMode.adminReview,
-                                menteeName: widget.name,
+                                menteeName: top.name,
+                                menteeUserId: top.id,
                                 progress: pr,
-                                menteeUserId: widget.menteeUserId,   // <- 추가
                               ),
                             ),
                           );
                         },
-                        // (멘티 뷰) onEdit 미전달 → 편집 아이콘 비표시
                       ),
-
-                      // 상태 뱃지: notStarted면 아예 표시하지 않음
                       if (state != Progress.notStarted)
                         Positioned(
                           top: 10,
@@ -396,44 +378,12 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
     );
   }
 
-  CurriculumProgress _progressFor(CurriculumItem item) {
-    final p = widget.progressMap[item.id];
-    if (p != null) {
-      // 서버 맵이 있으면 그대로 사용 (attempts/bestScore/examPassed까지 반영)
-      return CurriculumProgress(
-        watchedRatio: p.watchedRatio,
-        attempts: p.attempts,
-        bestScore: p.bestScore,
-        passed: p.examPassed ?? p.passed,
-        hasVideo: p.hasVideo,
-        hasExam: p.hasExam,
-        videoCompleted: p.videoCompleted,
-        examPassed: p.examPassed,
-        moduleCompleted: p.moduleCompleted,
-      );
-    }
-
-    // ⬇︎ 서버 맵이 아직 없으면 기존 Fallback 로직
-    final passed = widget.completedIds.contains(item.id);
-    final watched = passed ? 1.0 : (widget.progressRatio[item.id] ?? 0.0);
-
-    return CurriculumProgress(
-      watchedRatio: watched.clamp(0.0, 1.0),
-      attempts: passed ? 1 : 0,   // 임시(기존 더미)
-      bestScore: null,
-      passed: passed,
-    );
-  }
-
-
-
-  /// 상태 뱃지 (완료/수강중). '시작 전' 상태는 이 위젯을 호출하지 마세요.
+  /// 상태 뱃지 (완료/수강중). '시작 전' 상태는 호출 안 함.
   Widget _progressBadge(Progress state) {
     final bool done = (state == Progress.done);
 
     final Color bg = done ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF);
-    final Color border =
-    done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
+    final Color border = done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
     final Color fg = done ? const Color(0xFF059669) : const Color(0xFF2563EB);
 
     return Container(
@@ -446,25 +396,12 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            done ? Icons.check_circle_rounded : Icons.timelapse,
-            size: 16,
-            color: fg,
-          ),
+          Icon(done ? Icons.check_circle_rounded : Icons.timelapse, size: 16, color: fg),
           const SizedBox(width: 6),
-          Text(
-            done ? '완료' : '수강중',
-            style: TextStyle(
-              color: fg,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
+          Text(done ? '완료' : '수강중',
+              style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
         ],
       ),
     );
   }
-
-  String _fmtDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

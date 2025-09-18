@@ -27,6 +27,8 @@ class MenteeSummaryTile extends StatelessWidget {
   /// 상세보기 버튼 콜백
   final VoidCallback? onDetail;
 
+  final double? overrideProgress;
+
 
   const MenteeSummaryTile({
     super.key,
@@ -35,16 +37,29 @@ class MenteeSummaryTile extends StatelessWidget {
     required this.watchRatio,
     required this.examMap,
     this.onDetail,
+    this.overrideProgress,
   });
+
+  double _calcProgressFromCurriculum() {
+    final doneCount = curriculum.where(_isModuleDone).length;
+    final totalCount = curriculum.length;
+    if (totalCount == 0) return 0.0;
+    final r = doneCount / totalCount;
+    if (r.isNaN || r.isInfinite) return 0.0;
+    return r.clamp(0.0, 1.0);
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
     final bool useFallback = curriculum.isEmpty;
 
-    final int doneCount   = useFallback ? mentee.courseDone  : curriculum.where(_isModuleDone).length;
-    final int totalCount  = useFallback ? mentee.courseTotal : curriculum.length;
-    final double progress = (totalCount == 0) ? 0.0 : (doneCount / totalCount);
-    final String percentText = '${(progress * 100).round()}%';
+    final double progress = (overrideProgress != null)
+        ? overrideProgress!.clamp(0.0, 1.0)
+        : _calcProgressFromCurriculum(); // 기존 방식 fallback
+
+    final percentText = '${(progress * 100).round()}%';
 
     final int examPass  = useFallback ? mentee.examDone  : curriculum.where((e) => e.requiresExam).where((e) => (examMap[e.id]?.passed ?? false)).length;
     final int examTotal = useFallback ? mentee.examTotal : curriculum.where((e) => e.requiresExam).length;
@@ -140,14 +155,14 @@ class MenteeSummaryTile extends StatelessWidget {
                     style: const TextStyle(
                         color: UiTokens.title, fontWeight: FontWeight.w800,),),
                 SizedBox(height: 15,),
-                Text(
-                  '교육 진행: $doneCount/$totalCount 완료  ·  시험: $examPass/$examTotal 합격',
-                  style: TextStyle(
-                    color: UiTokens.title.withOpacity(0.7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+                // Text(
+                //   '교육 진행: $doneCount/$totalCount 완료  ·  시험: $examPass/$examTotal 합격',
+                //   style: TextStyle(
+                //     color: UiTokens.title.withOpacity(0.7),
+                //     fontSize: 12,
+                //     fontWeight: FontWeight.w700,
+                //   ),
+                // ),
               ],
             ),
           ),

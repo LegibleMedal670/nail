@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Providers/AdminProgressProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'env/env.dart';
@@ -34,6 +35,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()..hydrate()),
         ChangeNotifierProvider(create: (_) => CurriculumProvider()..ensureLoaded()),
+        ChangeNotifierProvider(create: (_) => AdminProgressProvider()..ensureLoaded()),
       ],
       child: const MyApp(),
     ),

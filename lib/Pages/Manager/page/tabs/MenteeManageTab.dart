@@ -1,4 +1,7 @@
+// lib/Pages/Manager/page/tabs/MenteeManageTab.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/page/MenteeDetailPage.dart';
@@ -6,11 +9,10 @@ import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
 import 'package:nail/Pages/Manager/widgets/MenteeSummaryTile.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
 import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+
 import 'package:nail/Providers/CurriculumProvider.dart';
-import 'package:nail/Services/AdminMenteeService.dart';
-import 'package:nail/Services/CourseProgressService.dart';
-import 'package:nail/Services/SupabaseService.dart';
-import 'package:provider/provider.dart';
+import 'package:nail/Providers/AdminProgressProvider.dart';
+import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 
 /// 정렬 옵션
 enum MenteeSort { latest, name, progress, lowScore }
@@ -24,172 +26,17 @@ class MenteeManageTab extends StatefulWidget {
 }
 
 class _MenteeManageTabState extends State<MenteeManageTab> {
-  List<Mentee> _data = [];
   MenteeSort _sort = MenteeSort.latest;
-
-  // _MenteeManageTabState
-  Map<String, Map<String, dynamic>> _metricsByUser = {};
-  int _keyPeopleCount = 0; // 서버 기준 “주요 인물” 카운트
-
-
-  bool _loading = false;
-  String? _error;
-
-  final Map<String, Map<String, double>> _watchRatioByUser = {};
-  final Map<String, Map<String, ExamRecord>> _examMapByUser = {};
-  final Set<String> _inflightUsers = {}; // 중복 호출 방지
-
-  Future<void> _ensurePerMenteeProgress(Mentee m) async {
-    // 이미 로드했거나 요청중이면 스킵
-    if (_watchRatioByUser.containsKey(m.id) || _inflightUsers.contains(m.id)) return;
-
-    // login_key(=accessCode)가 없으면 패스
-    if (m.accessCode.isEmpty) return;
-
-    _inflightUsers.add(m.id);
-    try {
-      // mentee_course_progress 기반: 모듈별 진행 맵
-      final progMap = await CourseProgressService.listCurriculumProgress(
-        loginKey: m.accessCode,
-      );
-
-      final wr = <String, double>{};
-      final ex = <String, ExamRecord>{};
-
-      progMap.forEach((code, pr) {
-        wr[code] = pr.watchedRatio.clamp(0.0, 1.0);
-        ex[code] = ExamRecord(
-          attempts: pr.attempts,
-          bestScore: pr.bestScore,
-          passed: (pr.examPassed ?? pr.passed),
-        );
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _watchRatioByUser[m.id] = wr;
-        _examMapByUser[m.id] = ex;
-      });
-    } catch (e) {
-      debugPrint('per-mentee progress load failed for ${m.id}: $e');
-    } finally {
-      _inflightUsers.remove(m.id);
-    }
-  }
-
 
   @override
   void initState() {
     super.initState();
-
-    // 커리큘럼 프리로드 (첫 프레임 후)
+    // 첫 프레임 이후 안전하게 전역 데이터 보장 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<CurriculumProvider>().ensureLoaded();
-      }
+      if (!mounted) return;
+      context.read<CurriculumProvider>().ensureLoaded();
+      context.read<AdminProgressProvider>().ensureLoaded(); // 멘티+메트릭 일괄 로드
     });
-
-    _fetch(); // 목록/메트릭 로드
-  }
-
-
-  // ===== Supabase: 목록 가져오기 =====
-  Future<void> _fetch() async {
-    setState(() { _loading = true; _error = null; });
-
-    try {
-
-      _watchRatioByUser.clear();
-      _examMapByUser.clear();
-      _inflightUsers.clear();
-
-// 1) 기본 목록
-      final baseRows = await SupabaseService.instance.listMentees();
-
-// 2) 메트릭 목록 (관리자용 RPC)
-      final metrics = await AdminMenteeService.instance.listMenteesMetrics(
-        days: 30,
-        lowScore: 60,
-        maxAttempts: 5,
-      );
-
-// 3) 메트릭을 id -> row 맵으로 (id 또는 user_id 어느 쪽이 와도 커버)
-      final metricsById = <String, Map<String, dynamic>>{};
-      for (final raw in metrics) {
-        final m = Map<String, dynamic>.from(raw as Map);
-        final uidAny = m['id'] ?? m['user_id']; // ← 함수는 'id'를 리턴함
-        if (uidAny == null) continue;
-        final uid = uidAny.toString();
-        if (uid.isEmpty) continue;
-        metricsById[uid] = m;
-      }
-
-// 4) 두 소스를 합쳐 Mentee 리스트 구성
-      final list = <Mentee>[];
-      for (final raw in baseRows) {
-        final r = Map<String, dynamic>.from(raw as Map);
-
-        final uid = (r['id'] ?? '').toString();
-        final extra = metricsById[uid];
-
-        list.add(
-          Mentee(
-            id: uid,
-            name: (r['nickname'] ?? '이름없음').toString(),
-            mentor: (r['mentor'] ?? '미배정').toString(),
-            startedAt: DateTime.tryParse((r['joined_at'] ?? '').toString())
-                ?? DateTime.fromMillisecondsSinceEpoch(0),
-            photoUrl: r['photo_url'] as String?,
-            accessCode: (r['login_key'] ?? '').toString(),
-
-            // ↓ 메트릭이 없을 수도 있으니 방어적으로 num? -> toDouble()/toInt()
-            progress:    (extra?['progress']     as num?)?.toDouble() ?? 0.0,
-            courseDone:  (extra?['course_done']  as num?)?.toInt()    ?? 0,
-            courseTotal: (extra?['course_total'] as num?)?.toInt()    ?? 0,
-            examDone:    (extra?['exam_done']    as num?)?.toInt()    ?? 0,
-            examTotal:   (extra?['exam_total']   as num?)?.toInt()    ?? 0,
-            score:       (extra?['avg_score']    as num?)?.toDouble(),
-          ),
-        );
-      }
-
-// 5) setState로 반영
-      if (!mounted) return;
-      setState(() {
-        _data = list;
-      });
-    } catch (e, st) {
-      if (!mounted) return;
-      print(e);
-      print(st);
-      setState(() => _error = '불러오기 실패: $e');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _onPullRefresh() => _fetch();
-
-  int get _totalMentees => _data.length;
-
-  double get _avgScore {
-    final xs = _data.map((m) => m.score).whereType<double>().toList();
-    if (xs.isEmpty) return 0;
-    return xs.reduce((a,b)=>a+b) / xs.length;
-  }
-
-  // “주요 인물”: 서버 판정값 사용
-  int get _keyPeopleCountView => _keyPeopleCount;
-
-
-  int get _unassignedCount =>
-      _data.where((m) => m.mentor.trim().isEmpty || m.mentor.trim() == '미배정').length;
-
-  double get _avgEducationDays {
-    if (_data.isEmpty) return 0;
-    final now = DateTime.now();
-    final days = _data.map((m) => now.difference(m.startedAt).inDays).toList();
-    return days.reduce((a, b) => a + b) / _data.length;
   }
 
   // ===== 정렬 =====
@@ -200,8 +47,11 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     MenteeSort.lowScore => '낮은 점수순',
   };
 
-  List<Mentee> get _sorted {
-    final list = [..._data];
+  List<Mentee> _sorted({
+    required List<Mentee> src,
+    required AdminProgressProvider admin,
+  }) {
+    final list = [...src];
     int cmpNum(num a, num b) => a.compareTo(b);
     switch (_sort) {
       case MenteeSort.latest:
@@ -211,7 +61,10 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
         list.sort((a, b) => a.name.compareTo(b.name));
         break;
       case MenteeSort.progress:
-        list.sort((a, b) => cmpNum(b.progress, a.progress));
+        list.sort((a, b) => cmpNum(
+          admin.progressOfUser(b.id), // ✅ Provider의 퍼센트
+          admin.progressOfUser(a.id),
+        ));
         break;
       case MenteeSort.lowScore:
         list.sort((a, b) => cmpNum((a.score ?? 101), (b.score ?? 101)));
@@ -242,8 +95,8 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
   }
 
   // ===== 추가 버튼 처리 =====
-  Future<void> _addMentee() async {
-    final existing = _data.map((m) => m.accessCode).where((s) => s.isNotEmpty).toSet();
+  Future<void> _addMentee(List<Mentee> mentees) async {
+    final existing = mentees.map((m) => m.accessCode).where((s) => s.isNotEmpty).toSet();
 
     final res = await Navigator.of(context).push<MenteeEditResult>(
       MaterialPageRoute(builder: (_) => MenteeEditPage(existingCodes: existing)),
@@ -251,7 +104,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
     if (!mounted) return;
     if (res?.mentee != null) {
-      await _fetch(); // 신뢰성 우선: 서버 재조회
+      await context.read<AdminProgressProvider>().refreshAll();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('멘티 "${res!.mentee!.name}" 추가됨')),
       );
@@ -260,20 +113,38 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
   @override
   Widget build(BuildContext context) {
-    final body = _loading
+    final admin = context.watch<AdminProgressProvider>();
+    final curri = context.watch<CurriculumProvider>();
+
+    final loading = admin.loading;
+    final error = admin.error;
+    final mentees = admin.mentees;
+
+    // KPI
+    final totalMentees = mentees.length;
+    final unassignedCount =
+        mentees.where((m) => m.mentor.trim().isEmpty || m.mentor.trim() == '미배정').length;
+    final avgScore = () {
+      final xs = mentees.map((m) => m.score).whereType<double>().toList();
+      if (xs.isEmpty) return 0.0;
+      return xs.reduce((a, b) => a + b) / xs.length;
+    }();
+    final keyPeople = admin.keyPeopleCount;
+
+    final sorted = _sorted(src: mentees, admin: admin);
+
+    final body = loading
         ? const Center(child: CircularProgressIndicator())
-        : (_error != null
+        : (error != null
         ? Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(_error!,
+          Text(error,
               style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           FilledButton(
-            onPressed: (){
-              _fetch();
-            },
+            onPressed: () => admin.refreshAll(),
             style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
             child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
@@ -281,7 +152,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
       ),
     )
         : RefreshIndicator(
-      onRefresh: _onPullRefresh,
+      onRefresh: () => admin.refreshAll(),
       color: UiTokens.primaryBlue,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
@@ -303,49 +174,53 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                     icon: Icons.people_alt_outlined,
                     title: '총 멘티 수',
                     rich: TextSpan(
-                      text: '$_totalMentees',
+                      text: '$totalMentees',
                       style: const TextStyle(
-                          color: UiTokens.title,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          height: 1.0),
+                        color: UiTokens.title,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        height: 1.0,
+                      ),
                       children: [
                         const TextSpan(
                           text: ' 명',
                           style: TextStyle(
-                              color: UiTokens.primaryBlue,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              height: 1.2),
+                            color: UiTokens.primaryBlue,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
+                          ),
                         ),
                         TextSpan(
-                          text: '\n미배정 $_unassignedCount명',
+                          text: '\n미배정 $unassignedCount명',
                           style: TextStyle(
-                              color: UiTokens.title.withOpacity(0.6),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              height: 1.2),
+                            color: UiTokens.title.withOpacity(0.6),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   MetricCard.simple(
-                      icon: Icons.grade_outlined,
-                      title: '멘티 평균 점수',
-                      value: _avgScore.toStringAsFixed(0),
-                      unit: '점',),
+                    icon: Icons.grade_outlined,
+                    title: '멘티 평균 점수',
+                    value: avgScore.toStringAsFixed(0),
+                    unit: '점',
+                  ),
                   MetricCard.simple(
-                      icon: Icons.hourglass_bottom_outlined,
-                      title: '최종 평가를 기다리는 멘티',
-                      value: '18',
-                      unit: '명',),
+                    icon: Icons.hourglass_bottom_outlined,
+                    title: '최종 평가를 기다리는 멘티',
+                    value: '18',
+                    unit: '명',
+                  ),
                   MetricCard.simple(
                     icon: Icons.priority_high_rounded,
                     title: '주요 인물',
-                    value: '$_keyPeopleCountView',
+                    value: '$keyPeople',
                     unit: '명',
                   ),
-
                 ],
               ),
             ),
@@ -385,41 +260,53 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
             // ===== 멘티 목록 =====
             ListView.separated(
-              itemCount: _sorted.length,
+              itemCount: sorted.length,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               separatorBuilder: (_, __) => const SizedBox(height: 10),
-
-              // ⬇️ itemBuilder의 지역 context(아이템 컨텍스트)를 쓰지 않도록 변수명 변경
               itemBuilder: (itemCtx, i) {
-                final m = _sorted[i];
+                final m = sorted[i];
 
-                // 커리큘럼: 앱 전역의 CurriculumProvider에서 공유 (없으면 빈 리스트)
-                final curriculum = context.watch<CurriculumProvider>().items;
+                // 지연 로딩: 모듈별 진행 맵
+                admin.loadMenteeProgress(m.id);
 
-                // 멘티별 진행: 캐시에 없으면 비동기로 로드(한 번만)
-                _ensurePerMenteeProgress(m);
+                final curriculum = curri.items;
 
-                final watchRatio = _watchRatioByUser[m.id] ?? const <String, double>{};
-                final examMap    = _examMapByUser[m.id]    ?? const <String, ExamRecord>{};
+                // 모듈별 진행 맵 -> 타일 바인딩용으로 변환
+                final pm = admin.progressMapFor(m.id) ??
+                    const <String, CurriculumProgress>{};
+
+                final watchRatio = <String, double>{
+                  for (final e in pm.entries)
+                    e.key: e.value.watchedRatio.clamp(0.0, 1.0),
+                };
+                final examMap = <String, ExamRecord>{
+                  for (final e in pm.entries)
+                    e.key: ExamRecord(
+                      attempts: e.value.attempts,
+                      bestScore: e.value.bestScore,
+                      passed: (e.value.examPassed ?? e.value.passed),
+                    ),
+                };
+
+                final progress = admin.progressOfUser(m.id); // ✅ 단일 공식
 
                 return MenteeSummaryTile(
                   mentee: m,
-                  curriculum: curriculum,   // ← 이제 빈 배열 아님
-                  watchRatio: watchRatio,   // ← 모듈별 시청률
-                  examMap: examMap,         // ← 모듈별 시험기록
+                  curriculum: curriculum,
+                  watchRatio: watchRatio,
+                  examMap: examMap,
+                  overrideProgress: progress, // ✅ 게이지 강제 일치(타일에 필드 추가 필요)
 
                   onDetail: () async {
                     final pageCtx = this.context;
-
-                    // 다른 멘티들의 login_key 모음(수정 페이지에서 중복 체크용)
-                    final existing = _data
+                    final existing = mentees
                         .where((x) => x.id != m.id)
                         .map((x) => x.accessCode)
                         .where((s) => s.isNotEmpty)
                         .toSet();
 
-                    // ✅ 실제 데이터 연동된 상세 페이지로 이동
+                    // 현재 상세는 기존 시그니처 유지
                     final res = await Navigator.of(pageCtx).push<MenteeEditResult?>(
                       MaterialPageRoute(
                         builder: (_) => MenteeDetailPage(
@@ -431,20 +318,17 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
                     if (!mounted) return;
 
-                    // ✅ 돌아오면 무조건 서버에서 재조회해서 목록/타일 최신화
-                    await _fetch();
+                    // 상세에서 변경 후 목록 최신화
+                    await admin.refreshAll();
 
-                    // (선택) 삭제만 스낵바 노출
                     if (res?.deleted == true) {
                       ScaffoldMessenger.of(pageCtx).showSnackBar(
                         const SnackBar(content: Text('멘티가 삭제되었습니다')),
                       );
                     }
                   },
-
                 );
               },
-
             ),
             const SizedBox(height: 12),
           ],
@@ -457,7 +341,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab_mentee_add',
         backgroundColor: UiTokens.primaryBlue,
-        onPressed: _addMentee,
+        onPressed: () => _addMentee(mentees),
         icon: const Icon(Icons.person_add_alt_rounded),
         label: const Text('추가'),
       ),
