@@ -1377,8 +1377,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                 ),
                               ),
 
-                              // (추가) 영상이 없을 때 중앙 안내 오버레이 TODO 이거 영상 넣을때도 뜸 업로드 안해도 썸네일 생기면 안뜨게 해야함
-                              if (_videoUrl == null)
+                              // (추가) 영상이 없을 때 중앙 안내 오버레이
+                              if ( (_videoUrl == null || _videoUrl!.isEmpty) &&
+                                  _pendingLocalVideoFile == null &&
+                                  (_pendingThumbBytes == null || _pendingThumbBytes!.isEmpty) &&
+                                  _thumbSignedFuture == null )
                                 Center(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
