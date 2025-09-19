@@ -64,6 +64,10 @@ class MenteeSummaryTile extends StatelessWidget {
     final int examPass  = useFallback ? mentee.examDone  : curriculum.where((e) => e.requiresExam).where((e) => (examMap[e.id]?.passed ?? false)).length;
     final int examTotal = useFallback ? mentee.examTotal : curriculum.where((e) => e.requiresExam).length;
 
+    // ✅ 완료/총 모듈 카운트
+    final int doneCount = useFallback ? mentee.courseDone  : _doneCountLocal;
+    final int totalCount = useFallback ? mentee.courseTotal : _totalCountLocal;
+
     // 현재 모듈(처음으로 완료가 아닌 항목)
     final current = curriculum.firstWhere(
           (e) => !_isModuleDone(e),
@@ -110,11 +114,6 @@ class MenteeSummaryTile extends StatelessWidget {
                         style: const TextStyle(
                             color: UiTokens.title, fontSize: 16, fontWeight: FontWeight.w900)),
                     const SizedBox(height: 2),
-                    // Text(mentee.role,
-                    //     style: TextStyle(
-                    //         color: UiTokens.title.withOpacity(0.6),
-                    //         fontSize: 12,
-                    //         fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
@@ -155,14 +154,14 @@ class MenteeSummaryTile extends StatelessWidget {
                     style: const TextStyle(
                         color: UiTokens.title, fontWeight: FontWeight.w800,),),
                 SizedBox(height: 15,),
-                // Text(
-                //   '교육 진행: $doneCount/$totalCount 완료  ·  시험: $examPass/$examTotal 합격',
-                //   style: TextStyle(
-                //     color: UiTokens.title.withOpacity(0.7),
-                //     fontSize: 12,
-                //     fontWeight: FontWeight.w700,
-                //   ),
-                // ),
+                Text(
+                  '영상 시청: $doneCount/$totalCount 완료  ·  시험: $examPass/$examTotal 합격',
+                  style: TextStyle(
+                    color: UiTokens.title.withOpacity(0.7),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ],
             ),
           ),
@@ -208,7 +207,7 @@ class MenteeSummaryTile extends StatelessWidget {
 
   // === helpers ===
   bool _isModuleDone(CurriculumItem it) {
-    final vr = (watchRatio[it.id] ?? 0.0) >= 1.0;
+    final vr = (watchRatio[it.id] ?? 0.0) >= 0.9;
     final examOk = !it.requiresExam ? true : (examMap[it.id]?.passed ?? false);
     return vr && examOk;
   }
@@ -216,76 +215,6 @@ class MenteeSummaryTile extends StatelessWidget {
   String _fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  int _toPercent(double r) => (r * 100).round();
-
-  Widget _pill({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color bg,
-    required Color fg,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: fg),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: TextStyle(
-                        color: fg.withOpacity(0.9),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: UiTokens.title,
-                        fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  int get _totalCountLocal => curriculum.length;
+  int get _doneCountLocal  => curriculum.where(_isModuleDone).length;
 }
-
-// ===== 데모용 커리큘럼 =====
-List<CurriculumItem> _demoCurriculum() => const [
-  CurriculumItem(
-    id: 'w01',
-    week: 1,
-    title: '기초 위생 및 도구 소개',
-    summary: '필수 위생, 도구 종류, 기본 사용법',
-
-    hasVideo: true,
-    requiresExam: true,
-      videoUrl: '', resources: [], goals: []
-  ),
-  CurriculumItem(
-    id: 'w02',
-    week: 2,
-    title: '파일링과 큐티클 케어',
-    summary: '안전한 큐티클 정리와 파일링 각도',
-    hasVideo: true,
-    requiresExam: true,videoUrl: '', resources: [], goals: []
-  ),
-  CurriculumItem(
-    id: 'w03',
-    week: 3,
-    title: '베이스·컬러·탑 코트',
-    summary: '도포 순서, 경화 시간, 흔한 실수',
-    hasVideo: true,
-    requiresExam: true,videoUrl: '', resources: [], goals: []
-  ),
-];
