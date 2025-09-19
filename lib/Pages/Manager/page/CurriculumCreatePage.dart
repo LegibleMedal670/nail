@@ -1,5 +1,9 @@
 // lib/Pages/Manager/page/CurriculumCreatePage.dart
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:nail/Services/StorageService.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/model/ExamModel.dart';
@@ -9,6 +13,7 @@ import 'package:nail/Pages/Manager/page/ExamEditPage.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/SupabaseService.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 /// 저장 결과 (필요 시 확장 가능)
 class CurriculumCreateResult {
@@ -61,6 +66,47 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
   bool _dirty = false;
   bool _saving = false;
 
+  // 로컬 선택 대기 중 영상/썸네일 (저장 시 업로드)
+  File? _pendingLocalVideoFile;
+  Uint8List? _pendingThumbBytes;
+  int _pendingThumbRev = 0;
+
+  // 시험 편집 결과(저장 시 업로드)
+  ExamEditResult? _pendingExam;
+  int _examPassScore = 60; // (선택) 화면 표시용
+
+
+// 갤러리에서 선택한 파일을 반영(썸네일 즉시 생성)
+  Future<void> _setPendingVideo(File file) async {
+    final Uint8List? thumb = await VideoThumbnail.thumbnailData(
+      video: file.path,
+      imageFormat: ImageFormat.JPEG,
+      maxWidth: 640,
+      quality: 80,
+      timeMs: 3000,
+    );
+    if (!mounted) return;
+    setState(() {
+      _pendingLocalVideoFile = file;
+      _pendingThumbBytes = thumb;  // UI에서 즉시 사용할 수 있음(원한다면)
+      _videoUrl = null;            // 원격 연결은 비워두고 저장 시 업로드
+      _dirty = true;
+      _pendingThumbRev++;
+    });
+  }
+
+// 선택 취소/삭제 시 즉시 초기화
+  void _clearPendingVideo() {
+    setState(() {
+      _pendingLocalVideoFile = null;
+      _pendingThumbBytes = null;
+      _videoUrl = null;
+      _dirty = true;
+      _pendingThumbRev++;
+    });
+  }
+
+
   void _markDirty() {
     if (!_dirty) setState(() => _dirty = true);
   }
@@ -110,28 +156,33 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                       subtitle: Text(_videoUrl == null
                           ? '스토리지는 나중에 붙입니다'
                           : '임시 URL을 교체합니다'),
-                      onTap: () {
-                        setState(() {
-                          _videoUrl = 'uploaded://demo_video.mp4';
-                          _dirty = true;
-                        });
-                        Navigator.pop(sheetCtx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('영상이 연결(변경)되었습니다 (데모)')),
-                        );
+                      // 기존: setState로 'uploaded://demo_video.mp4' 설정하던 부분 전체 교체
+                      onTap: () async {
+                        try {
+                          final pf = await SupabaseService.instance.pickOneFile(); // 갤러리에서 "동영상만" 선택됨
+                          if (pf?.path == null) return;
+                          await _setPendingVideo(File(pf!.path!));                 // ★ 즉시 썸네일 생성/반영(필드에 보관)
+                          if (mounted) Navigator.pop(sheetCtx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('영상이 선택되었습니다. 저장 시 업로드됩니다.')),
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('영상 선택 실패: $e')),
+                          );
+                        }
                       },
+
                     ),
-                    if (_videoUrl != null)
+                    if (_videoUrl != null || _pendingLocalVideoFile != null)
                       ListTile(
                         leading:
                         const Icon(Icons.delete_outline, color: Colors.red),
                         title: const Text('영상 삭제'),
                         subtitle: const Text('현재 연결된 영상을 제거합니다'),
                         onTap: () {
-                          setState(() {
-                            _videoUrl = null;
-                            _dirty = true;
-                          });
+                          _clearPendingVideo(); // ★ 즉시 반영(로컬/원격 연결 초기화)
                           Navigator.pop(sheetCtx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('영상이 삭제되었습니다')),
@@ -383,8 +434,10 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                               FilledButton.icon(
                                 onPressed: () async {
                                   Navigator.pop(sheetCtx);
+
+                                  // ✅ 모달의 context가 아니라 State의 루트 context 사용
                                   final result = await Navigator.push<ExamEditResult>(
-                                    context,
+                                    this.context,
                                     MaterialPageRoute(
                                       builder: (_) => const ExamEditPage(
                                         initialQuestions: [],
@@ -392,15 +445,21 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                                       ),
                                     ),
                                   );
+
                                   if (!mounted) return;
                                   if (result != null) {
                                     setState(() {
-                                      _requiresExam = result.questions.isNotEmpty || temp;
+                                      _pendingExam = result;
+                                      _examPassScore = result.passScore;
+                                      _requiresExam = result.questions.isNotEmpty;
                                       _dirty = true;
                                     });
-                                    ScaffoldMessenger.of(context).showSnackBar(
+                                    // ✅ 루트 context로 스낵바
+                                    ScaffoldMessenger.of(this.context).showSnackBar(
                                       SnackBar(
-                                        content: Text('시험 구성 완료: 문항 ${result.questions.length}개 · 통과 ${result.passScore}점'),
+                                        content: Text(
+                                          '시험 구성 완료: 문항 ${result.questions.length}개 · 통과 ${result.passScore}점',
+                                        ),
                                       ),
                                     );
                                   }
@@ -425,11 +484,12 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                               const Icon(Icons.info_outline, size: 22, color: UiTokens.actionIcon),
                               const SizedBox(width: 8),
                               Text(
-                                '현재 이 과정에는 시험이 없습니다.',
-                                style: TextStyle(
-                                  color: UiTokens.title.withOpacity(0.7),
+                                _requiresExam
+                                    ? '이 과정에는 시험이 있습니다.\n통과 기준: ${_examPassScore}점 / 100점'
+                                    : '이 과정에는 시험이 없습니다.',
+                                style: const TextStyle(
+                                  color: UiTokens.title,
                                   fontWeight: FontWeight.w700,
-                                  fontSize: 16,
                                 ),
                               ),
                             ],
@@ -476,195 +536,195 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
     );
   }
 
-  Future<void> _editMaterialsSheet() async {
-    // 로컬 temp 복사
-    final temp = _materials
-        .map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url))
-        .toList();
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetCtx) {
-        const double kActionBarHeight = 52;
-        const double kActionBarPaddingV = 16;
-        final bottomInset = MediaQuery.of(sheetCtx).viewInsets.bottom;
-
-        return GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: _unfocus,
-          child: AnimatedPadding(
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-            padding: EdgeInsets.only(bottom: bottomInset),
-            child: DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.6,
-              minChildSize: 0.4,
-              maxChildSize: 0.9,
-              builder: (_, controller) {
-                return StatefulBuilder(
-                  builder: (context, setInner) {
-                    void addItem() => setInner(() => temp.add(_EditMaterial(name: '새 자료')));
-                    void removeAt(int i) {
-                      if (i >= 0 && i < temp.length) {
-                        setInner(() => temp.removeAt(i));
-                      }
-                    }
-
-                    return SafeArea(
-                      top: false,
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                            child: Column(
-                              children: [
-                                _sheetGrabber(),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  '관련 자료 편집',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    color: UiTokens.title,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView.separated(
-                              controller: controller,
-                              padding: const EdgeInsets.fromLTRB(
-                                16, 0, 16, kActionBarHeight + kActionBarPaddingV + 12,
-                              ),
-                              itemCount: temp.length,
-                              separatorBuilder: (_, __) =>
-                              const SizedBox(height: 8),
-                              itemBuilder: (_, i) {
-                                final nameCtl =
-                                TextEditingController(text: temp[i].name);
-                                return Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: nameCtl,
-                                        onChanged: (v) => temp[i].name = v,
-                                        onSubmitted: (_) => _unfocus(),
-                                        onTapOutside: (_) => _unfocus(),
-                                        decoration: InputDecoration(
-                                          labelText: '자료 이름',
-                                          filled: true,
-                                          fillColor: const Color(0xFFF7F9FC),
-                                          prefixIcon: Icon(temp[i].icon,
-                                              color: UiTokens.primaryBlue),
-                                          contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 14,
-                                          ),
-                                          border: OutlineInputBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(14),
-                                            borderSide: const BorderSide(
-                                                color: Color(0xFFE6ECF3)),
-                                          ),
-                                          enabledBorder: OutlineInputBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(14),
-                                            borderSide: const BorderSide(
-                                                color: Color(0xFFE6ECF3)),
-                                          ),
-                                          focusedBorder: OutlineInputBorder(
-                                            borderRadius:
-                                            BorderRadius.circular(14),
-                                            borderSide: const BorderSide(
-                                              color: UiTokens.primaryBlue,
-                                              width: 2,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: '삭제',
-                                      icon: const Icon(Icons.close_rounded),
-                                      onPressed: () => removeAt(i),
-                                    ),
-                                  ],
-                                );
-                              },
-                            ),
-                          ),
-                          SafeArea(
-                            top: false,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                              child: SizedBox(
-                                height: kActionBarHeight,
-                                child: Row(
-                                  children: [
-                                    OutlinedButton.icon(
-                                      onPressed: addItem, // ← setInner 사용
-                                      icon: const Icon(Icons.add),
-                                      label: const Text('자료 추가'),
-                                      style: OutlinedButton.styleFrom(
-                                        minimumSize: const Size(0, 0),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(10),
-                                        ),
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    FilledButton(
-                                      onPressed: () {
-                                        _unfocus();
-                                        setState(() {
-                                          _materials
-                                            ..clear()
-                                            ..addAll(temp);
-                                          _dirty = true;
-                                        });
-                                        Navigator.pop(sheetCtx);
-                                      },
-                                      style: FilledButton.styleFrom(
-                                        minimumSize: const Size(0, 0),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 18, vertical: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                          BorderRadius.circular(10),
-                                        ),
-                                      ),
-                                      child: const Text('저장',
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w800)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
+  // Future<void> _editMaterialsSheet() async {
+  //   // 로컬 temp 복사
+  //   final temp = _materials
+  //       .map((e) => _EditMaterial(name: e.name, icon: e.icon, url: e.url))
+  //       .toList();
+  //
+  //   await showModalBottomSheet<void>(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     backgroundColor: Colors.white,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  //     ),
+  //     builder: (sheetCtx) {
+  //       const double kActionBarHeight = 52;
+  //       const double kActionBarPaddingV = 16;
+  //       final bottomInset = MediaQuery.of(sheetCtx).viewInsets.bottom;
+  //
+  //       return GestureDetector(
+  //         behavior: HitTestBehavior.opaque,
+  //         onTap: _unfocus,
+  //         child: AnimatedPadding(
+  //           duration: const Duration(milliseconds: 200),
+  //           curve: Curves.easeOut,
+  //           padding: EdgeInsets.only(bottom: bottomInset),
+  //           child: DraggableScrollableSheet(
+  //             expand: false,
+  //             initialChildSize: 0.6,
+  //             minChildSize: 0.4,
+  //             maxChildSize: 0.9,
+  //             builder: (_, controller) {
+  //               return StatefulBuilder(
+  //                 builder: (context, setInner) {
+  //                   void addItem() => setInner(() => temp.add(_EditMaterial(name: '새 자료')));
+  //                   void removeAt(int i) {
+  //                     if (i >= 0 && i < temp.length) {
+  //                       setInner(() => temp.removeAt(i));
+  //                     }
+  //                   }
+  //
+  //                   return SafeArea(
+  //                     top: false,
+  //                     child: Column(
+  //                       children: [
+  //                         Padding(
+  //                           padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+  //                           child: Column(
+  //                             children: [
+  //                               _sheetGrabber(),
+  //                               const SizedBox(height: 8),
+  //                               const Text(
+  //                                 '관련 자료 편집',
+  //                                 style: TextStyle(
+  //                                   fontSize: 18,
+  //                                   fontWeight: FontWeight.w800,
+  //                                   color: UiTokens.title,
+  //                                 ),
+  //                               ),
+  //                             ],
+  //                           ),
+  //                         ),
+  //                         Expanded(
+  //                           child: ListView.separated(
+  //                             controller: controller,
+  //                             padding: const EdgeInsets.fromLTRB(
+  //                               16, 0, 16, kActionBarHeight + kActionBarPaddingV + 12,
+  //                             ),
+  //                             itemCount: temp.length,
+  //                             separatorBuilder: (_, __) =>
+  //                             const SizedBox(height: 8),
+  //                             itemBuilder: (_, i) {
+  //                               final nameCtl =
+  //                               TextEditingController(text: temp[i].name);
+  //                               return Row(
+  //                                 children: [
+  //                                   Expanded(
+  //                                     child: TextField(
+  //                                       controller: nameCtl,
+  //                                       onChanged: (v) => temp[i].name = v,
+  //                                       onSubmitted: (_) => _unfocus(),
+  //                                       onTapOutside: (_) => _unfocus(),
+  //                                       decoration: InputDecoration(
+  //                                         labelText: '자료 이름',
+  //                                         filled: true,
+  //                                         fillColor: const Color(0xFFF7F9FC),
+  //                                         prefixIcon: Icon(temp[i].icon,
+  //                                             color: UiTokens.primaryBlue),
+  //                                         contentPadding:
+  //                                         const EdgeInsets.symmetric(
+  //                                           horizontal: 12,
+  //                                           vertical: 14,
+  //                                         ),
+  //                                         border: OutlineInputBorder(
+  //                                           borderRadius:
+  //                                           BorderRadius.circular(14),
+  //                                           borderSide: const BorderSide(
+  //                                               color: Color(0xFFE6ECF3)),
+  //                                         ),
+  //                                         enabledBorder: OutlineInputBorder(
+  //                                           borderRadius:
+  //                                           BorderRadius.circular(14),
+  //                                           borderSide: const BorderSide(
+  //                                               color: Color(0xFFE6ECF3)),
+  //                                         ),
+  //                                         focusedBorder: OutlineInputBorder(
+  //                                           borderRadius:
+  //                                           BorderRadius.circular(14),
+  //                                           borderSide: const BorderSide(
+  //                                             color: UiTokens.primaryBlue,
+  //                                             width: 2,
+  //                                           ),
+  //                                         ),
+  //                                       ),
+  //                                     ),
+  //                                   ),
+  //                                   IconButton(
+  //                                     tooltip: '삭제',
+  //                                     icon: const Icon(Icons.close_rounded),
+  //                                     onPressed: () => removeAt(i),
+  //                                   ),
+  //                                 ],
+  //                               );
+  //                             },
+  //                           ),
+  //                         ),
+  //                         SafeArea(
+  //                           top: false,
+  //                           child: Padding(
+  //                             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+  //                             child: SizedBox(
+  //                               height: kActionBarHeight,
+  //                               child: Row(
+  //                                 children: [
+  //                                   OutlinedButton.icon(
+  //                                     onPressed: addItem, // ← setInner 사용
+  //                                     icon: const Icon(Icons.add),
+  //                                     label: const Text('자료 추가'),
+  //                                     style: OutlinedButton.styleFrom(
+  //                                       minimumSize: const Size(0, 0),
+  //                                       padding: const EdgeInsets.symmetric(
+  //                                           horizontal: 12, vertical: 12),
+  //                                       shape: RoundedRectangleBorder(
+  //                                         borderRadius:
+  //                                         BorderRadius.circular(10),
+  //                                       ),
+  //                                     ),
+  //                                   ),
+  //                                   const Spacer(),
+  //                                   FilledButton(
+  //                                     onPressed: () {
+  //                                       _unfocus();
+  //                                       setState(() {
+  //                                         _materials
+  //                                           ..clear()
+  //                                           ..addAll(temp);
+  //                                         _dirty = true;
+  //                                       });
+  //                                       Navigator.pop(sheetCtx);
+  //                                     },
+  //                                     style: FilledButton.styleFrom(
+  //                                       minimumSize: const Size(0, 0),
+  //                                       padding: const EdgeInsets.symmetric(
+  //                                           horizontal: 18, vertical: 12),
+  //                                       shape: RoundedRectangleBorder(
+  //                                         borderRadius:
+  //                                         BorderRadius.circular(10),
+  //                                       ),
+  //                                     ),
+  //                                     child: const Text('저장',
+  //                                         style: TextStyle(
+  //                                             fontWeight: FontWeight.w800)),
+  //                                   ),
+  //                                 ],
+  //                               ),
+  //                             ),
+  //                           ),
+  //                         ),
+  //                       ],
+  //                     ),
+  //                   );
+  //                 },
+  //               );
+  //             },
+  //           ),
+  //         ),
+  //       );
+  //     },
+  //   );
+  // }
 
   // ===== 저장 & 종료 =====
   Future<bool> _confirmDiscard() async {
@@ -687,52 +747,117 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
     setState(() => _saving = true);
 
     try {
-      final week = int.parse(_weekCtl.text.trim());
-      final goals = _splitGoals(_summary)
+      final int week = int.parse(_weekCtl.text.trim());
+      final List<String> goals = _splitGoals(_summary)
           .map((e) => e.trim())
           .where((e) => e.isNotEmpty)
           .toList();
 
-      // 자료 → jsonb 배열로 변환 (URL 업로드는 나중에) TODO 나중에 파일피커로 해줘야함
-      final resources = _materials.map((m) {
-        final url = (m.url ?? '').trim();
-        final type = _guessType(url);
-        return {
-          'title': (m.name.trim().isEmpty ? '자료' : m.name.trim()),
-          if (url.isNotEmpty) 'url': url,
-          'type': type,
-        };
-      }).toList();
-
-      final code = _generateId(week);
+      // 1) 먼저 비디오 없이 커리큘럼 생성(코드/버전 확보)
+      final String code = _generateId(week);
       final created = await SupabaseService.instance.createCurriculumViaRpc(
         code: code,
         week: week,
         title: _titleCtl.text.trim(),
         summary: goals.join(', '),
         goals: goals,
-        resources: resources,
-        videoUrl: _videoUrl,
+        resources: [],
+        videoUrl: null, // ← 최초 생성 시 비워둠
       );
 
+      // 2) 로컬 대기 중 영상이 있다면 업로드 → 메타 반영
+      if (_pendingLocalVideoFile != null) {
+        final storage = StorageService();
+
+        // (a) 동영상 업로드
+        final String newVideoPath = await storage.uploadVideo(
+          file: _pendingLocalVideoFile!,
+          moduleCode: created.id,
+          version: created.version ?? 1,
+          week: created.week,
+        );
+
+        // (b) 썸네일 업로드(있으면 사용, 없으면 생성)
+        Uint8List? thumbBytes = _pendingThumbBytes;
+        thumbBytes ??= await VideoThumbnail.thumbnailData(
+          video: _pendingLocalVideoFile!.path,
+          imageFormat: ImageFormat.JPEG,
+          maxWidth: 640,
+          quality: 80,
+          timeMs: 3000,
+        );
+
+        String? newThumbPath;
+        if (thumbBytes != null) {
+          newThumbPath = await storage.uploadThumbnailBytes(
+            bytes: thumbBytes,
+            moduleCode: created.id,
+            version: created.version ?? 1,
+            week: created.week,
+            filename: 'thumb.jpg',
+            upsert: true,
+          );
+        }
+
+        // (c) 비디오/썸네일 경로를 RPC로 반영
+        await SupabaseService.instance.saveEditsViaRpc(
+          code: created.id,
+          goals: goals,
+          resources: const [],
+          videoPathOrNull: newVideoPath,
+          thumbPathOrNull: newThumbPath ?? '',
+        );
+      } else if ((_videoUrl ?? '').isNotEmpty) {
+        // (옵션) 외부/데모 URL을 입력한 경우 그대로 반영
+        await SupabaseService.instance.saveEditsViaRpc(
+          code: created.id,
+          goals: goals,
+          resources: const [],
+          videoPathOrNull: _videoUrl,
+          thumbPathOrNull: null,
+        );
+      }
+
+      // 2-시험) 시험 세트 업서트 (편집해둔 내용이 있으면 저장)
+      if (_pendingExam != null && _pendingExam!.questions.isNotEmpty) {
+        await SupabaseService.instance.adminUpsertExamSet(
+          moduleCode: created.id,
+          passScore: _pendingExam!.passScore,
+          questions: _pendingExam!.questions
+              .map((q) => q.toJson()) // ✅ List<ExamQuestion> → List<Map<String,dynamic>>
+              .toList(),
+        );
+      }
+
+      // 3) 갱신된 항목 재조회(비디오/썸네일/시험 여부 반영본)
+      final updated = await SupabaseService.instance.getCurriculumItemByCode(created.id) ?? created;
+
+      // 4) 로컬 스토어 반영 및 종료
       final provider = context.read<CurriculumProvider>();
-      provider.upsertLocal(created);
+      provider.upsertLocal(updated);
       // ignore: unawaited_futures
       provider.refresh(force: true);
 
+      if (!mounted) return;
       Navigator.pop(
         context,
         CurriculumCreateResult(
-          item: created, // durationMinutes는 UI에서 제거됨 → 모델은 0 유지
+          item: updated,        // durationMinutes는 모델 0 유지
           goals: goals,
           materials: _materials,
-          videoUrl: _videoUrl,
+          videoUrl: updated.videoUrl,
         ),
       );
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('과정이 생성되었습니다')),
       );
+
+      // (선택) 로컬 대기 상태 정리
+      setState(() {
+        _pendingLocalVideoFile = null;
+        _pendingThumbBytes = null;
+        _pendingExam = null;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -846,16 +971,34 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                               end: Alignment.bottomRight,
                             ),
                           ),
-                          child: Center(
-                            child: Icon(
-                              _videoUrl == null
-                                  ? Icons.videocam_off_rounded
-                                  : Icons.videocam_rounded,
-                              size: 48,
-                              color: UiTokens.actionIcon,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: (_pendingThumbBytes != null)
+                                ? Container(
+                              color: Colors.black, // 레터박스 배경
+                              child: Center(
+                                child: Image.memory(
+                                  _pendingThumbBytes!,
+                                  key: ValueKey(_pendingThumbRev),
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.contain, // ✅ 비율 보존 (레터박스)
+                                ),
+                              ),
+                            )
+                                : Center(
+                              child: Icon(
+                                _videoUrl == null
+                                    ? Icons.videocam_off_rounded
+                                    : Icons.videocam_rounded,
+                                size: 48,
+                                color: UiTokens.actionIcon,
+                              ),
                             ),
                           ),
+
                         ),
+
                         if (_videoUrl != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
@@ -892,8 +1035,8 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                         const _SectionTitle('시험 정보'),
                         const SizedBox(height: 8),
                         Text(
-                          _requiresExam
-                              ? '이 과정에는 시험이 있습니다.\n통과 기준: 60점 (데모)'
+                          (_pendingExam != null && _pendingExam!.questions.isNotEmpty) || _requiresExam
+                              ? '이 과정에는 시험이 있습니다.\n통과 기준: ${_examPassScore}점 / 100점'
                               : '이 과정에는 시험이 없습니다.',
                           style: const TextStyle(
                             color: UiTokens.title,
@@ -972,15 +1115,15 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
         : parts;
   }
 
-  String _guessType(String? url) {
-    final u = (url ?? '').toLowerCase();
-    if (u.endsWith('.pdf')) return 'pdf';
-    if (RegExp(r'\.(png|jpe?g|gif|webp)$').hasMatch(u)) return 'image';
-    if (RegExp(r'\.(mp4|mov|m4v|webm)$').hasMatch(u)) return 'video';
-    if (u.contains('docs.google.com/spreadsheets')) return 'sheet';
-    if (u.contains('docs.google.com/document')) return 'doc';
-    return 'web';
-  }
+  // String _guessType(String? url) {
+  //   final u = (url ?? '').toLowerCase();
+  //   if (u.endsWith('.pdf')) return 'pdf';
+  //   if (RegExp(r'\.(png|jpe?g|gif|webp)$').hasMatch(u)) return 'image';
+  //   if (RegExp(r'\.(mp4|mov|m4v|webm)$').hasMatch(u)) return 'video';
+  //   if (u.contains('docs.google.com/spreadsheets')) return 'sheet';
+  //   if (u.contains('docs.google.com/document')) return 'doc';
+  //   return 'web';
+  // }
 
   Widget _bullet(String text) {
     return Padding(
