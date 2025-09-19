@@ -1,4 +1,6 @@
-import 'package:file_picker/file_picker.dart';
+// SupabaseService.dart
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 
@@ -136,7 +138,6 @@ class SupabaseService {
   }
 
   /// (관리자) 목표/자료/비디오 경로를 한 번에 저장 — 서버에서 p_admin_key 검증
-  /// (관리자) 목표/자료 + 비디오/썸네일 경로 저장
   /// - videoPathOrNull: null=변경없음, ''=해제, 'path'=설정
   /// - thumbPathOrNull: 규칙 동일
   Future<void> saveEditsViaRpc({
@@ -161,7 +162,6 @@ class SupabaseService {
     });
   }
 
-
   Future<void> ensureAdminSessionLinked({String? adminKeyOverride}) async {
     // 1) 세션이 없으면 익명 로그인
     if (_sb.auth.currentSession == null || _sb.auth.currentUser == null) {
@@ -182,7 +182,6 @@ class SupabaseService {
 
     _adminLinkEnsured = true;
   }
-
 
   /// (선택) 커리큘럼 생성 RPC – 프로젝트에 이미 있으면 그대로 사용
   Future<CurriculumItem> createCurriculumViaRpc({
@@ -273,17 +272,35 @@ class SupabaseService {
     return Map<String, dynamic>.from(rows.first);
   }
 
-  // ---------------- 파일피커(UI용) ----------------
+  // ---------------- 갤러리에서 동영상 선택 (image_picker 기반) ----------------
+  /// 기존 호출부 호환을 위해 메서드명/반환타입 유지
+  /// - iOS: 사진 앱(PHPicker) → 사용자 경험상 "갤러리"가 열림
+  /// - Android: Android Photo Picker(13+) / MediaStore(하위)
   Future<PickedLocalFile?> pickOneFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: false,
-      type: FileType.any,
-      withReadStream: false,
-      withData: false,
+    final ImagePicker picker = ImagePicker();
+
+    // 갤러리(사진 앱)에서 비디오 선택
+    final XFile? x = await picker.pickVideo(
+      source: ImageSource.gallery,
+      // 필요시 길이 제한
+      // maxDuration: const Duration(minutes: 10),
     );
-    if (result == null || result.files.isEmpty) return null;
-    final f = result.files.first;
-    return PickedLocalFile(name: f.name, path: f.path, extension: f.extension);
+
+    if (x == null) return null;
+
+    final String path = x.path;
+    final String name = path.split(Platform.pathSeparator).last;
+    String? ext;
+    final int dotIdx = name.lastIndexOf('.');
+    if (dotIdx >= 0 && dotIdx < name.length - 1) {
+      ext = name.substring(dotIdx + 1).toLowerCase();
+    }
+
+    return PickedLocalFile(
+      name: name,
+      path: path,
+      extension: ext,
+    );
   }
 
   // ---- 내부 매퍼: DB row -> UI 모델 ----
@@ -335,5 +352,4 @@ class SupabaseService {
       thumbUrl: (thumbUrl?.isEmpty == true) ? null : thumbUrl,
     );
   }
-
 }
