@@ -1314,24 +1314,48 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                   tooltip: '삭제',
                   icon: const Icon(Icons.delete_outline, color: UiTokens.actionIcon),
                   onPressed: () async {
-                    bool ok = false;
-                    if (widget.onDeleteConfirm != null) {
-                      ok = await widget.onDeleteConfirm!();
-                    } else {
-                      ok = (await showDialog<bool>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('과정 삭제'),
-                          content: Text('‘${_item.title}’을(를) 삭제할까요? 되돌릴 수 없어요.'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-                            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
-                          ],
-                        ),
-                      )) == true;
-                    }
-                    if (ok && context.mounted) {
+                    final ok = await showDiscardChangesDialog(
+                      context,
+                      title: '과정 삭제',
+                      message: '‘${_item.title}’을(를) 삭제할까요?\n되돌릴 수 없어요.',
+                      stayText: '취소',
+                      leaveText: '삭제',
+                      isDanger: true,                          // ← 빨간 스타일
+                      icon: Icons.delete_outline_rounded,      // ← 삭제 아이콘
+                    );
+
+                    if (!ok || !context.mounted) return;
+
+                    try {
+                      final key = widget.adminKey ?? SupabaseService.instance.adminKey;
+                      if (key == null || key.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('관리자 인증이 필요합니다(adminKey 없음)')),
+                        );
+                        return;
+                      }
+
+                      // ❶ 서버에서 실제 삭제
+                      await SupabaseService.instance.adminDeleteCurriculum(
+                        code: _item.id, // ← code 컬럼을 키로 사용
+                        adminKey: key,
+                      );
+
+                      // ❷ (선택) 목록 새로고침
+                      try { context.read<CurriculumProvider>().refresh(force: true); } catch (_) {}
+
+                      if (!context.mounted) return;
+
+                      // ❸ 호출자에게 삭제 사실 전달 후 닫기
                       Navigator.of(context).pop(const CurriculumDetailResult(deleted: true));
+
+                      // (스낵바는 상위에서 띄우는 패턴이면 생략 가능)
+                      // ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('삭제되었습니다')));
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('삭제 실패: $e')),
+                      );
                     }
                   },
                 ),

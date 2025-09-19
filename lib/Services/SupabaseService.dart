@@ -225,6 +225,22 @@ class SupabaseService {
     return 1;
   }
 
+  /// (관리자) 커리큘럼 삭제 — 서버에서 p_admin_key 검증
+  /// - 보통 연관 시험/파일 정리까지 처리하는 RPC 이름을 가정: admin_delete_curriculum
+  Future<void> adminDeleteCurriculum({
+    required String code,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+    await _sb.rpc('admin_delete_curriculum', params: {
+      'p_admin_key': key,
+      'p_code': code,
+    });
+  }
+
   // ---------------- 시험 ----------------
   Future<Map<String, dynamic>?> getExamSet({required String moduleCode}) async {
     final res = await _sb.rpc('get_exam_set', params: {'p_module_code': moduleCode});
