@@ -906,29 +906,29 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                   const SizedBox(height: 12),
 
                   // 관련 자료
-                  _SectionCard(
-                    onEdit: _editMaterialsSheet,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const _SectionTitle('관련 자료'),
-                        const SizedBox(height: 8),
-                        if (_materials.isEmpty)
-                          Text('등록된 자료가 없습니다.',
-                              style: TextStyle(
-                                  color: UiTokens.title.withOpacity(0.6),
-                                  fontWeight: FontWeight.w700))
-                        else
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _materials
-                                .map((m) => _fileChip(m.icon, m.name))
-                                .toList(),
-                          ),
-                      ],
-                    ),
-                  ),
+                  // _SectionCard(
+                  //   onEdit: _editMaterialsSheet,
+                  //   child: Column(
+                  //     crossAxisAlignment: CrossAxisAlignment.start,
+                  //     children: [
+                  //       const _SectionTitle('관련 자료'),
+                  //       const SizedBox(height: 8),
+                  //       if (_materials.isEmpty)
+                  //         Text('등록된 자료가 없습니다.',
+                  //             style: TextStyle(
+                  //                 color: UiTokens.title.withOpacity(0.6),
+                  //                 fontWeight: FontWeight.w700))
+                  //       else
+                  //         Wrap(
+                  //           spacing: 8,
+                  //           runSpacing: 8,
+                  //           children: _materials
+                  //               .map((m) => _fileChip(m.icon, m.name))
+                  //               .toList(),
+                  //         ),
+                  //     ],
+                  //   ),
+                  // ),
 
                   const SizedBox(height: 24),
 

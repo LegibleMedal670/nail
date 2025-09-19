@@ -241,25 +241,26 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
 
               // ===== 레포트(임시) / 새로고침 / 필터 =====
               Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('레포트 생성(데모)')),
-                          );
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: UiTokens.primaryBlue,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: const Text('레포트 생성하기',
-                            style: TextStyle(fontWeight: FontWeight.w800)),
-                      ),
-                    ),
-                  ),
+                  // Expanded(
+                  //   child: SizedBox(
+                  //     height: 48,
+                  //     child: FilledButton(
+                  //       onPressed: () {
+                  //         ScaffoldMessenger.of(context).showSnackBar(
+                  //           const SnackBar(content: Text('레포트 생성(데모)')),
+                  //         );
+                  //       },
+                  //       style: FilledButton.styleFrom(
+                  //         backgroundColor: UiTokens.primaryBlue,
+                  //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  //       ),
+                  //       child: const Text('레포트 생성하기',
+                  //           style: TextStyle(fontWeight: FontWeight.w800)),
+                  //     ),
+                  //   ),
+                  // ),
                   const SizedBox(width: 8),
                   IconButton(
                     tooltip: '새로고침',
