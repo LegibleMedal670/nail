@@ -135,6 +135,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   bool get _isAdminReview => widget.mode == CurriculumViewMode.adminReview;
   bool get _isMentee      => widget.mode == CurriculumViewMode.mentee;
 
+  bool get _editingGuardActive => _isAdminEdit && (_dirty || _saving);
+
+
   // ▼ 수정: 서버에서 재조회한 값(_prOverride)이 있으면 그것을 우선 사용
   CurriculumProgress get _pr => _prOverride ?? widget.progress ?? const CurriculumProgress();
 
@@ -1279,10 +1282,12 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       behavior: HitTestBehavior.translucent,
       onTap: _unfocus,
       child: PopScope(
-        canPop: false,
+        canPop: !_editingGuardActive, // 편집 보호 활성일 때만 막기
         onPopInvoked: (didPop) async {
-          if (didPop) return;
-          await _handleBack();
+          if (didPop) return;                // 이미 정상 pop되었으면 추가 처리 없음
+          if (_editingGuardActive) {
+            await _handleBack();             // 편집 중이면 기존 확인 다이얼로그 로직 수행
+          }
         },
         child: Scaffold(
           backgroundColor: Colors.white,
@@ -1291,9 +1296,18 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
             backgroundColor: Colors.white,
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: UiTokens.title),
-              onPressed: _handleBack,
-              tooltip: '뒤로가기',
+              icon: Icon(
+                _editingGuardActive ? Icons.close_rounded : Icons.arrow_back,
+                color: UiTokens.title,
+              ),
+              tooltip: _editingGuardActive ? '닫기' : '뒤로가기',
+              onPressed: () async {
+                if (_editingGuardActive) {
+                  await _handleBack();       // 편집 중엔 확인 후 닫기
+                } else {
+                  if (mounted) Navigator.maybePop(context); // 평소엔 곧바로 뒤로
+                }
+              },
             ),
             title: Row(
               children: [
