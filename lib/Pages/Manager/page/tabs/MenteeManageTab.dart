@@ -111,6 +111,98 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     }
   }
 
+  /// ===== KPI Grid (고정 높이 ❌ / 내용 기반 높이 ✅) =====
+  Widget _buildKpiGrid({
+    required BuildContext context,
+    required int totalMentees,
+    required int unassignedCount,
+    required double avgScore,
+    required int keyPeople,
+  }) {
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final width = constraints.maxWidth;
+
+        // 화면 폭에 따라 칼럼 수 반응형
+        final int crossAxisCount = width >= 900
+            ? 4
+            : (width >= 600
+            ? 3
+            : 2);
+
+        // 접근성 텍스트 배율을 반영해 타일 높이 보정
+        final textScale = MediaQuery.textScaleFactorOf(ctx).clamp(1.0, 1.6);
+        const baseTileHeight = 140.0; // 내용이 쾌적하게 들어가는 기준 높이
+        final tileHeight = baseTileHeight * textScale;
+
+        return GridView(
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(), // 바깥 스크롤에 위임
+          shrinkWrap: true, // 내용 크기만큼만 차지
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            mainAxisSpacing: 6,
+            crossAxisSpacing: 6,
+            mainAxisExtent: tileHeight, // 비율 대신 고정 높이로 안정화
+          ),
+          children: [
+            MetricCard.rich(
+              icon: Icons.people_alt_outlined,
+              title: '총 멘티 수',
+              rich: TextSpan(
+                text: '$totalMentees',
+                style: const TextStyle(
+                  color: UiTokens.title,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  height: 1.0,
+                ),
+                children: [
+                  const TextSpan(
+                    text: ' 명',
+                    style: TextStyle(
+                      color: UiTokens.primaryBlue,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '\n미배정 $unassignedCount명',
+                    style: TextStyle(
+                      color: UiTokens.title.withOpacity(0.6),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            MetricCard.simple(
+              icon: Icons.grade_outlined,
+              title: '멘티 평균 점수',
+              value: avgScore.toStringAsFixed(0),
+              unit: '점',
+            ),
+            const MetricCard.simple(
+              icon: Icons.hourglass_bottom_outlined,
+              title: '최종 평가를 기다리는 멘티',
+              value: '18',
+              unit: '명',
+            ),
+            MetricCard.simple(
+              icon: Icons.priority_high_rounded,
+              title: '주요 인물',
+              value: '$keyPeople',
+              unit: '명',
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProgressProvider>();
@@ -160,69 +252,13 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ===== 2×2 KPI 카드 =====
-            SizedBox(
-              height: MediaQuery.of(context).size.height * 0.33,
-              child: GridView.count(
-                crossAxisCount: 2,
-                mainAxisSpacing: 6,
-                crossAxisSpacing: 6,
-                physics: const NeverScrollableScrollPhysics(),
-                childAspectRatio: 1.35,
-                children: [
-                  MetricCard.rich(
-                    icon: Icons.people_alt_outlined,
-                    title: '총 멘티 수',
-                    rich: TextSpan(
-                      text: '$totalMentees',
-                      style: const TextStyle(
-                        color: UiTokens.title,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        height: 1.0,
-                      ),
-                      children: [
-                        const TextSpan(
-                          text: ' 명',
-                          style: TextStyle(
-                            color: UiTokens.primaryBlue,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                          ),
-                        ),
-                        TextSpan(
-                          text: '\n미배정 $unassignedCount명',
-                          style: TextStyle(
-                            color: UiTokens.title.withOpacity(0.6),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  MetricCard.simple(
-                    icon: Icons.grade_outlined,
-                    title: '멘티 평균 점수',
-                    value: avgScore.toStringAsFixed(0),
-                    unit: '점',
-                  ),
-                  MetricCard.simple(
-                    icon: Icons.hourglass_bottom_outlined,
-                    title: '최종 평가를 기다리는 멘티',
-                    value: '18',
-                    unit: '명',
-                  ),
-                  MetricCard.simple(
-                    icon: Icons.priority_high_rounded,
-                    title: '주요 인물',
-                    value: '$keyPeople',
-                    unit: '명',
-                  ),
-                ],
-              ),
+            // ===== KPI 카드 (반응형, 내용 기반 높이) =====
+            _buildKpiGrid(
+              context: context,
+              totalMentees: totalMentees,
+              unassignedCount: unassignedCount,
+              avgScore: avgScore,
+              keyPeople: keyPeople,
             ),
             const SizedBox(height: 8),
 
@@ -247,8 +283,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                             fontSize: 14,
                             fontWeight: FontWeight.w700)),
                     style: TextButton.styleFrom(
-                      padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                       foregroundColor: UiTokens.actionIcon,
                       minimumSize: const Size(0, 0),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -277,8 +312,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                     const <String, CurriculumProgress>{};
 
                 final watchRatio = <String, double>{
-                  for (final e in pm.entries)
-                    e.key: e.value.watchedRatio.clamp(0.0, 1.0),
+                  for (final e in pm.entries) e.key: e.value.watchedRatio.clamp(0.0, 1.0),
                 };
                 final examMap = <String, ExamRecord>{
                   for (final e in pm.entries)
@@ -297,7 +331,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                   watchRatio: watchRatio,
                   examMap: examMap,
                   overrideProgress: progress, // ✅ 게이지 강제 일치(타일에 필드 추가 필요)
-
                   onDetail: () async {
                     final pageCtx = this.context;
                     final existing = mentees

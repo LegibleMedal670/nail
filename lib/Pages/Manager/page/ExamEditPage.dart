@@ -2,89 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 
-// /// =========================
-// /// 모델
-// /// =========================
-//
-// enum ExamQuestionType { mcq, shortAnswer, ordering }
-//
-// class ExamQuestion {
-//   final String id;
-//   ExamQuestionType type;
-//   String prompt;
-//
-//   // 객관식
-//   List<String>? choices;
-//   int? correctIndex; // 단일정답(필요 시 확장 가능)
-//
-//   // 주관식
-//   List<String>? answers; // 허용 답안들
-//
-//   // 순서 맞추기
-//   List<String>? ordering; // 정답 순서
-//
-//   ExamQuestion._({
-//     required this.id,
-//     required this.type,
-//     required this.prompt,
-//     this.choices,
-//     this.correctIndex,
-//     this.answers,
-//     this.ordering,
-//   });
-//
-//   factory ExamQuestion.mcq({
-//     required String prompt,
-//     List<String>? choices,
-//     int? correctIndex,
-//   }) =>
-//       ExamQuestion._(
-//         id: DateTime.now().microsecondsSinceEpoch.toString(),
-//         type: ExamQuestionType.mcq,
-//         prompt: prompt,
-//         choices: choices ?? ['보기 1', '보기 2', '보기 3', '보기 4'],
-//         correctIndex: correctIndex ?? 0,
-//       );
-//
-//   factory ExamQuestion.short({
-//     required String prompt,
-//     List<String>? answers,
-//   }) =>
-//       ExamQuestion._(
-//         id: DateTime.now().microsecondsSinceEpoch.toString(),
-//         type: ExamQuestionType.shortAnswer,
-//         prompt: prompt,
-//         answers: answers ?? ['예시 답안'],
-//       );
-//
-//   factory ExamQuestion.ordering({
-//     required String prompt,
-//     List<String>? ordering,
-//   }) =>
-//       ExamQuestion._(
-//         id: DateTime.now().microsecondsSinceEpoch.toString(),
-//         type: ExamQuestionType.ordering,
-//         prompt: prompt,
-//         ordering: ordering ?? ['항목 A', '항목 B', '항목 C'],
-//       );
-//
-//   ExamQuestion clone() => ExamQuestion._(
-//     id: id,
-//     type: type,
-//     prompt: prompt,
-//     choices: choices == null ? null : List<String>.from(choices!),
-//     correctIndex: correctIndex,
-//     answers: answers == null ? null : List<String>.from(answers!),
-//     ordering: ordering == null ? null : List<String>.from(ordering!),
-//   );
-// }
-//
-// class ExamEditResult {
-//   final List<ExamQuestion> questions;
-//   final int passScore; // 0~100
-//   const ExamEditResult({required this.questions, required this.passScore});
-// }
-
 /// =========================
 /// 페이지
 /// =========================
@@ -99,20 +16,6 @@ class ExamEditPage extends StatefulWidget {
     this.initialPassScore = 60,
   });
 
-  /// 빠른 데모용
-  factory ExamEditPage.demo() {
-    return ExamEditPage(
-      initialPassScore: 60,
-      initialQuestions: [
-        ExamQuestion.mcq(prompt: '기본 케어에서 먼저 해야 하는 단계는?'),
-        ExamQuestion.short(prompt: '젤 제거 과정을 한 단어로? (영어)', answers: ['off', 'soakoff']),
-        ExamQuestion.ordering(
-          prompt: '올바른 순서로 배열하세요',
-          ordering: ['손 소독', '큐티클 정리', '베이스 코트'],
-        ),
-      ],
-    );
-  }
 
   @override
   State<ExamEditPage> createState() => _ExamEditPageState();

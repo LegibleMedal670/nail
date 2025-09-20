@@ -168,8 +168,6 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
       if (loginKey.isEmpty) return;
 
-      print('로그인키 $loginKey');
-
       final res = await VideoProgressService.instance.menteeGetProgress(
         loginKey: loginKey,
         moduleCode: _item.id, // == code
