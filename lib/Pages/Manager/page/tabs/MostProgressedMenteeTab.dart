@@ -106,7 +106,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
     // 2) 동일 데이터 소스: 커리큘럼/모듈별 진행 맵
     final List<CurriculumItem> items = curri.items;
     final Map<String, CurriculumProgress> pm =
-        admin.progressMapFor(top.id) ?? const {};
+        admin.progressMapFor(top.id) ?? const <String, CurriculumProgress>{};
 
     // 3) 게이지 퍼센트(단일 공식)
     final double progress = admin.progressOfUser(top.id).clamp(0.0, 1.0);
@@ -117,9 +117,9 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
     bool _isInProgress(String id) {
       final p = pm[id];
       if (p == null) return false;
-      final vc = (p.hasVideo && (p.videoCompleted ?? false));
-      final ep = (p.hasExam && (p.examPassed ?? false));
-      final someWatch = p.watchedRatio > 0;
+      final vc = ((p.hasVideo ?? false) && (p.videoCompleted ?? false));
+      final ep = ((p.hasExam ?? false) && (p.examPassed ?? false));
+      final someWatch = (p.watchedRatio > 0);
       return (!p.moduleCompleted) && (vc || ep || someWatch);
     }
 
@@ -136,6 +136,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
 
     final gaugeColor = UiTokens.primaryBlue;
     final started = _fmtDate(top.startedAt);
+    final mentorName = top.mentorName ?? '미배정'; // ✅ 멘토명 표시(B안)
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -174,22 +175,38 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                top.name,
-                                style: const TextStyle(
-                                  color: UiTokens.title,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
+                              // ✅ “김멘티 · 멘토 : 김멘토” 형식
+                              Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: top.name,
+                                      style: const TextStyle(
+                                        color: UiTokens.title,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: '  ·  멘토 : ',
+                                      style: TextStyle(
+                                        color: UiTokens.title.withOpacity(0.7),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    TextSpan(
+                                      text: mentorName,
+                                      style: TextStyle(
+                                        color: UiTokens.title.withOpacity(0.7),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '멘토 : ${top.mentor}',
-                                style: TextStyle(
-                                  color: UiTokens.title.withOpacity(0.6),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -220,7 +237,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                               strokeWidth: 10,
                               backgroundColor: const Color(0xFFE9EEF6),
                               valueColor: AlwaysStoppedAnimation(gaugeColor),
-                              strokeCap: StrokeCap.round,
+                              // strokeCap: StrokeCap.round, // 사용 중인 Flutter 버전에 따라 미지원일 수 있음
                             ),
                           ),
                           Text(
@@ -239,29 +256,10 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
 
               const SizedBox(height: 12),
 
-              // ===== 레포트(임시) / 새로고침 / 필터 =====
+              // ===== 새로고침 / 필터 =====
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  // Expanded(
-                  //   child: SizedBox(
-                  //     height: 48,
-                  //     child: FilledButton(
-                  //       onPressed: () {
-                  //         ScaffoldMessenger.of(context).showSnackBar(
-                  //           const SnackBar(content: Text('레포트 생성(데모)')),
-                  //         );
-                  //       },
-                  //       style: FilledButton.styleFrom(
-                  //         backgroundColor: UiTokens.primaryBlue,
-                  //         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  //       ),
-                  //       child: const Text('레포트 생성하기',
-                  //           style: TextStyle(fontWeight: FontWeight.w800)),
-                  //     ),
-                  //   ),
-                  // ),
-                  const SizedBox(width: 8),
                   IconButton(
                     tooltip: '새로고침',
                     iconSize: 20,

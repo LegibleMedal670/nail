@@ -27,8 +27,8 @@ class MenteeSummaryTile extends StatelessWidget {
   /// 상세보기 버튼 콜백
   final VoidCallback? onDetail;
 
+  /// 외부에서 계산된 진행률을 강제 반영하고 싶을 때 사용(0..1)
   final double? overrideProgress;
-
 
   const MenteeSummaryTile({
     super.key,
@@ -40,6 +40,8 @@ class MenteeSummaryTile extends StatelessWidget {
     this.overrideProgress,
   });
 
+  String get _mentorDisplay => mentee.mentorName ?? '미배정';
+
   double _calcProgressFromCurriculum() {
     final doneCount = curriculum.where(_isModuleDone).length;
     final totalCount = curriculum.length;
@@ -48,8 +50,6 @@ class MenteeSummaryTile extends StatelessWidget {
     if (r.isNaN || r.isInfinite) return 0.0;
     return r.clamp(0.0, 1.0);
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -61,27 +61,36 @@ class MenteeSummaryTile extends StatelessWidget {
 
     final percentText = '${(progress * 100).round()}%';
 
-    final int examPass  = useFallback ? mentee.examDone  : curriculum.where((e) => e.requiresExam).where((e) => (examMap[e.id]?.passed ?? false)).length;
-    final int examTotal = useFallback ? mentee.examTotal : curriculum.where((e) => e.requiresExam).length;
+    final int examPass = useFallback
+        ? mentee.examDone
+        : curriculum
+        .where((e) => e.requiresExam)
+        .where((e) => (examMap[e.id]?.passed ?? false))
+        .length;
+    final int examTotal =
+    useFallback ? mentee.examTotal : curriculum.where((e) => e.requiresExam).length;
 
     // ✅ 완료/총 모듈 카운트
-    final int doneCount = useFallback ? mentee.courseDone  : _doneCountLocal;
+    final int doneCount = useFallback ? mentee.courseDone : _doneCountLocal;
     final int totalCount = useFallback ? mentee.courseTotal : _totalCountLocal;
 
     // 현재 모듈(처음으로 완료가 아닌 항목)
     final current = curriculum.firstWhere(
           (e) => !_isModuleDone(e),
-      orElse: () => curriculum.isNotEmpty ? curriculum.last : const CurriculumItem(
+      orElse: () => curriculum.isNotEmpty
+          ? curriculum.last
+          : const CurriculumItem(
         id: '_empty',
         week: 0,
         title: '커리큘럼 없음',
         summary: '',
         hasVideo: false,
         requiresExam: false,
-          videoUrl: '', resources: [], goals: []
+        videoUrl: '',
+        resources: [],
+        goals: [],
       ),
     );
-
 
     return Container(
       decoration: BoxDecoration(
@@ -94,13 +103,14 @@ class MenteeSummaryTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ===== 헤더: 프로필 + 진행바 + 연필 =====
+          // ===== 헤더: 프로필 + 이름·멘토 + 진행바 + 퍼센트 =====
           Row(
             children: [
               CircleAvatar(
                 radius: 22,
                 backgroundColor: Colors.grey[400],
-                backgroundImage: mentee.photoUrl != null ? NetworkImage(mentee.photoUrl!) : null,
+                backgroundImage:
+                mentee.photoUrl != null ? NetworkImage(mentee.photoUrl!) : null,
                 child: mentee.photoUrl == null
                     ? const Icon(Icons.person, color: Colors.white)
                     : null,
@@ -110,10 +120,39 @@ class MenteeSummaryTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(mentee.name,
-                        style: const TextStyle(
-                            color: UiTokens.title, fontSize: 16, fontWeight: FontWeight.w900)),
-                    const SizedBox(height: 2),
+                    // ✅ "김멘티 · 멘토 : 김멘토" 형식으로 한 줄 표시 (넘치면 …)
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: mentee.name,
+                            style: const TextStyle(
+                              color: UiTokens.title,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          TextSpan(
+                            text: '  ·  멘토 : ',
+                            style: TextStyle(
+                              color: UiTokens.title.withOpacity(0.75),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          TextSpan(
+                            text: _mentorDisplay,
+                            style: TextStyle(
+                              color: UiTokens.title.withOpacity(0.75),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 8),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
@@ -121,17 +160,21 @@ class MenteeSummaryTile extends StatelessWidget {
                         value: progress,
                         minHeight: 8,
                         backgroundColor: const Color(0xFFE9EEF6),
-                        valueColor: AlwaysStoppedAnimation(const Color(0xFF22C55E)), // green
+                        valueColor:
+                        const AlwaysStoppedAnimation(Color(0xFF22C55E)), // green
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 20),
-              Text(percentText,
-                  style: const TextStyle(
-                      color: Color(0xFF16A34A),
-                      fontWeight: FontWeight.w900)),
+              Text(
+                percentText,
+                style: const TextStyle(
+                  color: Color(0xFF16A34A),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ],
           ),
 
@@ -148,12 +191,16 @@ class MenteeSummaryTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('현재 모듈  ·  W${current.week}. ${current.title}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: UiTokens.title, fontWeight: FontWeight.w800,),),
-                SizedBox(height: 15,),
+                Text(
+                  '현재 모듈  ·  W${current.week}. ${current.title}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: UiTokens.title,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 15),
                 Text(
                   '영상 시청: $doneCount/$totalCount 완료  ·  시험: $examPass/$examTotal 합격',
                   style: TextStyle(
@@ -186,7 +233,8 @@ class MenteeSummaryTile extends StatelessWidget {
                   onPressed: onDetail,
                   style: FilledButton.styleFrom(
                     backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                   ),
                   child: const Text(
@@ -216,5 +264,5 @@ class MenteeSummaryTile extends StatelessWidget {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   int get _totalCountLocal => curriculum.length;
-  int get _doneCountLocal  => curriculum.where(_isModuleDone).length;
+  int get _doneCountLocal => curriculum.where(_isModuleDone).length;
 }

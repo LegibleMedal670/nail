@@ -161,7 +161,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     final String displayName = user.nickname.isNotEmpty ? user.nickname : '사용자';
     final DateTime startedAt = user.joinedAt ?? DateTime.now();
     final String? photoUrl = user.photoUrl;
-    final String? mentorName = user.mentor;
+    final String mentorName = user.mentorName ?? '미배정';
 
     // 커리큘럼 상태
     final bool loading = curri.loading;
@@ -274,7 +274,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                mentorName != null ? '멘토 : $mentorName' : '멘토 : 없음',
+                                mentorName != null ? '멘토 : $mentorName' : '멘토 : 미배정',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,

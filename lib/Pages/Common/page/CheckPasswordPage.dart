@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
+import 'package:nail/Pages/Mentor/page/MentorMainPage.dart'; // ✅ 멘토 라우팅
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:provider/provider.dart';
 
-enum EntryMode { manager, mentee }
+/// 진입 모드: 관리자 / 멘티 / 멘토
+enum EntryMode { manager, mentee, mentor }
 
 class CheckPasswordPage extends StatefulWidget {
-  /// 기본은 관리자(비밀번호). 멘티 진입에는 EntryMode.mentee 로 호출하세요.
+  /// 기본은 관리자(비밀번호). 멘티/멘토 진입에는 EntryMode.mentee / EntryMode.mentor 로 호출하세요.
   const CheckPasswordPage({
     super.key,
     this.mode = EntryMode.manager,
@@ -109,11 +111,13 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
     final user = context.read<UserProvider>();
     final code = _code;
 
-    final ok = await user.signInWithCode(code); // 서버 검증 + (멘티) 캐시 저장
+    final ok = await user.signInWithCode(code); // 서버 검증 + (멘티/멘토) 캐시 저장
     if (!mounted) return;
 
     if (!ok) {
-      await _failFeedback(widget.mode == EntryMode.mentee ? '코드가 올바르지 않습니다' : '비밀번호가 올바르지 않습니다');
+      await _failFeedback(
+        (widget.mode == EntryMode.manager) ? '비밀번호가 올바르지 않습니다' : '코드가 올바르지 않습니다',
+      );
       return;
     }
 
@@ -123,9 +127,14 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
       await _failFeedback('관리자 계정이 아닙니다');
       return;
     }
-    if (widget.mode == EntryMode.mentee && user.isAdmin) {
+    if (widget.mode == EntryMode.mentee && (user.isAdmin || user.isMentor)) {
       await user.signOut();
-      await _failFeedback('이 코드는 관리자 전용입니다');
+      await _failFeedback('이 코드는 멘티 전용입니다');
+      return;
+    }
+    if (widget.mode == EntryMode.mentor && (!user.isMentor || user.isAdmin)) {
+      await user.signOut();
+      await _failFeedback('이 코드는 멘토 전용입니다');
       return;
     }
 
@@ -139,31 +148,57 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
     }
 
     try {
-
-      // 성공 분기에서 관리자 아니면:
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MenteeMainPage()),
-            (route) => false,
-      );
+      if (user.isMentor) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MentorMainPage()),
+              (route) => false,
+        );
+      } else {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MenteeMainPage()),
+              (route) => false,
+        );
+      }
     } catch (e) {
       await _failFeedback('사용자 정보 조회 실패: $e');
     }
   }
 
-
-
   // ====== UI 문자열(모드별) ======
-  String get _titleText =>
-      (widget.mode == EntryMode.manager) ? '비밀번호를 입력하세요' : '접속 코드를 입력하세요';
-  String get _subtitleText =>
-      (widget.mode == EntryMode.manager) ? '4자리 숫자' : '관리자에게 받은 4자리 코드';
-  String get _errorText =>
-      (widget.mode == EntryMode.manager) ? '비밀번호가 올바르지 않습니다' : '코드가 올바르지 않습니다';
+  String get _titleText {
+    switch (widget.mode) {
+      case EntryMode.manager:
+        return '비밀번호를 입력하세요';
+      case EntryMode.mentee:
+      case EntryMode.mentor:
+        return '접속 코드를 입력하세요';
+    }
+  }
+
+  String get _subtitleText {
+    switch (widget.mode) {
+      case EntryMode.manager:
+        return '4자리 숫자';
+      case EntryMode.mentee:
+      case EntryMode.mentor:
+        return '관리자에게 받은 4자리 코드';
+    }
+  }
+
+  String get _errorText {
+    switch (widget.mode) {
+      case EntryMode.manager:
+        return '비밀번호가 올바르지 않습니다';
+      case EntryMode.mentee:
+      case EntryMode.mentor:
+        return '코드가 올바르지 않습니다';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final isMenteeMode = widget.mode == EntryMode.mentee;
+    final isCodeMode = widget.mode != EntryMode.manager; // ✅ 멘티/멘토는 숫자 표시
 
     return GestureDetector(
       onTap: _unfocusAll,
@@ -282,8 +317,8 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
                               ),
                             ),
                             child: isFilled
-                                ? (isMenteeMode
-                            // 멘티 모드: 숫자 표시
+                                ? (isCodeMode
+                            // 멘티/멘토 모드: 숫자 표시
                                 ? Text(
                               _code[i],
                               style: TextStyle(

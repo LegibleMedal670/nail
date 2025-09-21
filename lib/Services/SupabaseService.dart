@@ -22,7 +22,9 @@ class SupabaseService {
 
   bool _adminLinkEnsured = false;
 
-  // ---------------- 유저/멘티 관련 ----------------
+  // ---------------- 유저/멘티/멘토 관련 ----------------
+  /// 서버 RPC(login_with_key) 결과를 맵으로 그대로 반환
+  /// - B안 기준: mentor(uuid), mentor_name(text), is_mentor(bool) 포함
   Future<Map<String, dynamic>?> loginWithKey(String loginKey) async {
     final res = await _sb.rpc('login_with_key', params: {'p_key': loginKey});
     if (res == null) return null;
@@ -38,17 +40,18 @@ class SupabaseService {
     throw Exception('failed to generate login code');
   }
 
+  /// 멘티 생성 (멘토 지정은 uuid 사용)
   Future<Map<String, dynamic>> createMentee({
     required String nickname,
     required DateTime joinedAt,
-    String? mentor,
+    String? mentorId,   // ✅ uuid
     String? photoUrl,
     String? loginKey,
   }) async {
     final res = await _sb.rpc('create_mentee', params: {
       'p_nickname': nickname,
       'p_joined': joinedAt.toIso8601String().substring(0, 10),
-      'p_mentor': mentor,
+      'p_mentor': mentorId,             // ✅ uuid 그대로 전달
       'p_photo_url': photoUrl,
       'p_login_key': loginKey,
     });
@@ -57,11 +60,12 @@ class SupabaseService {
     return Map<String, dynamic>.from(rows.first);
   }
 
+  /// 최소 사용자 업데이트 (멘토 변경은 uuid 사용)
   Future<Map<String, dynamic>> updateUserMin({
     required String id,
     String? nickname,
     DateTime? joinedAt,
-    String? mentor,
+    String? mentorId,   // ✅ uuid
     String? photoUrl,
     String? loginKey,
   }) async {
@@ -69,7 +73,7 @@ class SupabaseService {
       'p_id': id,
       'p_nickname': nickname,
       'p_joined': joinedAt == null ? null : joinedAt.toIso8601String().substring(0, 10),
-      'p_mentor': mentor,
+      'p_mentor': mentorId,            // ✅ uuid 그대로 전달
       'p_photo_url': photoUrl,
       'p_login_key': loginKey,
     });
@@ -88,6 +92,18 @@ class SupabaseService {
   Future<void> deleteUser({required String id}) async {
     await _sb.rpc('delete_user', params: {'p_id': id});
   }
+
+  // SupabaseService.dart (클래스 내부)
+  Future<List<Map<String, dynamic>>> listMentors() async {
+    final rows = await Supabase.instance.client
+        .from('app_users')
+        .select('id, nickname, photo_url')
+        .eq('is_mentor', true)
+        .order('nickname', ascending: true);
+    if (rows is! List) return const [];
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
 
   // ---------------- 커리큘럼 ----------------
   /// ✅ 뷰 curriculum_modules_v 사용 (has_exam 포함)

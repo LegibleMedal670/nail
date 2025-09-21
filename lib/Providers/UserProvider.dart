@@ -8,18 +8,23 @@ class UserAccount {
   final String userId;
   final String nickname;
   final bool isAdmin;
+  final bool isMentor;     // ✅ 멘토 역할
   final String loginKey;
   final DateTime joinedAt;
-  final String? mentor;
+  final String? mentorId;   // ✅ mentor(uuid)
+  final String? mentorName; // ✅ mentor 표시용 이름
   final String? photoUrl;
+
 
   const UserAccount({
     required this.userId,
     required this.nickname,
     required this.isAdmin,
+    required this.isMentor,
     required this.loginKey,
     required this.joinedAt,
-    this.mentor,
+    this.mentorId,
+    this.mentorName,
     this.photoUrl,
   });
 
@@ -27,18 +32,22 @@ class UserAccount {
     String? userId,
     String? nickname,
     bool? isAdmin,
+    bool? isMentor,
     String? loginKey,
     DateTime? joinedAt,
-    String? mentor,
+    String? mentorId,
+    String? mentorName,
     String? photoUrl,
   }) {
     return UserAccount(
       userId: userId ?? this.userId,
       nickname: nickname ?? this.nickname,
       isAdmin: isAdmin ?? this.isAdmin,
+      isMentor: isMentor ?? this.isMentor,
       loginKey: loginKey ?? this.loginKey,
       joinedAt: joinedAt ?? this.joinedAt,
-      mentor: mentor ?? this.mentor,
+      mentorId: mentorId ?? this.mentorId,
+      mentorName: mentorName ?? this.mentorName,
       photoUrl: photoUrl ?? this.photoUrl,
     );
   }
@@ -61,9 +70,11 @@ class UserProvider extends ChangeNotifier {
   bool get isLoading => _loading;
   bool get isLoggedIn => _current != null;
   bool get isAdmin => _current?.isAdmin == true;
+  bool get isMentor => _current?.isMentor == true; // ✅
   String get nickname => _current?.nickname ?? '';
   DateTime get joinedAt => _current?.joinedAt ?? DateTime.now();
-  String? get mentor => current?.mentor;
+  String? get mentorId => _current?.mentorId;       // ✅
+  String? get mentorName => _current?.mentorName;   // ✅
   String? get photoUrl => _current?.photoUrl;
 
   /// 현재 세션이 관리자라면 adminKey, 아니라면 null
@@ -100,7 +111,7 @@ class UserProvider extends ChangeNotifier {
 
   // ===== 라이프사이클 =====
 
-  /// 앱 시작 시 호출: (멘티만) 캐시 → 서버 재검증 → 메모리 탑재
+  /// 앱 시작 시 호출: (멘티/멘토) 캐시 → 서버 재검증 → 메모리 탑재
   /// - 관리자는 캐시하지 않으므로 복원 대상 아님
   Future<void> hydrate() async {
     if (_loading) return;
@@ -118,7 +129,7 @@ class UserProvider extends ChangeNotifier {
         return;
       }
 
-      // 캐시에 저장된 건 멘티 키여야 정상
+      // 캐시에 저장된 건 멘티/멘토 키여야 정상 (관리자는 캐시 안 함)
       final row = await _api.loginWithKey(savedKey);
       if (row == null || _asBool(row['is_admin'])) {
         // 캐시가 깨졌거나 관리자인 경우 → 캐시 제거
@@ -131,13 +142,15 @@ class UserProvider extends ChangeNotifier {
         userId: _asString(row['id']),
         nickname: _asString(row['nickname']),
         isAdmin: false,
+        isMentor: _asBool(row['is_mentor']),        // ✅
         loginKey: savedKey,
         joinedAt: _parseDate(row['joined_at']) ?? DateTime.now(),
-        mentor: row['mentor'] as String?,
+        mentorId: row['mentor'] as String?,         // uuid
+        mentorName: row['mentor_name'] as String?,  // display
         photoUrl: row['photo_url'] as String?,
       );
 
-      // 멘티 세션이므로 adminKey는 null 유지
+      // 멘티/멘토 세션이므로 adminKey는 null 유지
       _api.adminKey = null;
     } finally {
       _loading = false;
@@ -145,9 +158,9 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  /// 접속코드로 로그인 (관리자/멘티 겸용)
+  /// 접속코드로 로그인 (관리자/멘티/멘토 겸용)
   /// - 관리자: _adminKey = code 를 메모리에만 유지, 캐시는 비움
-  /// - 멘티: 접속코드 캐시에 저장
+  /// - 멘티/멘토: 접속코드 캐시에 저장
   Future<bool> signInWithCode(String code) async {
     if (_loading) return false;
     _loading = true;
@@ -158,13 +171,17 @@ class UserProvider extends ChangeNotifier {
       if (row == null) return false;
 
       final isAdmin = _asBool(row['is_admin']);
+      final isMentor = _asBool(row['is_mentor']); // ✅
+
       _current = UserAccount(
         userId: _asString(row['id']),
         nickname: _asString(row['nickname']),
         isAdmin: isAdmin,
+        isMentor: isMentor,
         loginKey: isAdmin ? '' : code, // 관리자는 로컬에 저장하지 않음
         joinedAt: _parseDate(row['joined_at']) ?? DateTime.now(),
-        mentor: row['mentor'] as String?,
+        mentorId: row['mentor'] as String?,         // uuid
+        mentorName: row['mentor_name'] as String?,  // display
         photoUrl: row['photo_url'] as String?,
       );
 
@@ -174,10 +191,10 @@ class UserProvider extends ChangeNotifier {
         _api.adminKey = _adminKey;
         await _cache.clear();
       } else {
-        // 멘티 세션: 캐시에 저장, adminKey는 비움
+        // 멘티/멘토 세션: 캐시에 저장, adminKey는 비움
         _adminKey = null;
         _api.adminKey = null;
-        await _cache.saveMenteeSession(
+        await _cache.saveMenteeSession( // 기존 API를 멘토도 공용 사용
           loginKey: _current!.loginKey,
           userId: _current!.userId,
           nickname: _current!.nickname,
@@ -190,7 +207,7 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  /// 프로필 최신화 (멘티만; 관리자는 접속키를 영구 저장하지 않으므로 스킵)
+  /// 프로필 최신화 (멘티/멘토; 관리자는 접속키를 영구 저장하지 않으므로 스킵)
   Future<void> refreshProfile() async {
     if (_current == null) return;
     if (_current!.isAdmin) return;
@@ -205,6 +222,9 @@ class UserProvider extends ChangeNotifier {
       nickname: _asString(row['nickname'], _current!.nickname),
       photoUrl: row['photo_url'] as String? ?? _current!.photoUrl,
       joinedAt: _parseDate(row['joined_at']) ?? _current!.joinedAt,
+      mentorId: row['mentor'] as String? ?? _current!.mentorId,          // ✅
+      mentorName: row['mentor_name'] as String? ?? _current!.mentorName, // ✅
+      isMentor: _asBool(row['is_mentor']),                               // ✅
     );
     notifyListeners();
   }

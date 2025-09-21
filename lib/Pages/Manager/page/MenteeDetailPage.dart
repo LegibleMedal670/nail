@@ -1,5 +1,6 @@
 // lib/Pages/Manager/page/MenteeDetailPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -332,7 +333,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                                       color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w900)),
                               const SizedBox(height: 4),
                               Text(
-                                '멘토 : ${_mentee.mentor}',
+                                '멘토 : ${_mentee.mentorName ?? '미배정'}',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,

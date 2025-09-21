@@ -1,5 +1,6 @@
 // lib/Pages/Manager/page/tabs/MenteeManageTab.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -87,7 +88,10 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           SortOption(value: MenteeSort.latest, label: '최신 시작순', icon: Icons.history_toggle_off),
           SortOption(value: MenteeSort.name, label: '가나다순', icon: Icons.sort_by_alpha),
           SortOption(value: MenteeSort.progress, label: '진척도순', icon: Icons.trending_up),
-          SortOption(value: MenteeSort.lowScore, label: '낮은 점수순', icon: Icons.sentiment_dissatisfied_outlined),
+          SortOption(
+              value: MenteeSort.lowScore,
+              label: '낮은 점수순',
+              icon: Icons.sentiment_dissatisfied_outlined),
         ],
       ),
     );
@@ -96,7 +100,8 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
   // ===== 추가 버튼 처리 =====
   Future<void> _addMentee(List<Mentee> mentees) async {
-    final existing = mentees.map((m) => m.accessCode).where((s) => s.isNotEmpty).toSet();
+    final existing =
+    mentees.map((m) => m.accessCode).where((s) => s.isNotEmpty).toSet();
 
     final res = await Navigator.of(context).push<MenteeEditResult>(
       MaterialPageRoute(builder: (_) => MenteeEditPage(existingCodes: existing)),
@@ -126,12 +131,11 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
         // 화면 폭에 따라 칼럼 수 반응형
         final int crossAxisCount = width >= 900
             ? 4
-            : (width >= 600
-            ? 3
-            : 2);
+            : (width >= 600 ? 3 : 2);
 
         // 접근성 텍스트 배율을 반영해 타일 높이 보정
-        final textScale = MediaQuery.textScaleFactorOf(ctx).clamp(1.0, 1.6);
+        final textScale =
+        MediaQuery.textScaleFactorOf(ctx).clamp(1.0, 1.6);
         const baseTileHeight = 140.0; // 내용이 쾌적하게 들어가는 기준 높이
         final tileHeight = baseTileHeight * textScale;
 
@@ -214,8 +218,11 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
     // KPI
     final totalMentees = mentees.length;
+
+    // ✅ 미배정: mentorId == null 으로 판정 (표시 텍스트 의존 X)
     final unassignedCount =
-        mentees.where((m) => m.mentor.trim().isEmpty || m.mentor.trim() == '미배정').length;
+        mentees.where((m) => m.mentorId == null).length;
+
     final avgScore = () {
       final xs = mentees.map((m) => m.score).whereType<double>().toList();
       if (xs.isEmpty) return 0.0;
@@ -233,12 +240,16 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(error,
-              style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+              style: const TextStyle(
+                  color: UiTokens.title,
+                  fontWeight: FontWeight.w700)),
           const SizedBox(height: 10),
           FilledButton(
             onPressed: () => admin.refreshAll(),
-            style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
-            child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
+            style: FilledButton.styleFrom(
+                backgroundColor: UiTokens.primaryBlue),
+            child: const Text('다시 시도',
+                style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -283,10 +294,12 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                             fontSize: 14,
                             fontWeight: FontWeight.w700)),
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 6),
                       foregroundColor: UiTokens.actionIcon,
                       minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      tapTargetSize:
+                      MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
                 ],
@@ -298,7 +311,8 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
               itemCount: sorted.length,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              separatorBuilder: (_, __) =>
+              const SizedBox(height: 10),
               itemBuilder: (itemCtx, i) {
                 final m = sorted[i];
 
@@ -312,7 +326,8 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                     const <String, CurriculumProgress>{};
 
                 final watchRatio = <String, double>{
-                  for (final e in pm.entries) e.key: e.value.watchedRatio.clamp(0.0, 1.0),
+                  for (final e in pm.entries)
+                    e.key: e.value.watchedRatio.clamp(0.0, 1.0),
                 };
                 final examMap = <String, ExamRecord>{
                   for (final e in pm.entries)
@@ -323,14 +338,16 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                     ),
                 };
 
-                final progress = admin.progressOfUser(m.id); // ✅ 단일 공식
+                final progress =
+                admin.progressOfUser(m.id); // ✅ 단일 공식
 
                 return MenteeSummaryTile(
                   mentee: m,
                   curriculum: curriculum,
                   watchRatio: watchRatio,
                   examMap: examMap,
-                  overrideProgress: progress, // ✅ 게이지 강제 일치(타일에 필드 추가 필요)
+                  overrideProgress:
+                  progress, // ✅ 게이지 강제 일치(타일에 필드 추가 필요)
                   onDetail: () async {
                     final pageCtx = this.context;
                     final existing = mentees
@@ -340,7 +357,8 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                         .toSet();
 
                     // 현재 상세는 기존 시그니처 유지
-                    final res = await Navigator.of(pageCtx).push<MenteeEditResult?>(
+                    final res = await Navigator.of(pageCtx)
+                        .push<MenteeEditResult?>(
                       MaterialPageRoute(
                         builder: (_) => MenteeDetailPage(
                           mentee: m,
@@ -356,7 +374,8 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
                     if (res?.deleted == true) {
                       ScaffoldMessenger.of(pageCtx).showSnackBar(
-                        const SnackBar(content: Text('멘티가 삭제되었습니다')),
+                        const SnackBar(
+                            content: Text('멘티가 삭제되었습니다')),
                       );
                     }
                   },

@@ -1,15 +1,25 @@
-// lib/Pages/Manager/page/mentee_edit_page.dart
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
+import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
-class MenteeEditResult {
-  final Mentee? mentee;
-  final bool deleted; // (편집 모드일 때) 삭제 여부
-  const MenteeEditResult({this.mentee, this.deleted = false});
+/// 드롭다운 소스용 경량 멘토 모델
+class _MentorLite {
+  final String id;
+  final String name;
+  final String? photoUrl;
+  const _MentorLite({required this.id, required this.name, this.photoUrl});
+
+  factory _MentorLite.fromRow(Map<String, dynamic> r) {
+    return _MentorLite(
+      id: (r['id'] ?? '').toString(),
+      name: (r['nickname'] ?? '').toString(),
+      photoUrl: (r['photo_url'] as String?),
+    );
+  }
 }
 
 class MenteeEditPage extends StatefulWidget {
@@ -35,8 +45,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
   // --- Controllers ---
   late final TextEditingController _name =
   TextEditingController(text: widget.initial?.name ?? '');
-  late final TextEditingController _mentor =
-  TextEditingController(text: widget.initial?.mentor == '미배정' ? '' : (widget.initial?.mentor ?? ''));
+  // ✅ mentor 텍스트 입력 제거 → 드롭다운으로 전환
   late final TextEditingController _photoUrl =
   TextEditingController(text: widget.initial?.photoUrl ?? '');
   late final TextEditingController _accessCode =
@@ -44,10 +53,42 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
 
   late DateTime _startedAt = widget.initial?.startedAt ?? DateTime.now();
 
+  // --- Mentor dropdown state ---
+  final List<_MentorLite> _mentors = [];
+  final Map<String, String> _mentorNameById = {};
+  bool _loadingMentors = false;
+  String? _selectedMentorId; // null=미배정
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMentorId = widget.initial?.mentorId; // B안: uuid
+    _loadMentors();
+  }
+
+  Future<void> _loadMentors() async {
+    setState(() => _loadingMentors = true);
+    try {
+      final rows = await SupabaseService.instance.listMentors(); // ✅ P2 신규 API
+      _mentors
+        ..clear()
+        ..addAll(rows.map((e) => _MentorLite.fromRow(Map<String, dynamic>.from(e))));
+      _mentorNameById
+        ..clear()
+        ..addEntries(_mentors.map((m) => MapEntry(m.id, m.name)));
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('멘토 목록 불러오기 실패: $e')));
+    } finally {
+      if (mounted) setState(() => _loadingMentors = false);
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
-    _mentor.dispose();
     _photoUrl.dispose();
     _accessCode.dispose();
     super.dispose();
@@ -90,7 +131,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     );
   }
 
-  // --- 접속 코드 유틸(랜덤 생성 기능은 요구에 따라 제거 가능) ---
+  // --- 접속 코드 유틸(랜덤 생성 기능 유지) ---
   String _generate4DigitsUnique() {
     final rng = Random();
     final taken = {...widget.existingCodes};
@@ -111,7 +152,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     );
   }
 
-  // --- 삭제 (서버 연동 추가) ---
+  // --- 삭제 (서버 연동) ---
   Future<void> _delete() async {
     if (widget.initial == null) return;
 
@@ -144,9 +185,9 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final nickname = _name.text.trim();
-    final mentor = _mentor.text.trim().isEmpty ? null : _mentor.text.trim();
-    final photo  = _photoUrl.text.trim().isEmpty ? null : _photoUrl.text.trim();
-    final code   = _accessCode.text.trim().isEmpty ? null : _accessCode.text.trim();
+    final photo = _photoUrl.text.trim().isEmpty ? null : _photoUrl.text.trim();
+    final code = _accessCode.text.trim().isEmpty ? null : _accessCode.text.trim();
+    final mentorId = _selectedMentorId; // null이면 미배정
 
     try {
       Map<String, dynamic> row;
@@ -155,7 +196,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
         row = await SupabaseService.instance.createMentee(
           nickname: nickname,
           joinedAt: _startedAt,
-          mentor: mentor,
+          mentorId: mentorId,      // ✅ uuid 전달
           photoUrl: photo,
           loginKey: code,
         );
@@ -165,26 +206,18 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
           id: widget.initial!.id,
           nickname: nickname,
           joinedAt: _startedAt,
-          mentor: mentor,
+          mentorId: mentorId,      // ✅ uuid 전달(미배정은 null)
           photoUrl: photo,
           loginKey: code, // 비워두면 기존 유지
         );
       }
 
-      final entry = Mentee(
-        id: row['id'] as String,
-        name: row['nickname'] as String,
-        mentor: (row['mentor'] as String?) ?? '미배정',
-        startedAt: DateTime.parse(row['joined_at'] as String),
-        progress: widget.initial?.progress ?? 0,
-        courseDone: widget.initial?.courseDone ?? 0,
-        courseTotal: widget.initial?.courseTotal ?? 0,
-        examDone: widget.initial?.examDone ?? 0,
-        examTotal: widget.initial?.examTotal ?? 0,
-        score: widget.initial?.score,
-        photoUrl: row['photo_url'] as String?,
-        accessCode: (row['login_key'] as String?) ?? (code ?? ''),
-      );
+      // 반환 row에는 mentor_name이 없을 수도 있으니, 드롭다운에서 보던 이름으로 보정
+      final merged = Map<String, dynamic>.from(row);
+      merged['mentor_name'] ??= (mentorId == null ? null : _mentorNameById[mentorId]);
+      merged['login_key'] ??= code;
+
+      final entry = Mentee.fromRow(merged);
 
       if (!mounted) return;
       Navigator.of(context).pop(MenteeEditResult(mentee: entry));
@@ -202,6 +235,10 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     final isEdit = widget.initial != null;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
+    final mentorLabel = (_selectedMentorId == null)
+        ? '미배정'
+        : (_mentorNameById[_selectedMentorId!] ?? '로딩 중…');
+
     return GestureDetector(
       onTap: _unfocusAll,
       behavior: HitTestBehavior.translucent,
@@ -218,7 +255,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: UiTokens.actionIcon),
                 tooltip: '삭제',
-                onPressed: _delete, // ← 서버 삭제 연결
+                onPressed: _delete,
               ),
           ],
         ),
@@ -238,14 +275,53 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // 담당 멘토 (옵션)
-                  TextFormField(
-                    controller: _mentor,
-                    decoration: _dec('담당 멘토(없으면 비워두기)', Icons.school_outlined),
+                  // ✅ 담당 멘토 (드롭다운)
+                  InputDecorator(
+                    decoration: _dec('담당 멘토(없으면 미배정)', Icons.school_outlined),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String?>(
+                              isExpanded: true,
+                              value: _selectedMentorId,
+                              items: [
+                                const DropdownMenuItem<String?>(
+                                  value: null,
+                                  child: Text('미배정'),
+                                ),
+                                ..._mentors.map(
+                                      (m) => DropdownMenuItem<String?>(
+                                    value: m.id,
+                                    child: Text(m.name, overflow: TextOverflow.ellipsis),
+                                  ),
+                                ),
+                              ],
+                              onChanged: (v) => setState(() => _selectedMentorId = v),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          tooltip: '목록 새로고침',
+                          onPressed: _loadingMentors ? null : _loadMentors,
+                          icon: _loadingMentors
+                              ? const SizedBox(
+                              width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.refresh_rounded, color: UiTokens.actionIcon),
+                        ),
+                        if (_selectedMentorId != null)
+                          IconButton(
+                            tooltip: '미배정으로 변경',
+                            onPressed: () => setState(() => _selectedMentorId = null),
+                            icon: const Icon(Icons.clear_rounded, color: UiTokens.actionIcon),
+                          ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 16),
 
-                  // 시작일 (카드형 선택)
+                  // 시작일
                   InkWell(
                     onTap: _pickDate,
                     borderRadius: BorderRadius.circular(14),

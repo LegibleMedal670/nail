@@ -3,9 +3,10 @@ import 'package:flutter/foundation.dart';
 @immutable
 class Mentee {
   final String id;
-  final String name;       // nickname
-  final String mentor;
-  final DateTime startedAt; // joined_at
+  final String name;              // nickname
+  final String? mentorId;         // uuid from `mentor`
+  final String? mentorName;       // joined from mentor user (display)
+  final DateTime startedAt;       // joined_at
   final double progress;
   final int courseDone;
   final int courseTotal;
@@ -13,18 +14,19 @@ class Mentee {
   final int examTotal;
   final String? photoUrl;
   final double? score;
-  final String accessCode; // login_key
+  final String accessCode;        // login_key
 
   const Mentee({
     required this.id,
     required this.name,
-    required this.mentor,
     required this.startedAt,
     required this.progress,
     required this.courseDone,
     required this.courseTotal,
     required this.examDone,
     required this.examTotal,
+    this.mentorId,
+    this.mentorName,
     this.photoUrl,
     this.score,
     this.accessCode = '',
@@ -33,7 +35,8 @@ class Mentee {
   Mentee copyWith({
     String? id,
     String? name,
-    String? mentor,
+    String? mentorId,
+    String? mentorName,
     DateTime? startedAt,
     double? progress,
     int? courseDone,
@@ -47,7 +50,8 @@ class Mentee {
     return Mentee(
       id: id ?? this.id,
       name: name ?? this.name,
-      mentor: mentor ?? this.mentor,
+      mentorId: mentorId ?? this.mentorId,
+      mentorName: mentorName ?? this.mentorName,
       startedAt: startedAt ?? this.startedAt,
       progress: progress ?? this.progress,
       courseDone: courseDone ?? this.courseDone,
@@ -60,15 +64,16 @@ class Mentee {
     );
   }
 
-  /// Supabase row -> model
+  /// Supabase row -> model (B안: mentor(uuid) + mentor_name)
   static Mentee fromRow(Map<String, dynamic> row) {
     String _asS(dynamic v, {String or = ''}) => (v == null) ? or : v.toString();
+    String? _asSOrNull(dynamic v) => (v == null) ? null : v.toString();
 
     DateTime _asT(dynamic v) {
-      if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
+      if (v == null) return DateTime.fromMillisecondsSinceEpoch(0).toLocal();
       if (v is DateTime) return v.toLocal();
-      if (v is String) return DateTime.tryParse(v)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
-      return DateTime.fromMillisecondsSinceEpoch(0);
+      if (v is String) return DateTime.tryParse(v)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0).toLocal();
+      return DateTime.fromMillisecondsSinceEpoch(0).toLocal();
     }
 
     double? _asDOrNull(dynamic v) {
@@ -88,7 +93,8 @@ class Mentee {
     return Mentee(
       id: _asS(row['id']),
       name: _asS(row['nickname'], or: '이름없음'),
-      mentor: _asS(row['mentor'], or: '미배정'),
+      mentorId: _asSOrNull(row['mentor']),                 // uuid
+      mentorName: _asS(row['mentor_name'], or: '미배정'),   // display
       startedAt: _asT(row['joined_at']),
       progress: (_asDOrNull(row['progress']) ?? 0.0),
       courseDone: _asI(row['course_done']),
@@ -96,7 +102,7 @@ class Mentee {
       examDone: _asI(row['exam_done']),
       examTotal: _asI(row['exam_total']),
       score: _asDOrNull(row['avg_score']),
-      photoUrl: (row['photo_url'] == null) ? null : _asS(row['photo_url']),
+      photoUrl: _asSOrNull(row['photo_url']),
       accessCode: _asS(row['login_key']), // 숫자여도 문자열로 통일
     );
   }

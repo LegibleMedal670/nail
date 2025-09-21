@@ -1,9 +1,9 @@
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
+import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Services/AdminMenteeService.dart';
 import 'package:nail/Services/CourseProgressService.dart';
-import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 
 /// 관리자 전용: 멘티 목록 + 진행 메트릭 + (지연)모듈별 상세 진행.
 /// - 모든 화면(가장 빠른 신입 / 멘티 관리 / 멘티 상세)이 이 Provider만 보게 하여
@@ -52,9 +52,7 @@ class AdminProgressProvider extends ChangeNotifier {
   /// 가장 진도가 빠른 멘티(동률이면 첫 번째)
   Mentee? get topMentee {
     if (_mentees.isEmpty) return null;
-    final sorted = [..._mentees]..sort(
-          (a,b) => (b.progress).compareTo(a.progress),
-    );
+    final sorted = [..._mentees]..sort((a, b) => (b.progress).compareTo(a.progress));
     return sorted.first;
   }
 
@@ -81,12 +79,13 @@ class AdminProgressProvider extends ChangeNotifier {
     _set(loading: true, error: null);
 
     try {
-      // 관리자 메트릭: id, nickname, joined_at, mentor, photo_url, login_key, progress, ...
+      // 관리자 메트릭: id, nickname, joined_at, mentor(uuid), mentor_name, photo_url, login_key, progress, ...
       final baseRows = await AdminMenteeService.instance.listMenteesMetrics(
-        days: 30, lowScore: 60, maxAttempts: 5,
+        days: 30,
+        lowScore: 60,
+        maxAttempts: 5,
       );
 
-      // 파싱(이미 AdminMenteeService에서 안전 처리했다면 단순 매핑)
       final list = <Mentee>[];
       _loginKeyByUser.clear();
 
@@ -95,11 +94,14 @@ class AdminProgressProvider extends ChangeNotifier {
         final uid = (r['id'] ?? '').toString();
         if (uid.isEmpty) continue;
 
-        final mentee = Mentee.fromRow(r); // 너가 준 모델의 fromRow 사용
+        // 모델 변환 (B안: mentorId/mentorName 폼)
+        final mentee = Mentee.fromRow(r);
         list.add(mentee);
 
         final lk = (r['login_key'] ?? '').toString();
-        if (lk.isNotEmpty) _loginKeyByUser[uid] = lk;
+        if (lk.isNotEmpty) {
+          _loginKeyByUser[uid] = lk;
+        }
       }
 
       _mentees
@@ -122,6 +124,7 @@ class AdminProgressProvider extends ChangeNotifier {
     _inflightUsers.add(userId);
     try {
       final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
+
       // clamp 방어 + 저장
       final fixed = <String, CurriculumProgress>{};
       map.forEach((moduleId, pr) {
@@ -133,7 +136,6 @@ class AdminProgressProvider extends ChangeNotifier {
       _progressByUser[userId] = fixed;
       notifyListeners();
     } catch (e) {
-      // 조용히 실패 로그만
       if (kDebugMode) debugPrint('loadMenteeProgress($userId) failed: $e');
     } finally {
       _inflightUsers.remove(userId);
@@ -142,7 +144,6 @@ class AdminProgressProvider extends ChangeNotifier {
 
   /// 상세에서 진행 변화 발생 시(혹은 강제 최신화)
   Future<void> refreshMentee(String userId) async {
-    // 캐시 무효화 후 재로딩
     _progressByUser.remove(userId);
     await loadMenteeProgress(userId);
   }
