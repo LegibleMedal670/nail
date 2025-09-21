@@ -1,3 +1,4 @@
+// lib/Pages/Welcome/SelectRolePage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/CheckPasswordPage.dart';
 
@@ -12,11 +13,13 @@ class _SelectRolePageState extends State<SelectRolePage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  // ✅ 멘토 제거: 관리자/멘티만
+  // ✅ 역할 3종: 관리자 → 멘토 → 멘티 (순차 등장)
   late final Animation<Offset> _slideAdmin;
+  late final Animation<Offset> _slideMentor;
   late final Animation<Offset> _slideMentee;
 
   late final Animation<double> _fadeAdmin;
+  late final Animation<double> _fadeMentor;
   late final Animation<double> _fadeMentee;
 
   @override
@@ -25,20 +28,32 @@ class _SelectRolePageState extends State<SelectRolePage>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 900),
     );
 
-    // 스태거(순차): 관리자 -> 멘티
+    // 스태거 타이밍
     _slideAdmin = Tween<Offset>(
       begin: const Offset(0, 0.25),
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.00, 0.60, curve: Curves.easeOutCubic),
+      curve: const Interval(0.00, 0.45, curve: Curves.easeOutCubic),
     ));
     _fadeAdmin = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.00, 0.60, curve: Curves.easeOut),
+      curve: const Interval(0.00, 0.45, curve: Curves.easeOut),
+    ));
+
+    _slideMentor = Tween<Offset>(
+      begin: const Offset(0, 0.25),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.15, 0.75, curve: Curves.easeOutCubic),
+    ));
+    _fadeMentor = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0.15, 0.75, curve: Curves.easeOut),
     ));
 
     _slideMentee = Tween<Offset>(
@@ -64,12 +79,13 @@ class _SelectRolePageState extends State<SelectRolePage>
     super.dispose();
   }
 
-  // 위에 const 때문에 분리한 버전
+  // 한 타일 위젯
   Widget _roleTileBuilt({
     required IconData icon,
     required String label,
     required Animation<Offset> slide,
     required Animation<double> fade,
+    Color color = const Color.fromRGBO(47, 130, 246, 1),
   }) {
     return FadeTransition(
       opacity: fade,
@@ -80,20 +96,23 @@ class _SelectRolePageState extends State<SelectRolePage>
             switch (label) {
               case '관리자':
                 Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute(builder: (context) => const CheckPasswordPage(mode: EntryMode.manager,)),
-                );
-                break;
-              case '멘티':
-                Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(
-                    builder: (context) => const  CheckPasswordPage(mode: EntryMode.mentee,)
+                    builder: (_) => const CheckPasswordPage(mode: EntryMode.manager),
                   ),
                 );
                 break;
+              case '멘토':
+                Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CheckPasswordPage(mode: EntryMode.mentor),
+                  ),
+                );
+                break;
+              case '멘티':
               default:
                 Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(
-                    builder: (context) => const  CheckPasswordPage(mode: EntryMode.mentee,)
+                    builder: (_) => const CheckPasswordPage(mode: EntryMode.mentee),
                   ),
                 );
             }
@@ -103,7 +122,7 @@ class _SelectRolePageState extends State<SelectRolePage>
             height: 65,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: const Color.fromRGBO(47, 130, 246, 1),
+              color: color,
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
@@ -129,7 +148,7 @@ class _SelectRolePageState extends State<SelectRolePage>
 
   @override
   Widget build(BuildContext context) {
-    // 가운데 정렬은 유지, 타일 간격만 살짝 조정
+    // 가운데 정렬 UI
     return Scaffold(
       body: Center(
         child: Column(
@@ -151,8 +170,19 @@ class _SelectRolePageState extends State<SelectRolePage>
               label: '관리자',
               slide: _slideAdmin,
               fade: _fadeAdmin,
+              color: const Color(0xFF0EA5E9), // 하늘색
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 24),
+
+            // 멘토
+            _roleTileBuilt(
+              icon: Icons.support_agent_outlined,
+              label: '멘토',
+              slide: _slideMentor,
+              fade: _fadeMentor,
+              color: const Color(0xFF6366F1), // 보라톤로 구분
+            ),
+            const SizedBox(height: 24),
 
             // 멘티
             _roleTileBuilt(
@@ -160,6 +190,7 @@ class _SelectRolePageState extends State<SelectRolePage>
               label: '멘티',
               slide: _slideMentee,
               fade: _fadeMentee,
+              color: const Color.fromRGBO(47, 130, 246, 1), // 기존 블루
             ),
           ],
         ),

@@ -104,6 +104,40 @@ class SupabaseService {
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<List<Map<String, dynamic>>> adminListMentors() async {
+    final key = adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+    final res = await _sb.rpc('admin_list_mentors', params: {'p_admin_key': key});
+    if (res == null) return <Map<String, dynamic>>[];
+    final rows = (res is List) ? res : [res];
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList(growable: false);
+  }
+
+  /// 관리자: 멘토 생성
+  Future<Map<String, dynamic>> adminCreateMentor({
+    required String nickname,
+    required DateTime hiredAt,
+    String? photoUrl,
+    required String loginKey,
+  }) async {
+    final key = adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+    final res = await _sb.rpc('admin_create_mentor', params: {
+      'p_admin_key': key,
+      'p_nickname': nickname,
+      'p_joined': hiredAt.toIso8601String().substring(0, 10),
+      'p_photo_url': photoUrl,
+      'p_login_key': loginKey,
+    });
+    final rows = (res is List) ? res : [res];
+    if (rows.isEmpty) throw Exception('admin_create_mentor returned empty');
+    return Map<String, dynamic>.from(rows.first as Map);
+  }
+
 
   // ---------------- 커리큘럼 ----------------
   /// ✅ 뷰 curriculum_modules_v 사용 (has_exam 포함)

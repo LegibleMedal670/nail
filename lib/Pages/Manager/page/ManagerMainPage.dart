@@ -4,6 +4,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MenteeManageTab.dart';
+import 'package:nail/Pages/Manager/page/tabs/mentor_manage_tab.dart';
 
 class ManagerMainPage extends StatefulWidget {
   const ManagerMainPage({super.key});
@@ -17,6 +18,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
 
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: '대시보드'),
+    BottomNavigationBarItem(icon: Icon(Icons.support_agent_outlined), label: '멘토 관리'),
     BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: '멘티 관리'),
     BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in_outlined), label: '교육 관리'),
   ];
@@ -25,6 +27,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       const MostProgressedMenteeTab(),
+      const MentorManageTab(),
       const MenteeManageTab(),
       const CurriculumManageTab(),
     ];

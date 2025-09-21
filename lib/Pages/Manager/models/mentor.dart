@@ -1,69 +1,81 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
-/// 멘토 모델 (단순화 버전)
+@immutable
 class Mentor {
-  final String name;
-  final DateTime hiredAt;      // 입사일
-  final int menteeCount;       // 현재 멘티 수
-  final int avgGraduateDays;   // 평균 멘티 졸업 소요 일수
-  final String? photoUrl;      // 프로필 사진 (null 이면 아이콘 대체)
-  final double? avgScore;      // 지금까지 담당 멘티 평균 점수 (선택)
+  final String id;              // app_users.id (uuid)
+  final String name;            // nickname
+  final DateTime hiredAt;       // joined_at (멘토 입사일/등록일로 사용)
+  final int menteeCount;        // 담당 멘티 수
+  final double? avgScore;       // 담당 멘티 평균 점수(없으면 null)
+  final int? avgGraduateDays;   // 평균 교육 기간(일) (없으면 null)
+  final String? photoUrl;       // 프로필
+  final String accessCode;      // login_key (4자리)
 
   const Mentor({
+    required this.id,
     required this.name,
     required this.hiredAt,
     required this.menteeCount,
-    required this.avgGraduateDays,
-    this.photoUrl,
     this.avgScore,
+    this.avgGraduateDays,
+    this.photoUrl,
+    this.accessCode = '',
   });
 
-  /// UI 표시용: 'YYYY-MM-DD'
-  String get hiredAtText {
-    final y = hiredAt.year.toString().padLeft(4, '0');
-    final m = hiredAt.month.toString().padLeft(2, '0');
-    final d = hiredAt.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
+  Mentor copyWith({
+    String? id,
+    String? name,
+    DateTime? hiredAt,
+    int? menteeCount,
+    double? avgScore,
+    int? avgGraduateDays,
+    String? photoUrl,
+    String? accessCode,
+  }) {
+    return Mentor(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      hiredAt: hiredAt ?? this.hiredAt,
+      menteeCount: menteeCount ?? this.menteeCount,
+      avgScore: avgScore ?? this.avgScore,
+      avgGraduateDays: avgGraduateDays ?? this.avgGraduateDays,
+      photoUrl: photoUrl ?? this.photoUrl,
+      accessCode: accessCode ?? this.accessCode,
+    );
   }
 
-  /// UI 표시용: 평균 졸업 시간(2주 이상이면 '약 n주', 그 미만은 'n일')
-  String get avgGraduateText {
-    if (avgGraduateDays >= 14) {
-      final w = (avgGraduateDays / 7).round();
-      return '약 ${w}주';
+  static Mentor fromRow(Map<String, dynamic> row) {
+    DateTime _asT(dynamic v) {
+      if (v == null) return DateTime.fromMillisecondsSinceEpoch(0);
+      if (v is DateTime) return v.toLocal();
+      if (v is String) return DateTime.tryParse(v)?.toLocal() ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return DateTime.fromMillisecondsSinceEpoch(0);
     }
-    return '${avgGraduateDays}일';
+    int _asI(dynamic v, {int or = 0}) {
+      if (v == null) return or;
+      if (v is num) return v.toInt();
+      if (v is String) return int.tryParse(v) ?? or;
+      return or;
+    }
+    double? _asD(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toDouble();
+      if (v is String) return double.tryParse(v);
+      return null;
+    }
+    String _asS(dynamic v, {String or = ''}) => (v == null) ? or : v.toString();
+
+    return Mentor(
+      id: _asS(row['id']),
+      name: _asS(row['nickname'], or: '이름없음'),
+      hiredAt: _asT(row['joined_at']),
+      menteeCount: _asI(row['mentee_count']),
+      avgScore: _asD(row['avg_score']),
+      avgGraduateDays: (row['avg_graduate_days'] == null)
+          ? null
+          : _asI(row['avg_graduate_days']),
+      photoUrl: (row['photo_url'] == null) ? null : _asS(row['photo_url']),
+      accessCode: _asS(row['login_key'], or: ''),
+    );
   }
 }
-
-/// 데모 데이터
-List<Mentor> kDemoMentors = [
-  Mentor(
-    name: '박태현',
-    hiredAt: DateTime(2023, 3, 12),
-    menteeCount: 9,
-    avgGraduateDays: 12,
-    avgScore: 88.3,
-  ),
-  Mentor(
-    name: '김하늘',
-    hiredAt: DateTime(2024, 1, 8),
-    menteeCount: 6,
-    avgGraduateDays: 17,
-    avgScore: 91.0,
-  ),
-  Mentor(
-    name: '이도윤',
-    hiredAt: DateTime(2022, 11, 2),
-    menteeCount: 12,
-    avgGraduateDays: 14,
-    avgScore: 85.5,
-  ),
-  Mentor(
-    name: '정가은',
-    hiredAt: DateTime(2024, 6, 20),
-    menteeCount: 4,
-    avgGraduateDays: 24,
-    avgScore: 89.7,
-  ),
-];

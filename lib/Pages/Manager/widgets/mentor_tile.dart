@@ -67,7 +67,7 @@ class MentorTile extends StatelessWidget {
                     // 1행: 입사일 / 멘티 수
                     Row(
                       children: [
-                        _kv('입사일', mentor.hiredAtText),
+                        _kv('입사일', _fmtDate(mentor.hiredAt)),
                         const SizedBox(width: 12),
                         _kv('멘티', '${mentor.menteeCount}명'),
                       ],
@@ -80,7 +80,7 @@ class MentorTile extends StatelessWidget {
                       runSpacing: 6,
                       children: [
                         _chip(
-                          label: '평균 교육 기간 ${mentor.avgGraduateText}',
+                          label: '평균 교육 기간 ${mentor.avgGraduateDays}',
                           bg: const Color(0xFFE9F2FF),
                           fg: UiTokens.primaryBlue,
                         ),
@@ -155,3 +155,6 @@ class MentorTile extends StatelessWidget {
     );
   }
 }
+
+String _fmtDate(DateTime d) =>
+    '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
