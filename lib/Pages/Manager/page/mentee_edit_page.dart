@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -343,7 +344,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                           onPressed: _loadingMentors ? null : _loadMentors,
                           icon: _loadingMentors
                               ? const SizedBox(
-                              width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                              width: 18, height: 18, child: CupertinoActivityIndicator())
                               : const Icon(Icons.refresh_rounded, color: UiTokens.actionIcon),
                         ),
                         if (_selectedMentorId != null)
