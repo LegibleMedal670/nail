@@ -4,10 +4,10 @@ import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/mentor.dart';
-import 'package:nail/Pages/Manager/page/mentor_edit_page.dart';
+import 'package:nail/Pages/Manager/page/MentorEditPage.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
-import 'package:nail/Pages/Manager/widgets/mentor_tile.dart';
-import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+import 'package:nail/Pages/Manager/widgets/MentorTile.dart';
+import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 // ✅ 추가: 관리자 세션 키를 읽기 위함

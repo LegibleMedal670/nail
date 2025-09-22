@@ -6,10 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/page/MenteeDetailPage.dart';
-import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
+import 'package:nail/Pages/Manager/page/MenteeEditPage.dart';
 import 'package:nail/Pages/Manager/widgets/MenteeSummaryTile.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
-import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
 
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Providers/AdminProgressProvider.dart';

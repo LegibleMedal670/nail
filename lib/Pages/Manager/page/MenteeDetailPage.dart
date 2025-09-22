@@ -6,13 +6,13 @@ import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
-import 'package:nail/Pages/Manager/page/mentee_edit_page.dart';
+import 'package:nail/Pages/Manager/page/MenteeEditPage.dart';
 
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
-import 'package:nail/Pages/Manager/widgets/sort_bottom_sheet.dart';
+import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
 
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/CourseProgressService.dart';
