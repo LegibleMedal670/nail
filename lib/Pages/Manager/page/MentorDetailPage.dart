@@ -45,11 +45,29 @@ class MentorDetailPage extends StatelessWidget {
                 IconButton(
                   tooltip: '수정',
                   icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
+                  // AppBar actions 내 '수정' 버튼
                   onPressed: () async {
-                    await Navigator.of(context).push(
+                    final res = await Navigator.of(context).push<MentorEditResult>(
                       MaterialPageRoute(builder: (_) => MentorEditPage(initial: mentor)),
                     );
-                    if (context.mounted) p.refresh();
+
+                    if (!context.mounted) return;
+
+                    // ✅ 삭제되었으면 현재 상세 페이지도 즉시 닫고, 상위로 'true' 전달
+                    if (res?.deleted == true) {
+                      Navigator.of(context).pop(true); // 상위 탭에서 리프레시 트리거로 사용
+                      return;
+                    }
+
+                    // 수정만 했다면 KPI/목록만 새로고침
+                    if (res?.mentor != null) {
+                      // (헤더의 이름/사진은 mentor 파라미터를 쓰고 있어서 바로 반영되진 않지만,
+                      //  당장은 KPI/담당 멘티 수만 갱신하면 충분)
+                      await p.refresh();
+                    } else {
+                      // 변경이 없더라도 안전하게 갱신 가능
+                      await p.refresh();
+                    }
                   },
                 ),
               ],

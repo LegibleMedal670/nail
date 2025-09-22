@@ -176,7 +176,6 @@ class _MentorManageTabState extends State<MentorManageTab> {
     }
   }
 
-  // ✅ 신규: 상세로 진입 (A안) — 페이지 범위로 Provider 주입
   Future<void> _openDetail(Mentor m) async {
     final adminKey = context.read<UserProvider>().adminKey;
     if (adminKey == null || adminKey.isEmpty) {
@@ -186,20 +185,27 @@ class _MentorManageTabState extends State<MentorManageTab> {
       return;
     }
 
-    Navigator.of(context).push(
+    // ✅ 상세로 진입했다가 돌아올 때, 삭제 여부를 bool로 받음
+    final deleted = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder:
-            (_) => ChangeNotifierProvider(
-              create:
-                  (_) => MentorDetailProvider(
-                    mentorId: m.id,
-                    // adminKey: adminKey,
-                  )..ensureLoaded(), // KPI/멘티목록/통계 등 초기 로드 묶음
-              child: MentorDetailPage(mentor: m),
-            ),
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => MentorDetailProvider(mentorId: m.id)..ensureLoaded(),
+          child: MentorDetailPage(mentor: m),
+        ),
       ),
     );
+
+    // ✅ 삭제되었으면 목록을 서버에서 재조회
+    if (deleted == true) {
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('멘토가 삭제되었습니다')),
+        );
+      }
+    }
   }
+
 
   // (기존) 편집 페이지 — 필요 시 유지
   Future<void> _openEdit(Mentor m) async {
