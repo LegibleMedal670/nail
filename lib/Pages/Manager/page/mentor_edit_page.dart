@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/mentor.dart';
+import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 class MentorEditResult {
@@ -84,27 +85,31 @@ class _MentorEditPageState extends State<MentorEditPage> {
 
   Future<void> _delete() async {
     if (widget.initial == null) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('멘토 삭제'),
-        content: Text('정말 “${widget.initial!.name}” 멘토를 삭제할까요?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
-        ],
-      ),
+
+    final ok = await showDiscardChangesDialog(
+      context,
+      title: '멘토 삭제',
+      message: '정말 “${widget.initial!.name}” 멘토를 삭제하시겠어요?\n되돌릴 수 없어요.',
+      stayText: '취소',
+      leaveText: '삭제',
+      isDanger: true,                 // 🔴 위험 작업 스타일
+      barrierDismissible: true,
     );
-    if (ok != true) return;
+
+    if (!ok) return;
+
     try {
       await SupabaseService.instance.deleteUser(id: widget.initial!.id);
       if (!mounted) return;
       Navigator.of(context).pop(const MentorEditResult(deleted: true));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제 실패: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('삭제 실패: $e')),
+      );
     }
   }
+
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;

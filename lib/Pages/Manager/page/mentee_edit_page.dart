@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/Mentee.dart';
 import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
+import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 /// 드롭다운 소스용 경량 멘토 모델
@@ -166,18 +167,17 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
   Future<void> _delete() async {
     if (widget.initial == null) return;
 
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('멘티 삭제'),
-        content: Text('정말 “${widget.initial!.name}” 멘티를 삭제하시겠어요? 되돌릴 수 없어요.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('삭제')),
-        ],
-      ),
+    final ok = await showDiscardChangesDialog(
+      context,
+      title: '멘티 삭제',
+      message: '정말 “${widget.initial!.name}” 멘티를 삭제하시겠어요?\n되돌릴 수 없어요.',
+      stayText: '취소',
+      leaveText: '삭제',
+      isDanger: true,                 // 🔴 위험 작업 스타일
+      barrierDismissible: true,       // (원하면 false로 변경해도 됨)
     );
-    if (ok != true) return;
+
+    if (!ok) return;
 
     try {
       await SupabaseService.instance.deleteUser(id: widget.initial!.id);
@@ -190,6 +190,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
       );
     }
   }
+
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;

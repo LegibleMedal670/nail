@@ -1,4 +1,5 @@
 // lib/Pages/Manager/page/MenteeDetailPage.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
 import 'package:provider/provider.dart';
@@ -275,7 +276,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
           if (_loadingProg)
             const Padding(
               padding: EdgeInsets.only(right: 6),
-              child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+              child: SizedBox(width: 18, height: 18, child: CupertinoActivityIndicator()),
             ),
           if (_errorProg)
             IconButton(

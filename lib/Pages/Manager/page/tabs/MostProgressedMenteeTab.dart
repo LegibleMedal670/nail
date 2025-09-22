@@ -1,4 +1,5 @@
 // lib/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -267,7 +268,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                     icon: _refreshing
                         ? const SizedBox(
                       width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CupertinoActivityIndicator(),
                     )
                         : const Icon(Icons.refresh_rounded, color: UiTokens.actionIcon),
                   ),
