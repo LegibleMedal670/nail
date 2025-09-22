@@ -35,7 +35,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()..hydrate()),
         ChangeNotifierProvider(create: (_) => CurriculumProvider()..ensureLoaded()),
-        ChangeNotifierProvider(create: (_) => AdminProgressProvider()..ensureLoaded()),
+        ChangeNotifierProvider(create: (_) => AdminProgressProvider()),
       ],
       child: const MyApp(),
     ),

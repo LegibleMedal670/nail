@@ -127,7 +127,7 @@ class _MentorEditPageState extends State<MentorEditPage> {
           id: widget.initial!.id,
           nickname: nickname,
           joinedAt: _hiredAt,
-          mentorId: null,           // 멘토 자신 편집이라 mentor(uuid) 사용 안 함
+          // mentorId: null,           // 멘토 자신 편집이라 mentor(uuid) 사용 안 함
           photoUrl: photoUrl,
           loginKey: loginKey.isEmpty ? null : loginKey,
         );

@@ -62,25 +62,35 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
   @override
   void initState() {
     super.initState();
-    _selectedMentorId = widget.initial?.mentorId; // B안: uuid
+    _selectedMentorId = (widget.initial?.mentorId?.isNotEmpty == true)
+        ? widget.initial!.mentorId
+        : null;
     _loadMentors();
   }
+
 
   Future<void> _loadMentors() async {
     setState(() => _loadingMentors = true);
     try {
-      final rows = await SupabaseService.instance.listMentors(); // ✅ P2 신규 API
+      final rows = await SupabaseService.instance.adminListMentors();
       _mentors
         ..clear()
         ..addAll(rows.map((e) => _MentorLite.fromRow(Map<String, dynamic>.from(e))));
       _mentorNameById
         ..clear()
         ..addEntries(_mentors.map((m) => MapEntry(m.id, m.name)));
+
+      // ✅ 현재 선택이 목록에 없다면 미배정(null)로
+      if (_selectedMentorId != null && !_mentors.any((m) => m.id == _selectedMentorId)) {
+        _selectedMentorId = null;
+      }
+
       setState(() {});
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('멘토 목록 불러오기 실패: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('멘토 목록 불러오기 실패: $e')),
+      );
     } finally {
       if (mounted) setState(() => _loadingMentors = false);
     }
@@ -200,16 +210,43 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
           photoUrl: photo,
           loginKey: code,
         );
+        final newId = row['id'] as String;
+
+// 멘토 선택되어 있으면 배정까지 마무리
+        if (mentorId != null) {
+          await SupabaseService.instance.adminAssignMenteesToMentor(
+            mentorId: mentorId,
+            menteeIds: [newId],
+          );
+        }
       } else {
         // 편집
         row = await SupabaseService.instance.updateUserMin(
           id: widget.initial!.id,
           nickname: nickname,
           joinedAt: _startedAt,
-          mentorId: mentorId,      // ✅ uuid 전달(미배정은 null)
+          // mentorId: mentorId,      // ✅ uuid 전달(미배정은 null)
           photoUrl: photo,
           loginKey: code, // 비워두면 기존 유지
         );
+        // ---- 여기부터 추가: 멘토 변경 시 관리자 RPC로 배정/해제 수행 ----
+        final prevMentorId = widget.initial!.mentorId;   // 예전 배정
+        final nextMentorId = mentorId;                   // 드롭다운 선택값(null=미배정)
+
+        if (prevMentorId != nextMentorId) {
+          if (nextMentorId == null && prevMentorId != null) {
+            // 미배정으로 변경 → 해제
+            await SupabaseService.instance.adminUnassignMentees(
+              menteeIds: [widget.initial!.id],
+            );
+          } else if (nextMentorId != null) {
+            // 새 멘토로 배정/변경
+            await SupabaseService.instance.adminAssignMenteesToMentor(
+              mentorId: nextMentorId,
+              menteeIds: [widget.initial!.id],
+            );
+          }
+        }
       }
 
       // 반환 row에는 mentor_name이 없을 수도 있으니, 드롭다운에서 보던 이름으로 보정
@@ -235,9 +272,12 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     final isEdit = widget.initial != null;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
-    final mentorLabel = (_selectedMentorId == null)
-        ? '미배정'
-        : (_mentorNameById[_selectedMentorId!] ?? '로딩 중…');
+
+    // build() 내부, DropdownButton 만들기 직전
+    final String? dropdownValue =
+    (_selectedMentorId != null && _mentors.any((m) => m.id == _selectedMentorId))
+        ? _selectedMentorId
+        : null;
 
     return GestureDetector(
       onTap: _unfocusAll,
@@ -284,18 +324,13 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String?>(
                               isExpanded: true,
-                              value: _selectedMentorId,
+                              value: dropdownValue,
                               items: [
-                                const DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text('미배정'),
-                                ),
-                                ..._mentors.map(
-                                      (m) => DropdownMenuItem<String?>(
-                                    value: m.id,
-                                    child: Text(m.name, overflow: TextOverflow.ellipsis),
-                                  ),
-                                ),
+                                const DropdownMenuItem<String?>(value: null, child: Text('미배정')),
+                                ..._mentors.map((m) => DropdownMenuItem<String?>(
+                                  value: m.id,
+                                  child: Text(m.name, overflow: TextOverflow.ellipsis),
+                                )),
                               ],
                               onChanged: (v) => setState(() => _selectedMentorId = v),
                             ),

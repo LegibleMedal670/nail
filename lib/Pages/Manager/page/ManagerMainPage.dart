@@ -4,7 +4,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MenteeManageTab.dart';
-import 'package:nail/Pages/Manager/page/tabs/mentor_manage_tab.dart';
+import 'package:nail/Pages/Manager/page/tabs/MentorManageTab.dart';
 
 class ManagerMainPage extends StatefulWidget {
   const ManagerMainPage({super.key});

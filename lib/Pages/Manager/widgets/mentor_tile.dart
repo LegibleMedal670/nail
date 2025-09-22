@@ -80,16 +80,16 @@ class MentorTile extends StatelessWidget {
                       runSpacing: 6,
                       children: [
                         _chip(
-                          label: '평균 교육 기간 ${mentor.avgGraduateDays}',
+                          label: '평균 교육 기간 ${mentor.avgGraduateDays ?? '-'}',
                           bg: const Color(0xFFE9F2FF),
                           fg: UiTokens.primaryBlue,
                         ),
-                        if (mentor.avgScore != null)
-                          _chip(
-                            label: '멘티 평균 ${mentor.avgScore!.toStringAsFixed(0)}점',
-                            bg: const Color(0xFFE9F2FF),
-                            fg: UiTokens.primaryBlue,
-                          ),
+                        // if (mentor.avgScore != null)
+                        //   _chip(
+                        //     label: '멘티 평균 ${mentor.avgScore!.toStringAsFixed(0)}점',
+                        //     bg: const Color(0xFFE9F2FF),
+                        //     fg: UiTokens.primaryBlue,
+                        //   ),
                       ],
                     ),
                   ],

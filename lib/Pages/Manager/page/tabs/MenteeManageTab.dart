@@ -16,7 +16,7 @@ import 'package:nail/Providers/AdminProgressProvider.dart';
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 
 /// 정렬 옵션
-enum MenteeSort { latest, name, progress, lowScore }
+enum MenteeSort { latest, name, progress }
 
 /// ===== 멘티 관리 탭 =====
 class MenteeManageTab extends StatefulWidget {
@@ -45,7 +45,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     MenteeSort.latest => '최신 시작순',
     MenteeSort.name => '가나다순',
     MenteeSort.progress => '진척도순',
-    MenteeSort.lowScore => '낮은 점수순',
   };
 
   List<Mentee> _sorted({
@@ -67,9 +66,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           admin.progressOfUser(a.id),
         ));
         break;
-      case MenteeSort.lowScore:
-        list.sort((a, b) => cmpNum((a.score ?? 101), (b.score ?? 101)));
-        break;
     }
     return list;
   }
@@ -88,10 +84,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           SortOption(value: MenteeSort.latest, label: '최신 시작순', icon: Icons.history_toggle_off),
           SortOption(value: MenteeSort.name, label: '가나다순', icon: Icons.sort_by_alpha),
           SortOption(value: MenteeSort.progress, label: '진척도순', icon: Icons.trending_up),
-          SortOption(
-              value: MenteeSort.lowScore,
-              label: '낮은 점수순',
-              icon: Icons.sentiment_dissatisfied_outlined),
         ],
       ),
     );
@@ -183,18 +175,18 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                 ],
               ),
             ),
-            MetricCard.simple(
-              icon: Icons.grade_outlined,
-              title: '멘티 평균 점수',
-              value: avgScore.toStringAsFixed(0),
-              unit: '점',
-            ),
-            const MetricCard.simple(
-              icon: Icons.hourglass_bottom_outlined,
-              title: '최종 평가를 기다리는 멘티',
-              value: '18',
-              unit: '명',
-            ),
+            // MetricCard.simple(
+            //   icon: Icons.grade_outlined,
+            //   title: '멘티 평균 점수',
+            //   value: avgScore.toStringAsFixed(0),
+            //   unit: '점',
+            // ),
+            // const MetricCard.simple(
+            //   icon: Icons.hourglass_bottom_outlined,
+            //   title: '최종 평가를 기다리는 멘티',
+            //   value: '18',
+            //   unit: '명',
+            // ),
             MetricCard.simple(
               icon: Icons.priority_high_rounded,
               title: '주요 인물',

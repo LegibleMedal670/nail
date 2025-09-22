@@ -65,7 +65,7 @@ class SupabaseService {
     required String id,
     String? nickname,
     DateTime? joinedAt,
-    String? mentorId,   // ✅ uuid
+    // String? mentorId,   // ✅ uuid
     String? photoUrl,
     String? loginKey,
   }) async {
@@ -73,7 +73,7 @@ class SupabaseService {
       'p_id': id,
       'p_nickname': nickname,
       'p_joined': joinedAt == null ? null : joinedAt.toIso8601String().substring(0, 10),
-      'p_mentor': mentorId,            // ✅ uuid 그대로 전달
+      // 'p_mentor': mentorId,            // ✅ uuid 그대로 전달
       'p_photo_url': photoUrl,
       'p_login_key': loginKey,
     });
@@ -418,4 +418,137 @@ class SupabaseService {
       thumbUrl: (thumbUrl?.isEmpty == true) ? null : thumbUrl,
     );
   }
+
+  // ===================== Mentors (Admin) =====================
+
+  Future<Map<String, dynamic>?> _rpcSingle(String fn, Map<String, dynamic> params) async {
+    final res = await _sb.rpc(fn, params: params).select();
+    if (res == null) return null;
+    final rows = (res is List) ? res : [res];
+    if (rows.isEmpty) return null;
+    return Map<String, dynamic>.from(rows.first as Map);
+  }
+
+  Future<List<Map<String, dynamic>>> _rpcList(String fn, Map<String, dynamic> params) async {
+    final res = await _sb.rpc(fn, params: params).select();
+    if (res == null) return const <Map<String, dynamic>>[];
+    final rows = (res is List) ? res : [res];
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>?> adminMentorOverview({
+    required String mentorId,
+    int avgDays = 90,
+    int recentDays = 7,
+    String? adminKey,
+  }) async {
+
+    print(mentorId);
+
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) throw Exception('adminKey is missing');
+    return _rpcSingle('admin_mentor_overview', {
+      'p_admin_key': key,
+      'p_avg_days': avgDays,
+      'p_mentor_id': mentorId,
+      'p_recent_days': recentDays,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> adminListMenteesOfMentor({
+    required String mentorId,
+    bool onlyPending = false,
+    int limit = 200,
+    int offset = 0,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) throw Exception('adminKey is missing');
+    return _rpcList('admin_list_mentees_of_mentor', {
+      'p_admin_key': key,
+      'p_mentor_id': mentorId,
+      'p_only_pending': onlyPending,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+  }
+
+  Future<int> adminAssignMenteesToMentor({
+    required String mentorId,
+    required List<String> menteeIds,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) throw Exception('adminKey is missing');
+    final rows = await _rpcList('admin_assign_mentees_to_mentor', {
+      'p_admin_key': key,
+      'p_mentor_id': mentorId,
+      'p_mentee_ids': menteeIds,
+    });
+    if (rows.isEmpty) return 0;
+    return (rows.first['updated_count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<int> adminUnassignMentees({
+    required List<String> menteeIds,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) throw Exception('adminKey is missing');
+    final rows = await _rpcList('admin_unassign_mentees', {
+      'p_admin_key': key,
+      'p_mentee_ids': menteeIds,
+    });
+    if (rows.isEmpty) return 0;
+    return (rows.first['updated_count'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<Map<String, dynamic>?> adminReassignMentee({
+    required String menteeId,
+    required String newMentorId,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) throw Exception('adminKey is missing');
+    return _rpcSingle('admin_reassign_mentee', {
+      'p_admin_key': key,
+      'p_mentee_id': menteeId,
+      'p_new_mentor_id': newMentorId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> adminListMenteePracticeAttempts({
+    required String menteeId,
+    int limit = 50,
+    int offset = 0,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) throw Exception('adminKey is missing');
+    return _rpcList('admin_list_mentee_practice_attempts', {
+      'p_admin_key': key,
+      'p_mentee_id': menteeId,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> adminListUnassignedMentees({
+    String? search,
+    int limit = 200,
+    int offset = 0,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+    return _rpcList('admin_list_unassigned_mentees', {
+      'p_admin_key': key,
+      'p_search': (search == null || search.trim().isEmpty) ? null : search.trim(),
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+  }
+
 }
