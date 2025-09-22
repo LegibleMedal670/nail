@@ -443,8 +443,6 @@ class SupabaseService {
     String? adminKey,
   }) async {
 
-    print(mentorId);
-
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
     return _rpcSingle('admin_mentor_overview', {

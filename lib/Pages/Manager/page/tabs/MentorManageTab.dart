@@ -185,8 +185,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
       return;
     }
 
-    // ✅ 상세로 진입했다가 돌아올 때, 삭제 여부를 bool로 받음
-    final deleted = await Navigator.of(context).push<bool>(
+    final ret = await Navigator.of(context).push<dynamic>(
       MaterialPageRoute(
         builder: (_) => ChangeNotifierProvider(
           create: (_) => MentorDetailProvider(mentorId: m.id)..ensureLoaded(),
@@ -195,16 +194,29 @@ class _MentorManageTabState extends State<MentorManageTab> {
       ),
     );
 
-    // ✅ 삭제되었으면 목록을 서버에서 재조회
-    if (deleted == true) {
+    // 삭제: bool true
+    if (ret == true) {
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('멘토가 삭제되었습니다')),
         );
       }
+      return;
     }
+
+    // 수정: Mentor 객체
+    if (ret is Mentor) {
+      final idx = _mentors.indexWhere((x) => x.id == ret.id);
+      if (idx != -1) {
+        setState(() => _mentors[idx] = ret); // ✅ 즉시 반영 (네트워크 호출 없음)
+      }
+      return;
+    }
+
+    // ret == null → 변화 없음
   }
+
 
 
   // (기존) 편집 페이지 — 필요 시 유지

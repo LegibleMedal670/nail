@@ -9,181 +9,205 @@ import 'package:nail/Pages/Manager/page/MentorEditPage.dart';
 import 'package:nail/Pages/Manager/page/MenteePracticeListPage.dart';
 import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
 
-
-class MentorDetailPage extends StatelessWidget {
+class MentorDetailPage extends StatefulWidget {
   final legacy.Mentor mentor; // 목록에서 받아옴
   const MentorDetailPage({super.key, required this.mentor});
 
-  String _fmtDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+  @override
+  State<MentorDetailPage> createState() => _MentorDetailPageState();
+}
 
+class _MentorDetailPageState extends State<MentorDetailPage> {
+  late legacy.Mentor _mentor = widget.mentor; // ← 편집 반영용 로컬 스냅샷
+  bool _edited = false; // ← 추가
+
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => MentorDetailProvider(mentorId: mentor.id)..ensureLoaded(),
+      create: (_) => MentorDetailProvider(mentorId: _mentor.id)..ensureLoaded(),
       child: Consumer<MentorDetailProvider>(
         builder: (context, p, _) {
           final loading = p.loading;
           final err = p.error;
 
-          return Scaffold(
-            backgroundColor: Colors.white,
-            appBar: AppBar(
-              title: const Text('멘토 상세', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
-              leading: IconButton(
-                icon: Icon(Icons.arrow_back, color: UiTokens.title,
-                ),
-                tooltip: '뒤로가기',
-                onPressed: () async {
-                  Navigator.pop(context);
-                },
-              ),
+          return WillPopScope(
+            onWillPop: () async {
+              Navigator.of(context).pop(_edited ? _mentor : null);
+              return false; // 우리가 pop 처리했으니 기본 pop 막기
+            },
+            child: Scaffold(
               backgroundColor: Colors.white,
-              elevation: 0,
-              actions: [
-                IconButton(
-                  tooltip: '수정',
-                  icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
-                  // AppBar actions 내 '수정' 버튼
-                  onPressed: () async {
-                    final res = await Navigator.of(context).push<MentorEditResult>(
-                      MaterialPageRoute(builder: (_) => MentorEditPage(initial: mentor)),
-                    );
-
-                    if (!context.mounted) return;
-
-                    // ✅ 삭제되었으면 현재 상세 페이지도 즉시 닫고, 상위로 'true' 전달
-                    if (res?.deleted == true) {
-                      Navigator.of(context).pop(true); // 상위 탭에서 리프레시 트리거로 사용
-                      return;
-                    }
-
-                    // 수정만 했다면 KPI/목록만 새로고침
-                    if (res?.mentor != null) {
-                      // (헤더의 이름/사진은 mentor 파라미터를 쓰고 있어서 바로 반영되진 않지만,
-                      //  당장은 KPI/담당 멘티 수만 갱신하면 충분)
-                      await p.refresh();
-                    } else {
-                      // 변경이 없더라도 안전하게 갱신 가능
-                      await p.refresh();
-                    }
+              appBar: AppBar(
+                title: const Text('멘토 상세',
+                    style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+                  tooltip: '뒤로가기',
+                  onPressed: () {
+                    Navigator.of(context).pop(_edited ? _mentor : null);
                   },
                 ),
-              ],
-            ),
-            body: loading && p.overview == null
-                ? const Center(child: CircularProgressIndicator())
-                : err != null
-                ? _Error(onRetry: p.refresh, message: err)
-                : RefreshIndicator(
-              onRefresh: p.refresh,
-              color: UiTokens.primaryBlue,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ===== 상단 프로필 카드 =====
-                    _HeaderCard(
-                      name: mentor.name,
-                      hiredAt: mentor.hiredAt,
-                      menteeCount: p.overview?.menteeCount ?? mentor.menteeCount ?? 0,
-                      photoUrl: mentor.photoUrl,
-                    ),
-                    const SizedBox(height: 10),
+                backgroundColor: Colors.white,
+                elevation: 0,
+                actions: [
+                  IconButton(
+                    tooltip: '수정',
+                    icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
+                    onPressed: () async {
+                      final res = await Navigator.of(context).push<MentorEditResult>(
+                        MaterialPageRoute(builder: (_) => MentorEditPage(initial: _mentor)),
+                      );
+                      if (!context.mounted || res == null) return;
 
-                    // ===== KPI 3종 =====
-                    _KpiGrid(
-                      pendingTotal: p.overview?.pendingTotal ?? 0,
-                      avgFeedbackDays: p.overview?.avgFeedbackDays,
-                      handled7d: p.overview?.handledLast7d ?? 0,
-                    ),
-
-                    // ===== 멘티 배정하기 버튼 =====
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: () async {
-                          final assigned = await Navigator.of(context).push<int>(
-                            MaterialPageRoute(
-                              builder: (_) => AssignMenteesPage(targetMentorId: mentor.id),
-                            ),
-                          );
-                          if (assigned != null && assigned > 0 && context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('$assigned명 배정 완료')),
-                            );
-                            p.refresh();
-                          }
-                        },
-                        style: FilledButton.styleFrom(
-                          backgroundColor: UiTokens.primaryBlue,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: const Text('멘티 배정하기', style: TextStyle(fontWeight: FontWeight.w800)),
+                      if (res.deleted) {
+                        Navigator.of(context).pop(true); // 삭제는 그대로 bool
+                        return;
+                      }
+                      if (res.mentor != null) {
+                        setState(() {
+                          _mentor = res.mentor!;
+                          _edited = true; // ← 편집 반영됨 표시
+                        });
+                      }
+                      await p.refresh();
+                    },
+                  ),
+                ],
+              ),
+              body: loading && p.overview == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : err != null
+                  ? _Error(onRetry: p.refresh, message: err)
+                  : RefreshIndicator(
+                onRefresh: p.refresh,
+                color: UiTokens.primaryBlue,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ===== 상단 프로필 카드 =====
+                      _HeaderCard(
+                        name: _mentor.name,
+                        hiredAt: _mentor.hiredAt,
+                        menteeCount:
+                        p.overview?.menteeCount ?? _mentor.menteeCount ?? 0,
+                        photoUrl: _mentor.photoUrl,
                       ),
-                    ),
+                      const SizedBox(height: 10),
 
-                    const SizedBox(height: 16),
+                      // ===== KPI 3종 =====
+                      _KpiGrid(
+                        pendingTotal: p.overview?.pendingTotal ?? 0,
+                        avgFeedbackDays: p.overview?.avgFeedbackDays,
+                        handled7d: p.overview?.handledLast7d ?? 0,
+                      ),
 
-                    // ===== 목록 헤더 + 필터 =====
-                    Row(
-                      children: [
-                        const Text('담당 멘티',
-                            style: TextStyle(color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w700)),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: () => _openFilter(context, p),
-                          icon: const Icon(Icons.filter_list_rounded, color: UiTokens.actionIcon, size: 18),
-                          label: Text(
-                            _filterLabel(p.onlyPending), // '전체' / '대기 있는 멘티'
-                            style: const TextStyle(color: UiTokens.actionIcon, fontSize: 14, fontWeight: FontWeight.w700),
-                          ),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                            minimumSize: const Size(0, 0),
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // ===== 멘티 목록 =====
-                    ListView.separated(
-                      itemCount: p.mentees.length,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (_, i) {
-                        final m = p.mentees[i];
-                        return _MenteeTile(
-                          mentee: m,
-                          onTap: () async {
-                            await Navigator.of(context).push(
+                      // ===== 멘티 배정하기 버튼 =====
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton(
+                          onPressed: () async {
+                            final assigned =
+                            await Navigator.of(context).push<int>(
                               MaterialPageRoute(
-                                builder: (_) => ChangeNotifierProvider<MentorDetailProvider>.value(
-                                  value: p, // ✅ 현재 페이지에서 쓰던 동일 인스턴스 주입
-                                  child: MenteePracticeListPage(
-                                    mentorId: mentor.id,
-                                    mentee: m,
-                                    onUnassign: () async {
-                                      final cnt = await p.unassignMentees([m.id]);
-                                      return cnt > 0;
-                                    },
-                                  ),
-                                ),
+                                builder: (_) => AssignMenteesPage(
+                                    targetMentorId: _mentor.id),
                               ),
                             );
-                            if (context.mounted) p.refresh();
+                            if (assigned != null &&
+                                assigned > 0 &&
+                                context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('$assigned명 배정 완료')),
+                              );
+                              p.refresh();
+                            }
                           },
-                        );
-                      },
-                    ),
-                  ],
+                          style: FilledButton.styleFrom(
+                            backgroundColor: UiTokens.primaryBlue,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('멘티 배정하기',
+                              style: TextStyle(fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // ===== 목록 헤더 + 필터 =====
+                      Row(
+                        children: [
+                          const Text('담당 멘티',
+                              style: TextStyle(
+                                  color: UiTokens.title,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          TextButton.icon(
+                            onPressed: () => _openFilter(context, p),
+                            icon: const Icon(Icons.filter_list_rounded,
+                                color: UiTokens.actionIcon, size: 18),
+                            label: Text(
+                              _filterLabel(p.onlyPending), // '전체' / '대기 있는 멘티'
+                              style: const TextStyle(
+                                  color: UiTokens.actionIcon,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 6),
+                              minimumSize: const Size(0, 0),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // ===== 멘티 목록 =====
+                      ListView.separated(
+                        itemCount: p.mentees.length,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        itemBuilder: (_, i) {
+                          final m = p.mentees[i];
+                          return _MenteeTile(
+                            mentee: m,
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                  ChangeNotifierProvider<
+                                      MentorDetailProvider>.value(
+                                    value: p, // ✅ 동일 Provider 인스턴스 공유
+                                    child: MenteePracticeListPage(
+                                      mentorId: _mentor.id,
+                                      mentee: m,
+                                      onUnassign: () async {
+                                        final cnt =
+                                        await p.unassignMentees([m.id]);
+                                        return cnt > 0;
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              );
+                              if (context.mounted) p.refresh();
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -201,12 +225,15 @@ class _Error extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
+    // 로그 용
+    // ignore: avoid_print
     print(message);
 
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(message, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+        Text(message,
+            style:
+            const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         FilledButton(
           onPressed: onRetry,
@@ -232,7 +259,7 @@ class _HeaderCard extends StatelessWidget {
   });
 
   String _fmtDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -250,16 +277,23 @@ class _HeaderCard extends StatelessWidget {
             radius: 26,
             backgroundColor: Colors.grey[300],
             backgroundImage: photoUrl != null ? NetworkImage(photoUrl!) : null,
-            child: photoUrl == null ? const Icon(Icons.person, color: Color(0xFF8C96A1)) : null,
+            child: photoUrl == null
+                ? const Icon(Icons.person, color: Color(0xFF8C96A1))
+                : null,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(name,
-                  style: const TextStyle(color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w800)),
+                  style: const TextStyle(
+                      color: UiTokens.title,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text('입사일: ${_fmtDate(hiredAt)}   멘티: $menteeCount명',
-                  style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700)),
+                  style: TextStyle(
+                      color: UiTokens.title.withOpacity(0.6),
+                      fontWeight: FontWeight.w700)),
             ]),
           ),
         ],
@@ -281,18 +315,34 @@ class _KpiGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avgText = (avgFeedbackDays == null) ? '—' : avgFeedbackDays!.toStringAsFixed(1);
+    final avgText =
+    (avgFeedbackDays == null) ? '—' : avgFeedbackDays!.toStringAsFixed(1);
 
     return GridView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3, crossAxisSpacing: 6, mainAxisSpacing: 6, childAspectRatio: 1,
+        crossAxisCount: 3,
+        crossAxisSpacing: 6,
+        mainAxisSpacing: 6,
+        childAspectRatio: 1,
       ),
       children: [
-        _KpiTile(icon: Icons.fact_check_outlined, title: '검수 대기', value: '$pendingTotal', unit: '건'),
-        _KpiTile(icon: Icons.hourglass_bottom_rounded, title: '평균 소요일', value: avgText, unit: '일'),
-        _KpiTile(icon: Icons.done_all_rounded, title: '최근 7일 처리', value: '$handled7d', unit: '건'),
+        _KpiTile(
+            icon: Icons.fact_check_outlined,
+            title: '검수 대기',
+            value: '$pendingTotal',
+            unit: '건'),
+        _KpiTile(
+            icon: Icons.hourglass_bottom_rounded,
+            title: '평균 소요일',
+            value: avgText,
+            unit: '일'),
+        _KpiTile(
+            icon: Icons.done_all_rounded,
+            title: '최근 7일 처리',
+            value: '$handled7d',
+            unit: '건'),
       ],
     );
   }
@@ -303,28 +353,42 @@ class _KpiTile extends StatelessWidget {
   final String title;
   final String value;
   final String unit;
-  const _KpiTile({required this.icon, required this.title, required this.value, required this.unit});
+  const _KpiTile(
+      {required this.icon,
+        required this.title,
+        required this.value,
+        required this.unit});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, border: Border.all(color: UiTokens.cardBorder),
-        borderRadius: BorderRadius.circular(14), boxShadow: [UiTokens.cardShadow],
+        color: Colors.white,
+        border: Border.all(color: UiTokens.cardBorder),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [UiTokens.cardShadow],
       ),
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, color: UiTokens.actionIcon),
         const Spacer(),
-        Text(title, style: TextStyle(color: UiTokens.title.withOpacity(0.7), fontWeight: FontWeight.w700)),
+        Text(title,
+            style: TextStyle(
+                color: UiTokens.title.withOpacity(0.7),
+                fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        RichText(text: TextSpan(
-          text: value,
-          style: const TextStyle(color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w900),
-          children: [
-            TextSpan(text: ' $unit', style: const TextStyle(color: UiTokens.primaryBlue, fontWeight: FontWeight.w800)),
-          ],
-        )),
+        RichText(
+            text: TextSpan(
+              text: value,
+              style: const TextStyle(
+                  color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w900),
+              children: [
+                TextSpan(
+                    text: ' $unit',
+                    style: const TextStyle(
+                        color: UiTokens.primaryBlue, fontWeight: FontWeight.w800)),
+              ],
+            )),
       ]),
     );
   }
@@ -336,7 +400,7 @@ class _MenteeTile extends StatelessWidget {
   const _MenteeTile({required this.mentee, this.onTap});
 
   String _fmtDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
@@ -345,8 +409,10 @@ class _MenteeTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white, border: Border.all(color: UiTokens.cardBorder),
-          borderRadius: BorderRadius.circular(14), boxShadow: [UiTokens.cardShadow],
+          color: Colors.white,
+          border: Border.all(color: UiTokens.cardBorder),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [UiTokens.cardShadow],
         ),
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -354,16 +420,24 @@ class _MenteeTile extends StatelessWidget {
             CircleAvatar(
               radius: 22,
               backgroundColor: Colors.grey[300],
-              backgroundImage: mentee.photoUrl != null ? NetworkImage(mentee.photoUrl!) : null,
-              child: mentee.photoUrl == null ? const Icon(Icons.person, color: Color(0xFF8C96A1)) : null,
+              backgroundImage:
+              mentee.photoUrl != null ? NetworkImage(mentee.photoUrl!) : null,
+              child: mentee.photoUrl == null
+                  ? const Icon(Icons.person, color: Color(0xFF8C96A1))
+                  : null,
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(mentee.name, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
+              child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(mentee.name,
+                    style: const TextStyle(
+                        color: UiTokens.title, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 4),
                 Text('시작일: ${_fmtDate(mentee.startedAt)}',
-                    style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700)),
+                    style: TextStyle(
+                        color: UiTokens.title.withOpacity(0.6),
+                        fontWeight: FontWeight.w700)),
               ]),
             ),
             _PendingBadge(count: mentee.pendingCount),
@@ -388,8 +462,13 @@ class _PendingBadge extends StatelessWidget {
     final String label = has ? '대기 ${count}건' : '대기 없음';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, border: Border.all(color: border), borderRadius: BorderRadius.circular(10)),
-      child: Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
+      decoration: BoxDecoration(
+          color: bg,
+          border: Border.all(color: border),
+          borderRadius: BorderRadius.circular(10)),
+      child: Text(label,
+          style: TextStyle(
+              color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
     );
   }
 }
@@ -411,8 +490,11 @@ Future<void> _openFilter(BuildContext context, MentorDetailProvider p) async {
       title: '필터',
       current: current,
       options: const [
-        SortOption(value: MenteeFilter.all,     label: '전체',         icon: Icons.list_alt),
-        SortOption(value: MenteeFilter.pending, label: '평가 대기 멘티', icon: Icons.hourglass_bottom_rounded),
+        SortOption(value: MenteeFilter.all, label: '전체', icon: Icons.list_alt),
+        SortOption(
+            value: MenteeFilter.pending,
+            label: '평가 대기 멘티',
+            icon: Icons.hourglass_bottom_rounded),
       ],
     ),
   );
@@ -421,4 +503,3 @@ Future<void> _openFilter(BuildContext context, MentorDetailProvider p) async {
     await p.toggleOnlyPending(result == MenteeFilter.pending);
   }
 }
-
