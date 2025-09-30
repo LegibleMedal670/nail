@@ -1,4 +1,3 @@
-// lib/Pages/Manager/page/tabs/CurriculumManageTab.dart
 import 'dart:convert';
 import 'dart:math';
 
@@ -9,9 +8,10 @@ import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Manager/page/CurriculumCreatePage.dart';
+import 'package:nail/Pages/Manager/page/PracticeCreatePage.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nail/Services/SupabaseService.dart';
 
 /// 상위(ManagerMainPage)와 공유하는 전환 키
 const String kKindTheory = 'theory';
@@ -93,22 +93,15 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
       _pracError = null;
     });
     try {
-      final sp = Supabase.instance.client;
+      final rows = await SupabaseService.instance.adminListPracticeSets(
+        activeOnly: null, // 전체
+        limit: 200,
+        offset: 0,
+      );
 
-      // 1) 관리자/멘토 RPC가 있으면 우선 사용
-      List<dynamic>? rpcRows;
-      try {
-        rpcRows = await sp.rpc('admin_list_practice_sets', params: {'p_active_only': null});
-      } catch (_) {
-        rpcRows = null;
-      }
-
-      final rows = rpcRows ??
-          await sp.from('practice_sets').select('*').order('created_at', ascending: false);
-
-      _pracItems = (rows as List)
+      _pracItems = rows
           .map((e) => _PracticeSet.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+          .toList(growable: false);
     } catch (e) {
       _pracError = e.toString();
     } finally {
@@ -150,11 +143,21 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
               );
             }
           } else {
-            // 실습 생성/편집은 추후 연결
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('실습 세트 생성/편집 페이지는 추후 연결 예정입니다.')),
+            // 실습 생성(저장 → 목록 갱신)
+            final nextCode = _computeNextPracticeCode();
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PracticeCreatePage(suggestedCode: nextCode),
+              ),
             );
+            if (!mounted) return;
+            if (result != null) {
+              await _loadPractice();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('실습 세트가 생성되었습니다')),
+              );
+            }
           }
         },
         icon: Icon(isTheory ? Icons.add_card_outlined : Icons.add_photo_alternate_outlined),
@@ -187,7 +190,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                 ),
               ),
 
-              // ===== 이론 뷰: 기존 분기 그대로 =====
+              // ===== 이론 뷰 =====
               if (isTheory) ...[
                 if (loading && items.isEmpty) ...[
                   const SizedBox(height: 80),
@@ -230,7 +233,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                   ],
                 ],
               ]
-              // ===== 실습 뷰: CurriculumTile.practice 로 렌더 =====
+              // ===== 실습 뷰: CurriculumTile.practice로 렌더 =====
               else ...[
                 if (_pracLoading && _pracItems.isEmpty) ...[
                   const SizedBox(height: 80),
@@ -263,6 +266,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                         summary: summary,
                         badges: badges,
                         onTap: () {
+                          // TODO: 편집 페이지 연결
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('실습 ${it.code} 편집 화면은 추후 연결 예정입니다.')),
                           );
@@ -296,8 +300,23 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
   String _toSummary(String? raw) {
     final s = (raw ?? '').trim();
     if (s.isEmpty) return '지시문 없음';
-    // 2줄 UI에 맞게 너무 긴 경우 잘라줌
     return s.length > 160 ? '${s.substring(0, 160)}…' : s;
+  }
+
+  /// 현재 로컬에 로드된 실습 코드들(_pracItems)에서
+  /// 'PS-###' 패턴만 모아 최대값+1을 반환. 없으면 'PS-001'.
+  String _computeNextPracticeCode() {
+    int maxNum = 0;
+    final re = RegExp(r'^\s*PS-(\d+)\s*$');
+    for (final it in _pracItems) {
+      final m = re.firstMatch(it.code.trim());
+      if (m != null) {
+        final n = int.tryParse(m.group(1)!) ?? 0;
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    final next = maxNum + 1;
+    return 'PS-${next.toString().padLeft(3, '0')}';
   }
 }
 

@@ -549,4 +549,81 @@ class SupabaseService {
     });
   }
 
+  // ===================== 실습 세트(Practice Sets) =====================
+
+  /// (관리자) 실습 세트 Upsert
+  /// - 서버 RPC: admin_upsert_practice_set
+  /// - referenceImages: jsonb 배열 (URL 또는 스토리지 경로)
+  Future<Map<String, dynamic>> adminUpsertPracticeSet({
+    required String code,
+    required String title,
+    String? instructions,
+    required List<String> referenceImages,
+    required bool active,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+
+    final res = await _sb.rpc('admin_upsert_practice_set', params: {
+      'p_admin_key': key,
+      'p_code': code,
+      'p_title': title,
+      'p_instructions': instructions,
+      'p_reference_images': referenceImages, // ← 반드시 배열(jsonb)
+      'p_active': active,
+    });
+
+    final row = (res is List && res.isNotEmpty) ? res.first : res;
+    if (row == null) {
+      throw Exception('admin_upsert_practice_set returned null');
+    }
+    return Map<String, dynamic>.from(row as Map);
+  }
+
+  /// (관리자) 실습 세트 목록
+  /// - activeOnly: true=active만 / false=inactive만 / null=전체
+  /// - 서버 RPC: admin_list_practice_sets
+  Future<List<Map<String, dynamic>>> adminListPracticeSets({
+    bool? activeOnly,
+    int limit = 200,
+    int offset = 0,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+
+    final res = await _sb.rpc('admin_list_practice_sets', params: {
+      'p_admin_key': key,
+      'p_active_only': activeOnly, // null 허용
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+
+    if (res == null) return const <Map<String, dynamic>>[];
+    final rows = (res is List) ? res : [res];
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList(growable: false);
+  }
+
+  /// (관리자) 실습 세트 삭제
+  /// - 서버 RPC: admin_delete_practice_set
+  Future<void> adminDeletePracticeSet({
+    required String code,
+    String? adminKey,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+    await _sb.rpc('admin_delete_practice_set', params: {
+      'p_admin_key': key,
+      'p_code': code,
+    });
+  }
+
+
 }
