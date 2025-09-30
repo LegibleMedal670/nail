@@ -16,6 +16,9 @@ class ManagerMainPage extends StatefulWidget {
 class _ManagerMainPageState extends State<ManagerMainPage> {
   int _currentIndex = 0;
 
+  /// 교육 관리 탭의 이론/실습 전환 상태(앱바 토글 ↔ 하위 탭 동기화)
+  final ValueNotifier<String> _manageKind = ValueNotifier<String>(kKindTheory);
+
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: '대시보드'),
     BottomNavigationBarItem(icon: Icon(Icons.support_agent_outlined), label: '멘토 관리'),
@@ -29,7 +32,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
       const MostProgressedMenteeTab(),
       const MentorManageTab(),
       const MenteeManageTab(),
-      const CurriculumManageTab(),
+      CurriculumManageTab(kindNotifier: _manageKind),
     ];
 
     return Scaffold(
@@ -38,14 +41,48 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         backgroundColor: Colors.white,
         centerTitle: false,
         elevation: 0,
-        title: Text(
-          (_currentIndex == 0) ? '가장 진도가 빠른 신입' : _navItems[_currentIndex].label!,
-          style: const TextStyle(
-            color: UiTokens.title,
-            fontWeight: FontWeight.w700,
-            fontSize: 26,
-          ),
+        title: ValueListenableBuilder<String>(
+          valueListenable: _manageKind,
+          builder: (_, kind, __) {
+            final base = (_currentIndex == 0) ? '가장 진도가 빠른 신입' : _navItems[_currentIndex].label!;
+            if (_currentIndex != 3) {
+              return Text(
+                base,
+                style: const TextStyle(
+                  color: UiTokens.title,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 26,
+                ),
+              );
+            }
+            final isTheory = kind == kKindTheory;
+            final title = isTheory ? '$base(이론)' : '$base(실습)';
+            return Text(
+              title,
+              style: const TextStyle(
+                color: UiTokens.title,
+                fontWeight: FontWeight.w700,
+                fontSize: 26,
+              ),
+            );
+          },
         ),
+        // ✅ 앱바 우측에 이론/실습 토글(디자인 커스텀, 그림자/애니/아이콘)
+        actions: [
+          if (_currentIndex == 3)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ValueListenableBuilder<String>(
+                  valueListenable: _manageKind,
+                  builder: (_, kind, __) => _ManageKindSegment(
+                    value: kind,
+                    onChanged: (v) => _manageKind.value = v,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: IndexedStack(index: _currentIndex, children: pages),
       bottomNavigationBar: BottomNavigationBar(
@@ -56,6 +93,86 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         unselectedItemColor: const Color(0xFFB0B9C1),
         showUnselectedLabels: true,
         items: _navItems,
+      ),
+    );
+  }
+}
+
+/// 앱바용 이론/실습 토글(세련된 필 세그먼트)
+class _ManageKindSegment extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _ManageKindSegment({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final isTheory = value == kKindTheory;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE6EBF0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SegmentPill(
+            selected: isTheory,
+            label: '이론',
+            onTap: () => onChanged(kKindTheory),
+          ),
+          _SegmentPill(
+            selected: !isTheory,
+            label: '실습',
+            onTap: () => onChanged(kKindPractice),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SegmentPill extends StatelessWidget {
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SegmentPill({
+    required this.selected,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? UiTokens.primaryBlue.withOpacity(0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: selected ? UiTokens.primaryBlue : c.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -1,4 +1,5 @@
 // lib/Pages/Manager/page/tabs/CurriculumManageTab.dart
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -12,23 +13,59 @@ import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// 상위(ManagerMainPage)와 공유하는 전환 키
+const String kKindTheory = 'theory';
+const String kKindPractice = 'practice';
+
 class CurriculumManageTab extends StatefulWidget {
-  const CurriculumManageTab({super.key});
+  /// AppBar 토글과 동기화하기 위한 외부 상태(Notifer).
+  /// 주입되지 않으면 기본값(kKindTheory)로만 동작.
+  final ValueNotifier<String>? kindNotifier;
+
+  const CurriculumManageTab({super.key, this.kindNotifier});
 
   @override
   State<CurriculumManageTab> createState() => _CurriculumManageTabState();
 }
 
 class _CurriculumManageTabState extends State<CurriculumManageTab> {
+  // ---- 전환 상태(이론/실습) ----
+  late String _kind = widget.kindNotifier?.value ?? kKindTheory;
+
+  // ---- 실습 목록용 로컬 상태 ----
+  bool _pracLoading = false;
+  String? _pracError;
+  List<_PracticeSet> _pracItems = const [];
+
+  // 상위(AppBar 토글) 변경 시 동기화
+  void _onKindChanged() {
+    final v = widget.kindNotifier!.value;
+    if (v == _kind) return;
+    setState(() => _kind = v);
+    if (_kind == kKindPractice) _loadPractice();
+  }
+
   @override
   void initState() {
     super.initState();
-    // 안전망: 이 탭이 처음 열릴 때도 보장적으로 로드 시도
+    // 탭 초기 진입 시 커리큘럼 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CurriculumProvider>().ensureLoaded();
     });
+    // 상위 Notifier 연동
+    widget.kindNotifier?.addListener(_onKindChanged);
+    if (_kind == kKindPractice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _loadPractice());
+    }
   }
 
+  @override
+  void dispose() {
+    widget.kindNotifier?.removeListener(_onKindChanged);
+    super.dispose();
+  }
+
+  // ===================== 기존 동작(이론) 그대로: 상세 열기 =====================
   Future<void> _openDetail(CurriculumItem item) async {
     final res = await Navigator.of(context).push<CurriculumDetailResult>(
       MaterialPageRoute(
@@ -38,17 +75,45 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
         ),
       ),
     );
-    // 삭제/저장 이후 최신화(목록 갱신)
     if (!mounted) return;
     if (res?.deleted == true) {
-      // 서버 삭제 연결은 아직 없으므로 목록 재요청으로 동기화
       await context.read<CurriculumProvider>().refresh(force: true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('‘${item.title}’이(가) 삭제되었습니다.')),
       );
     } else {
-      // 상세에서 goals/resources 저장했다면 목록에도 반영되도록
       await context.read<CurriculumProvider>().refresh(force: true);
+    }
+  }
+
+  // ===================== 실습 목록 로드 =====================
+  Future<void> _loadPractice() async {
+    setState(() {
+      _pracLoading = true;
+      _pracError = null;
+    });
+    try {
+      final sp = Supabase.instance.client;
+
+      // 1) 관리자/멘토 RPC가 있으면 우선 사용
+      List<dynamic>? rpcRows;
+      try {
+        rpcRows = await sp.rpc('admin_list_practice_sets', params: {'p_active_only': null});
+      } catch (_) {
+        rpcRows = null;
+      }
+
+      final rows = rpcRows ??
+          await sp.from('practice_sets').select('*').order('created_at', ascending: false);
+
+      _pracItems = (rows as List)
+          .map((e) => _PracticeSet.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      _pracError = e.toString();
+    } finally {
+      if (!mounted) return;
+      setState(() => _pracLoading = false);
     }
   }
 
@@ -59,39 +124,57 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
     final loading = provider.loading;
     final error = provider.error;
 
+    final bool isTheory = _kind == kKindTheory;
+
     return Scaffold(
       backgroundColor: Colors.white,
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab_course_add',
         backgroundColor: UiTokens.primaryBlue,
         onPressed: () async {
-          final items = context.read<CurriculumProvider>().items;
-          final nextWeek = items.isEmpty ? 1 : (items.map((e) => e.week).reduce(max) + 1);
+          if (isTheory) {
+            // 기존 동작 그대로(이론 모듈 생성)
+            final items = context.read<CurriculumProvider>().items;
+            final nextWeek = items.isEmpty ? 1 : (items.map((e) => e.week).reduce(max) + 1);
 
-          final res = await Navigator.push<CurriculumCreateResult>(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CurriculumCreatePage(suggestedWeek: nextWeek),
-            ),
-          );
+            final res = await Navigator.push<CurriculumCreateResult>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CurriculumCreatePage(suggestedWeek: nextWeek),
+              ),
+            );
 
-          if (res != null && mounted) {
+            if (res != null && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('‘${res.item.title}’이(가) 생성되었습니다.')),
+              );
+            }
+          } else {
+            // 실습 생성/편집은 추후 연결
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('‘${res.item.title}’이(가) 생성되었습니다.')),
+              const SnackBar(content: Text('실습 세트 생성/편집 페이지는 추후 연결 예정입니다.')),
             );
           }
         },
-        icon: const Icon(Icons.add_card_outlined),
-        label: const Text('추가'),
+        icon: Icon(isTheory ? Icons.add_card_outlined : Icons.add_photo_alternate_outlined),
+        label: Text(isTheory ? '이론 추가' : '실습 추가'),
       ),
       body: RefreshIndicator(
-        onRefresh: () => context.read<CurriculumProvider>().refresh(force: true),
+        onRefresh: () async {
+          if (isTheory) {
+            await context.read<CurriculumProvider>().refresh(force: true);
+          } else {
+            await _loadPractice();
+          }
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 상단 카피(기존 디자인 유지)
               const Padding(
                 padding: EdgeInsets.fromLTRB(4, 0, 4, 10),
                 child: Text(
@@ -104,45 +187,103 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                 ),
               ),
 
-              // 로딩/에러/성공 분기
-              if (loading && items.isEmpty) ...[
-                const SizedBox(height: 80),
-                const Center(child: CircularProgressIndicator()),
-              ] else if (error != null && items.isEmpty) ...[
-                const SizedBox(height: 40),
-                _ErrorBlock(
-                  message: error,
-                  onRetry: () => context.read<CurriculumProvider>().refresh(force: true),
-                ),
-              ] else if (items.isEmpty) ...[
-                _EmptyBlock(onRetry: () => context.read<CurriculumProvider>().refresh(force: true)),
-              ] else ...[
-                ListView.separated(
-                  itemCount: items.length,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) {
-                    final item = items[i];
-                    return CurriculumTile(
-                      item: item,
-                      onTap: () => _openDetail(item),
-                    );
-                  },
-                ),
-                if (loading) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      SizedBox(
-                        width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      SizedBox(width: 8),
-                      Text('업데이트 중…', style: TextStyle(color: UiTokens.title)),
-                    ],
+              // ===== 이론 뷰: 기존 분기 그대로 =====
+              if (isTheory) ...[
+                if (loading && items.isEmpty) ...[
+                  const SizedBox(height: 80),
+                  const Center(child: CircularProgressIndicator()),
+                ] else if (error != null && items.isEmpty) ...[
+                  const SizedBox(height: 40),
+                  _ErrorBlock(
+                    message: error,
+                    onRetry: () => context.read<CurriculumProvider>().refresh(force: true),
                   ),
+                ] else if (items.isEmpty) ...[
+                  _EmptyBlock(onRetry: () => context.read<CurriculumProvider>().refresh(force: true)),
+                ] else ...[
+                  ListView.separated(
+                    itemCount: items.length,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) {
+                      final item = items[i];
+                      return CurriculumTile(
+                        item: item,
+                        onTap: () => _openDetail(item),
+                      );
+                    },
+                  ),
+                  if (loading) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text('업데이트 중…', style: TextStyle(color: UiTokens.title)),
+                      ],
+                    ),
+                  ],
+                ],
+              ]
+              // ===== 실습 뷰: CurriculumTile.practice 로 렌더 =====
+              else ...[
+                if (_pracLoading && _pracItems.isEmpty) ...[
+                  const SizedBox(height: 80),
+                  const Center(child: CircularProgressIndicator()),
+                ] else if (_pracError != null && _pracItems.isEmpty) ...[
+                  const SizedBox(height: 40),
+                  _ErrorBlock(
+                    message: _pracError!,
+                    onRetry: _loadPractice,
+                  ),
+                ] else if (_pracItems.isEmpty) ...[
+                  _EmptyBlock(onRetry: _loadPractice),
+                ] else ...[
+                  ListView.separated(
+                    itemCount: _pracItems.length,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (_, i) {
+                      final it = _pracItems[i];
+                      final summary = _toSummary(it.instructions);
+                      final badges = <String>[
+                        '실습',
+                        if (it.referenceImages.isNotEmpty) '예시사진 ${it.referenceImages.length}',
+                        if (!it.active) 'inactive',
+                      ];
+
+                      return CurriculumTile.practice(
+                        title: it.title,
+                        summary: summary,
+                        badges: badges,
+                        onTap: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('실습 ${it.code} 편집 화면은 추후 연결 예정입니다.')),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  if (_pracLoading) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text('업데이트 중…', style: TextStyle(color: UiTokens.title)),
+                      ],
+                    ),
+                  ],
                 ],
               ],
             ],
@@ -150,6 +291,13 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
         ),
       ),
     );
+  }
+
+  String _toSummary(String? raw) {
+    final s = (raw ?? '').trim();
+    if (s.isEmpty) return '지시문 없음';
+    // 2줄 UI에 맞게 너무 긴 경우 잘라줌
+    return s.length > 160 ? '${s.substring(0, 160)}…' : s;
   }
 }
 
@@ -160,6 +308,7 @@ class _EmptyBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 32, 16, 48),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -191,6 +340,7 @@ class _ErrorBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -222,4 +372,45 @@ class _ErrorBlock extends StatelessWidget {
       ),
     );
   }
+}
+
+// ===================== 실습 세트 모델 =====================
+class _PracticeSet {
+  final String id;
+  final String code;
+  final String title;
+  final String? instructions;
+  final List<String> referenceImages;
+  final bool active;
+  final String createdAt;
+  final String updatedAt;
+
+  _PracticeSet({
+    required this.id,
+    required this.code,
+    required this.title,
+    required this.instructions,
+    required this.referenceImages,
+    required this.active,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory _PracticeSet.fromJson(Map<String, dynamic> j) => _PracticeSet(
+    id: j['id'] as String,
+    code: j['code'] as String,
+    title: j['title'] as String,
+    instructions: j['instructions'] as String?,
+    referenceImages: () {
+      final v = j['reference_images'];
+      if (v is List) return v.map((e) => e.toString()).toList();
+      if (v is String && v.isNotEmpty) {
+        return (jsonDecode(v) as List).map((e) => e.toString()).toList();
+      }
+      return <String>[];
+    }(),
+    active: (j['active'] as bool?) ?? true,
+    createdAt: j['created_at']?.toString() ?? '',
+    updatedAt: j['updated_at']?.toString() ?? '',
+  );
 }
