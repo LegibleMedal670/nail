@@ -6,7 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nail/Services/StorageService.dart'; // ⬅️ 추가: StorageService 사용
+// import 'package:supabase_flutter/supabase_flutter.dart'; // ⬅️ 삭제: 직접 스토리지 접근 안함
 
 /// 저장 결과(서버 저장 후 최종 값 반환)
 class PracticeCreateResult {
@@ -14,7 +15,7 @@ class PracticeCreateResult {
   final String code;
   final String title;
   final String instructions;
-  final List<String> referenceImages; // 저장된 URL(또는 경로) 리스트
+  final List<String> referenceImages; // 저장된 "객체 키" 리스트
   final bool active;
 
   const PracticeCreateResult({
@@ -31,13 +32,12 @@ class PracticeCreateResult {
 class _EditImage {
   final String id; // re-order key
   Uint8List? bytes; // 갤러리에서 고른 로컬 썸네일/원본 (미리보기 및 업로드용)
-  String? url; // 외부 URL 추가용
+  String? url; // 과거 호환용(현 UI에선 사용 안 함)
   _EditImage({required this.id, this.bytes, this.url});
 }
 
 class PracticeCreatePage extends StatefulWidget {
   /// 요구사항 #2: 코드 자동 채움 — 상위 화면에서 계산해서 전달
-  /// 예: 'PS-013'
   final String? suggestedCode;
 
   const PracticeCreatePage({super.key, this.suggestedCode});
@@ -509,7 +509,7 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
     );
   }
 
-// 비어있는 상태용 힌트 (갤러리만)
+  // 비어있는 상태용 힌트 (갤러리만)
   Widget _EmptyImagesHintGalleryOnly({required VoidCallback onAddFromGallery}) {
     return Container(
       width: double.infinity,
@@ -560,14 +560,12 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
     );
   }
 
-
   // ===== 저장(업로드 -> RPC upsert) =====
   Future<bool> _confirmDiscard() async {
     if (!_dirty) return true;
     // 요구사항 #1: 공용 다이얼로그 사용
     return await showDiscardChangesDialog(
       context,
-      // 아래 메시지는 기본값도 충분하지만, 명확히 지정
       title: '변경사항을 저장하지 않고 나갈까요?',
       message: '저장하지 않은 변경사항이 사라집니다.',
       stayText: '계속 작성',
@@ -593,36 +591,27 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
       try {
         await SupabaseService.instance.ensureAdminSessionLinked();
       } catch (_) {
-        // 이미 링크되어 있거나, 상위에서 처리 중이면 무시 가능
+        // 이미 링크되어 있거나 상위에서 처리 중이면 무시 가능
       }
 
-      // 1) 이미지 업로드 (로컬 bytes만)
-      final storage =
-      Supabase.instance.client.storage.from('practice-refs'); // 버킷명 확인
+      // 1) 이미지 업로드 (로컬 bytes만) — StorageService 사용, DB에는 "키" 저장
+      final storageSvc = StorageService();
       final List<String> finalRefs = [];
       int idx = 0;
+
       for (final img in _images) {
-        if (img.url != null && img.url!.isNotEmpty) {
-          finalRefs.add(img.url!);
-          continue;
-        }
-        if (img.bytes != null) {
-          final fileName =
-              'ref_${DateTime.now().millisecondsSinceEpoch}_${idx++}.jpg';
-          final filePath = '$code/$fileName'; // 폴더 = 실습 코드
-          await storage.uploadBinary(
-            filePath,
-            img.bytes!,
-            fileOptions: const FileOptions(
-              upsert: true,
-              cacheControl: '3600',
-              contentType: 'image/jpeg',
-            ),
-          );
-          // 공개 버킷이면 공개 URL, 비공개면 경로만 저장(또는 서명 URL 발급 로직 준비)
-          final url = storage.getPublicUrl(filePath);
-          finalRefs.add(url);
-        }
+        // URL 기반 항목은 현 UI에서 생성되지 않지만, 혹시 남아있다면 스킵
+        if (img.bytes == null) continue;
+
+        final fileName =
+            'ref_${DateTime.now().millisecondsSinceEpoch}_${idx++}.jpg';
+        final key = await storageSvc.uploadPracticeImageBytes(
+          bytes: img.bytes!,
+          code: code,             // practice_sets/<code>/refs/<filename>
+          filename: fileName,
+          upsert: true,
+        );
+        finalRefs.add(key);        // ← 공개 URL 대신 "객체 키" 저장
       }
 
       // 2) RPC upsert (DB는 항상 RPC로)
@@ -630,7 +619,7 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
         code: code,
         title: title,
         instructions: instructions.isEmpty ? null : instructions,
-        referenceImages: finalRefs,
+        referenceImages: finalRefs, // ← 키 목록 전달
         active: _active,
       );
 
@@ -655,7 +644,7 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
           code: retCode,
           title: retTitle,
           instructions: retInstr,
-          referenceImages: retRefs,
+          referenceImages: retRefs, // ← 객체 키 리스트
           active: retActive,
         ),
       );
@@ -663,6 +652,7 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
         const SnackBar(content: Text('실습 세트가 생성되었습니다')),
       );
     } catch (e) {
+      print(e);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('생성 실패: $e')),
@@ -817,8 +807,7 @@ class _PracticeCreatePageState extends State<PracticeCreatePage> {
                                     m.url!,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) =>
-                                    const ColoredBox(
-                                        color: Colors.black12),
+                                    const ColoredBox(color: Colors.black12),
                                   ),
                                 ),
                               );

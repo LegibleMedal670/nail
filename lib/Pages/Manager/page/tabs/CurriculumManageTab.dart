@@ -375,12 +375,7 @@ class _ErrorBlock extends StatelessWidget {
             '불러오는 중 오류가 발생했어요',
             style: TextStyle(color: UiTokens.title.withOpacity(0.8), fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w600),
-          ),
+
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: onRetry,

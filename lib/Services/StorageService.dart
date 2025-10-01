@@ -17,6 +17,7 @@ class StorageService {
     var s = raw.trim();
     if (s.startsWith('/')) s = s.substring(1);
     if (s.startsWith('videos/')) s = s.substring('videos/'.length);
+    if (s.startsWith('practice/')) s = s.substring('practice/'.length);
     return s;
   }
 
@@ -119,4 +120,93 @@ class StorageService {
   }
 
   void clearAllCaches() => _signedCache.clear();
+
+  // === Practice images (실습 참고 이미지) ======================================
+
+  static const String _practiceBucket = 'practice';
+
+  /// practice_sets/{code}/refs/{filename}
+  String practiceObjectPath({
+    required String code,
+    required String filename,
+  }) {
+    final safe = filename.replaceAll(' ', '_');
+    return 'practice_sets/$code/refs/$safe';
+  }
+
+  /// 바이트 업로드: DB에는 **객체 키**(버킷 상대 경로)만 저장하세요.
+  Future<String> uploadPracticeImageBytes({
+    required Uint8List bytes,
+    required String code,
+    String? filename, // null이면 타임스탬프 기반 이름
+    bool upsert = true,
+  }) async {
+    final name = filename ?? 'ref_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final key = practiceObjectPath(code: code, filename: name);
+
+    await _sb.storage.from(_practiceBucket).uploadBinary(
+      key,
+      bytes,
+      fileOptions: FileOptions(
+        cacheControl: '3600',
+        upsert: upsert,
+        contentType: 'image/jpeg',
+      ),
+    );
+
+    // 서명 URL 캐시 무효화
+    evictSignedUrl(key);
+    return key; // ← 이 값을 DB에 저장
+  }
+
+  /// 파일 업로드가 필요하면 이거 사용 (선택)
+  Future<String> uploadPracticeImageFile({
+    required File file,
+    required String code,
+    bool upsert = true,
+  }) async {
+    final ext = p.extension(file.path).toLowerCase();
+    final name = 'ref_${DateTime.now().millisecondsSinceEpoch}$ext';
+    final key = practiceObjectPath(code: code, filename: name);
+
+    await _sb.storage.from(_practiceBucket).upload(
+      key,
+      file,
+      fileOptions: FileOptions(cacheControl: '3600', upsert: upsert),
+    );
+
+    evictSignedUrl(key);
+    return key;
+  }
+
+  /// 삭제
+  Future<void> deletePracticeObject(String objectPath) async {
+    final key = normalizeObjectPath(objectPath);
+    await _sb.storage.from(_practiceBucket).remove([key]);
+    evictSignedUrl(key);
+  }
+
+  /// (표시용) 서명 URL 발급 — DB에는 키만 저장하고, 화면에서 이걸로 URL을 만드세요.
+  Future<String> getOrCreateSignedUrlPractice(
+      String objectPath, {
+        int expiresInSec = 21600, // 6h
+        int minTtlBufferSec = 300,
+      }) async {
+    final key = normalizeObjectPath(objectPath);
+    final now = DateTime.now();
+    final cached = _signedCache[key];
+    if (cached != null &&
+        now.isBefore(cached.expiresAt.subtract(Duration(seconds: minTtlBufferSec)))) {
+      return cached.url;
+    }
+
+    final url = await _sb.storage.from(_practiceBucket).createSignedUrl(
+      key,
+      expiresInSec,
+    );
+
+    final exp = now.add(Duration(seconds: expiresInSec));
+    _signedCache[key] = SignedUrlCacheEntry(url: url, expiresAt: exp);
+    return url;
+  }
 }
