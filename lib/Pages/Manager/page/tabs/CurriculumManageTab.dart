@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/page/PracticeDetailPage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
@@ -265,12 +266,46 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                         title: it.title,
                         summary: summary,
                         badges: badges,
-                        onTap: () {
-                          // TODO: 편집 페이지 연결
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('실습 ${it.code} 편집 화면은 추후 연결 예정입니다.')),
-                          );
-                        },
+                          onTap: () async {
+                            // 상세 열기
+                            final res = await Navigator.push<PracticeDetailResult>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PracticeDetailPage(
+                                  data: PracticeSetViewData(
+                                    id: it.id,
+                                    code: it.code,
+                                    title: it.title,
+                                    instructions: it.instructions,
+                                    referenceImages: it.referenceImages,
+                                    active: it.active,
+                                    createdAt: it.createdAt,
+                                    updatedAt: it.updatedAt,
+                                  ),
+                                ),
+                              ),
+                            );
+
+                            // 저장된 경우에만 로컬 리스트 반영 (서버 재조회 없이 즉시)
+                            if (res?.saved == true) {
+                              setState(() {
+                                final old = _pracItems[i];
+                                _pracItems[i] = _PracticeSet(
+                                  id: old.id,
+                                  code: old.code,
+                                  title: old.title,
+                                  instructions: res!.instructions ?? old.instructions,
+                                  referenceImages: res.referenceImages, // ✅ 개수/썸네일 즉시 반영
+                                  active: old.active,
+                                  createdAt: old.createdAt,
+                                  updatedAt: old.updatedAt,
+                                );
+                              });
+
+                              // 더 안전하게 하고 싶으면 여기서 _loadPractice() 한 번 호출해도 OK.
+                              // await _loadPractice();
+                            }
+                          }
                       );
                     },
                   ),
