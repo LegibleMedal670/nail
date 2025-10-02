@@ -32,18 +32,22 @@ class PracticeSetViewData {
   });
 }
 
+/// 부모로 돌려줄 결과 (제목/지시문/이미지와 삭제여부 모두 포함)
 class PracticeDetailResult {
   final bool saved;                   // 이 세션에서 저장이 있었는가
-  final List<String> referenceImages; // 저장 이후 최종 리스트
-  final String? instructions;         // 선택: 부모가 필요하면 사용
+  final bool deleted;                 // 삭제되었는가
+  final String? title;                // 저장 이후 제목
+  final String? instructions;         // 저장 이후 지시문
+  final List<String> referenceImages; // 저장 이후 최종 이미지 리스트
 
   const PracticeDetailResult({
-    required this.saved,
-    required this.referenceImages,
+    this.saved = false,
+    this.deleted = false,
+    this.title,
     this.instructions,
+    this.referenceImages = const [],
   });
 }
-
 
 /// 내부 편집용 이미지 모델(서버키 or 로컬바이트 보관)
 class _EditImage {
@@ -68,14 +72,15 @@ class PracticeDetailPage extends StatefulWidget {
 
 class _PracticeDetailPageState extends State<PracticeDetailPage> {
   // ── 편집 상태 ────────────────────────────────────────────────────────────────
+  late String _title = widget.data.title;               // ✅ 제목 편집
   late String _instructions = widget.data.instructions ?? '';
   late List<_EditImage> _images = [
     for (final s in widget.data.referenceImages)
       _EditImage(id: UniqueKey().toString(), keyOrUrl: s),
   ];
 
-  PracticeDetailResult? _lastSaved;  // 이번 세션에서 마지막 저장 결과
-  bool _everSaved = false;           // 세션 중 한 번이라도 저장했는지
+  PracticeDetailResult? _lastSaved; // 마지막 저장 결과
+  bool _everSaved = false;          // 세션 중 한 번이라도 저장했는지
 
   bool _dirty = false;
   bool _saving = false;
@@ -88,13 +93,12 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
   // ── 생명주기 ────────────────────────────────────────────────────────────────
   @override
   void dispose() {
-    // 메모리 회수 힌트
     _signedMap.clear();
     for (final e in _images) { e.bytes = null; }
     super.dispose();
   }
 
-  // ── Pop 가드(DiscardConfirmSheet) ───────────────────────────────────────────
+  // ── Pop 가드 ────────────────────────────────────────────────────────────────
   Future<void> _handleBack() async {
     if (_saving) {
       if (!mounted) return;
@@ -104,17 +108,18 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       );
       return;
     }
+
+    // 변경 없음: 이전 저장결과(or null)로 반환
     if (!_dirty) {
-    if (mounted) {
+      if (!mounted) return;
       Navigator.pop(
         context,
-        _lastSaved ??
-          const PracticeDetailResult(saved: false, referenceImages: []),
+        _lastSaved ?? const PracticeDetailResult(saved: false, referenceImages: []),
       );
-    }
       return;
     }
 
+    // 변경사항 있음: 버릴지 확인
     final leave = await showDiscardChangesDialog(
       context,
       title: '변경사항을 저장하지 않고 나갈까요?',
@@ -123,16 +128,120 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       leaveText: '나가기',
       barrierDismissible: true,
     );
-    if (leave == true && mounted) {
-      // 편집을 버리고 나가더라도, 이전에 "저장된 적"이 있으면 부모가 갱신 필요
-      Navigator.pop(
-            context,
-            _everSaved
-              ? (_lastSaved ?? const PracticeDetailResult(saved: true, referenceImages: []))
-        : const PracticeDetailResult(saved: false, referenceImages: []),
-    );
-    }
 
+    if (leave == true && mounted) {
+      Navigator.pop(
+        context,
+        _everSaved
+            ? (_lastSaved ?? const PracticeDetailResult(saved: true))
+            : const PracticeDetailResult(saved: false),
+      );
+    }
+  }
+
+  // ── 제목 편집 바텀시트 ──────────────────────────────────────────────────────
+  Future<void> _editTitle() async {
+    final ctl = TextEditingController(text: _title);
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        final inset = MediaQuery.of(ctx).viewInsets.bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: inset),
+          child: DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.55,
+            minChildSize: 0.4,
+            maxChildSize: 0.95,
+            builder: (_, controller) {
+              return SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                  child: Column(
+                    children: [
+                      _sheetGrabber(),
+                      const SizedBox(height: 8),
+                      const Text('제목 수정',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: UiTokens.title)),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: ctl,
+                        maxLines: 1,
+                        decoration: _inputDeco('제목을 입력하세요'),
+                      ),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('닫기'),
+                          ),
+                          const Spacer(),
+                          FilledButton(
+                            onPressed: () {
+                              final v = ctl.text.trim();
+                              if (!mounted) return;
+                              if (v.isNotEmpty) {
+                                setState(() {
+                                  _title = v;
+                                  _dirty = true;
+                                });
+                              }
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text('확인', style: TextStyle(fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  // ── 삭제 (RPC 사용) ─────────────────────────────────────────────────────────
+  Future<void> _delete() async {
+    if (_saving) return;
+
+    final sure = await showDiscardChangesDialog(
+      context,
+      title: '정말 삭제할까요?',
+      message: '이 실습과 연결된 참고 이미지를 포함해 되돌릴 수 없어요.',
+      stayText: '취소',
+      leaveText: '삭제',
+      isDanger: true,
+      barrierDismissible: true,
+    );
+    if (!sure || !mounted) return;
+
+    setState(() => _saving = true);
+    try {
+      // 관리 세션 보장 + RPC 호출
+      try { await SupabaseService.instance.ensureAdminSessionLinked(); } catch (_) {}
+      await SupabaseService.instance.adminDeletePracticeSet(code: widget.data.code);
+
+      if (!mounted) return;
+      Navigator.pop(context, const PracticeDetailResult(deleted: true));
+    } catch (e) {
+      print(e);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('삭제 실패: $e')),
+      );
+    }
   }
 
   // ── 썸네일 URL 해석(키→서명URL, 이미 URL이면 통과) ───────────────────────────
@@ -151,7 +260,6 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
   Future<String?> _futureFor(String raw) =>
       _signedMap.putIfAbsent(raw, () => _resolveDisplayUrl(raw));
 
-  // ── 썸네일 작은 위젯들 ─────────────────────────────────────────────────────
   Widget _thumbSkeleton() => Container(
     color: const Color(0xFFF1F5F9),
     child: const Center(
@@ -198,8 +306,6 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
                 if (xf == null) return;
 
                 final bytes = await xf.readAsBytes();
-
-                // 시트가 닫혔으면 중단
                 if (!sheetCtx.mounted) return;
 
                 setInner(() {
@@ -548,10 +654,10 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
         }
       }
 
-      // 2) RPC upsert (지시문 + 이미지 키리스트 교체)
+      // 2) RPC upsert (제목 + 지시문 + 이미지 키리스트 교체)
       final saved = await SupabaseService.instance.adminUpsertPracticeSet(
         code: code,
-        title: widget.data.title, // 이번 페이지에서는 제목 편집 없음
+        title: _title, // ✅ 제목 포함
         instructions: _instructions.isEmpty ? null : _instructions,
         referenceImages: finalKeys,
         active: widget.data.active,
@@ -572,17 +678,15 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
 
       _everSaved = true;
       _lastSaved = PracticeDetailResult(
-            saved: true,
-            referenceImages: retRefs,
-            instructions: _instructions.isEmpty ? null : _instructions,
-          );
+        saved: true,
+        title: _title,
+        instructions: _instructions.isEmpty ? null : _instructions,
+        referenceImages: retRefs,
+      );
 
       if (!mounted) return;
       setState(() {
-        _images = [
-          for (final s in retRefs)
-            _EditImage(id: UniqueKey().toString(), keyOrUrl: s),
-        ];
+        _images = [for (final s in retRefs) _EditImage(id: UniqueKey().toString(), keyOrUrl: s)];
         _dirty = false;
         _saving = false;
         _signedMap.clear();
@@ -631,12 +735,9 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: PopScope(
-        // 저장 중/더러운 상태만 가로막고, 평소엔 시스템 pop 허용
-        canPop: !_dirty && !_saving,
+        canPop: false, // 항상 우리가 pop 제어(결과 전달 위해)
         onPopInvoked: (didPop) {
-          // canPop:true인 경우 시스템이 이미 pop을 처리 -> 아무 것도 안 함
           if (didPop) return;
-          // canPop:false인 상태에서 뒤로가기가 시도되면 우리 로직으로 처리
           _handleBack();
         },
         child: Scaffold(
@@ -646,14 +747,14 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
             elevation: 0,
             leading: IconButton(
               tooltip: '뒤로가기',
-              icon: Icon( _dirty || _saving ? Icons.close_rounded : Icons.arrow_back , color: UiTokens.title),
+              icon: const Icon(Icons.arrow_back, color: UiTokens.title),
               onPressed: _handleBack,
             ),
             title: Row(
               children: [
                 Expanded(
                   child: Text(
-                    data.title,
+                    _title, // ✅ 로컬 제목 반영
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700),
                   ),
@@ -664,12 +765,13 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
             ),
             actions: [
               IconButton(
-                tooltip: '삭제(추후 연결)',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('삭제 기능은 추후 연결됩니다.')),
-                  );
-                },
+                tooltip: '제목 수정',
+                onPressed: _editTitle,
+                icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
+              ),
+              IconButton(
+                tooltip: '삭제',
+                onPressed: _delete,
                 icon: const Icon(Icons.delete_outline, color: UiTokens.actionIcon),
               ),
             ],

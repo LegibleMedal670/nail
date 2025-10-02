@@ -613,16 +613,19 @@ class SupabaseService {
   /// - 서버 RPC: admin_delete_practice_set
   Future<void> adminDeletePracticeSet({
     required String code,
-    String? adminKey,
+    String? adminKey, // 필요하면 외부에서 주입
   }) async {
-    final key = adminKey ?? this.adminKey;
+    final key = adminKey ?? this.adminKey; // this.adminKey를 쓰고 있다면 유지
     if (key == null || key.isEmpty) {
       throw Exception('adminKey is missing');
     }
-    await _sb.rpc('admin_delete_practice_set', params: {
-      'p_admin_key': key,
-      'p_code': code,
-    });
+    await _sb.rpc(
+      'admin_delete_practice_set',
+      params: {
+        'p_admin_key': key,
+        'p_code': code,
+      },
+    );
   }
 
 

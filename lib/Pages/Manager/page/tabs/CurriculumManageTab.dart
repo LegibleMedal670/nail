@@ -36,7 +36,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
   // ---- 실습 목록용 로컬 상태 ----
   bool _pracLoading = false;
   String? _pracError;
-  List<_PracticeSet> _pracItems = const [];
+  List<_PracticeSet> _pracItems = <_PracticeSet>[];
 
   // 상위(AppBar 토글) 변경 시 동기화
   void _onKindChanged() {
@@ -102,7 +102,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
 
       _pracItems = rows
           .map((e) => _PracticeSet.fromJson(Map<String, dynamic>.from(e)))
-          .toList(growable: false);
+          .toList(growable: true);
     } catch (e) {
       _pracError = e.toString();
     } finally {
@@ -267,7 +267,6 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                         summary: summary,
                         badges: badges,
                           onTap: () async {
-                            // 상세 열기
                             final res = await Navigator.push<PracticeDetailResult>(
                               context,
                               MaterialPageRoute(
@@ -286,24 +285,55 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                               ),
                             );
 
-                            // 저장된 경우에만 로컬 리스트 반영 (서버 재조회 없이 즉시)
+                            if (!mounted) return;
+
+                            // ── 1) 삭제 반영: 상세에서 Navigator.pop(... deleted: true)로 내려보내기
+                            final bool deleted = (() {
+                              try {
+                                // deleted 필드가 없는 기존 Result와도 호환되게 dynamic 접근
+                                return (res as dynamic)?.deleted == true;
+                              } catch (_) {
+                                return false;
+                              }
+                            })();
+
+                            if (deleted) {
+                              setState(() {
+                                final idx = _pracItems.indexWhere((x) => x.id == it.id);
+                                if (idx != -1) _pracItems.removeAt(idx);
+                              });
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('‘${it.title}’이(가) 삭제되었습니다.')),
+                              );
+                              return;
+                            }
+
+                            // ── 2) 저장 반영: 제목/지시문/이미지 즉시 업데이트
                             if (res?.saved == true) {
                               setState(() {
-                                final old = _pracItems[i];
-                                _pracItems[i] = _PracticeSet(
+                                final idx = _pracItems.indexWhere((x) => x.id == it.id);
+                                if (idx == -1) return;
+
+                                final old = _pracItems[idx];
+                                String newTitle = old.title;
+                                try {
+                                  final dyn = res as dynamic;
+                                  if (dyn?.title is String && (dyn.title as String).isNotEmpty) {
+                                    newTitle = dyn.title as String;
+                                  }
+                                } catch (_) {}
+
+                                _pracItems[idx] = _PracticeSet(
                                   id: old.id,
                                   code: old.code,
-                                  title: old.title,
+                                  title: newTitle,
                                   instructions: res!.instructions ?? old.instructions,
-                                  referenceImages: res.referenceImages, // ✅ 개수/썸네일 즉시 반영
+                                  referenceImages: res.referenceImages,
                                   active: old.active,
                                   createdAt: old.createdAt,
                                   updatedAt: old.updatedAt,
                                 );
                               });
-
-                              // 더 안전하게 하고 싶으면 여기서 _loadPractice() 한 번 호출해도 OK.
-                              // await _loadPractice();
                             }
                           }
                       );
