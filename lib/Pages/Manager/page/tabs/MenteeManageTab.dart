@@ -9,7 +9,7 @@ import 'package:nail/Pages/Manager/page/MenteeDetailPage.dart';
 import 'package:nail/Pages/Manager/page/MenteeEditPage.dart';
 import 'package:nail/Pages/Manager/widgets/MenteeSummaryTile.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
-import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
+import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Providers/AdminProgressProvider.dart';

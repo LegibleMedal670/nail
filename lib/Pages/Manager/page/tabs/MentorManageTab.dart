@@ -7,14 +7,14 @@ import 'package:nail/Pages/Manager/models/mentor.dart';
 import 'package:nail/Pages/Manager/page/MentorEditPage.dart';
 import 'package:nail/Pages/Manager/widgets/MetricCard.dart';
 import 'package:nail/Pages/Manager/widgets/MentorTile.dart';
-import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
+import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 // ✅ 추가: 관리자 세션 키를 읽기 위함
 import 'package:nail/Providers/UserProvider.dart';
 
 // ✅ 추가: 멘토 상세 Provider + Page
-import 'package:nail/Providers/MentorDetailProvider.dart';
+import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:nail/Pages/Manager/page/MentorDetailPage.dart';
 
 enum MentorSort { recentHire, name, menteeDesc, menteeAsc, fastGraduate }

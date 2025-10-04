@@ -3,11 +3,11 @@ import 'package:nail/Pages/Manager/page/AssignMenteesPage.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/mentor.dart' as legacy; // 기존 Mentor 모델
-import 'package:nail/Providers/MentorDetailProvider.dart';
+import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:nail/Pages/Manager/models/MenteeBrief.dart';
 import 'package:nail/Pages/Manager/page/MentorEditPage.dart';
 import 'package:nail/Pages/Manager/page/MenteePracticeListPage.dart';
-import 'package:nail/Pages/Manager/widgets/SortBottomSheet.dart';
+import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 
 class MentorDetailPage extends StatefulWidget {
   final legacy.Mentor mentor; // 목록에서 받아옴

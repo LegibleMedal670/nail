@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Providers/MentorDetailProvider.dart';
+import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Services/SupabaseService.dart';
 

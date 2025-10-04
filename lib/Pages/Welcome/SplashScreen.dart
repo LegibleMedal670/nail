@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
@@ -52,15 +53,33 @@ class _SplashScreenState extends State<SplashScreen> {
     if (_navigated || !mounted || _user == null) return;
     _navigated = true;
 
-    // 스플래시 최소 노출 보장
     await Future.delayed(_minSplashDuration);
     if (!mounted) return;
 
-    final goMenteeHome = _user!.isLoggedIn && !_user!.isAdmin;
-    final Widget dest = goMenteeHome ? const MenteeMainPage() : const SelectRolePage();
+    final u = _user!;
+    Widget dest;
+
+    if (!u.isLoggedIn) {
+      dest = const SelectRolePage();
+    } else if (u.isAdmin) {
+      // 기존 정책대로 관리자 진입점은 SelectRolePage에서 선택하도록 유지
+      dest = const SelectRolePage();
+    } else if (u.isMentor) {
+      // ✅ 멘토 세션이면 멘토 메인으로
+      dest = MentorMainPage(
+        mentorLoginKey: u.current!.loginKey,
+        mentorName: u.nickname,
+        mentorPhotoUrl: u.photoUrl,
+        mentorHiredAt: u.joinedAt,
+      );
+    } else {
+      // 멘티
+      dest = const MenteeMainPage();
+    }
 
     Navigator.pushReplacement(context, _buildPageRoute(dest));
   }
+
 
   PageRouteBuilder _buildPageRoute(Widget screen) {
     return PageRouteBuilder(

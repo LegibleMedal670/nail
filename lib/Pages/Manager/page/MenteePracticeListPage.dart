@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/MenteeBrief.dart';
 import 'package:nail/Pages/Manager/models/PracticeAttempt.dart';
-import 'package:nail/Providers/MentorDetailProvider.dart';
+import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:provider/provider.dart';
 
 class MenteePracticeListPage extends StatefulWidget {
