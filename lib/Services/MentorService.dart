@@ -21,12 +21,25 @@ class MentorService {
   // 큐 목록 (stub)
   Future<List<Map<String, dynamic>>> listQueue({
     required String loginKey,
-    String status = 'submitted', // 'submitted' | 'reviewed'
+    String status = 'submitted',
     int limit = 50,
     int offset = 0,
   }) async {
-    // TODO: mentor_list_practice_queue RPC로 교체
-    return <Map<String, dynamic>>[];
+    // 더미 1건 (status에 따라 표시만 다르게)
+    final now = DateTime.now().toIso8601String();
+    return [
+      {
+        'id': 'test-attempt-1',
+        'attempt_no': 3,
+        'set_code': 'PS-001',
+        'mentee_id': 'uuid-mentee-1',
+        'mentee_name': '홍길동',
+        'submitted_at': now,
+        'reviewed_at': null,
+        'status': status == 'reviewed' ? 'reviewed' : 'submitted',
+        'rating': null,
+      },
+    ];
   }
 
   // 내 멘티 (stub) — ✅ onlyPending 추가

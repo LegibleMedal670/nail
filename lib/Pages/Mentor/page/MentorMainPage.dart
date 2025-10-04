@@ -1,3 +1,4 @@
+// lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:provider/provider.dart';
@@ -92,7 +93,7 @@ class _ScaffoldView extends StatelessWidget {
             slivers: [
               const SliverToBoxAdapter(child: _ProfileHeader()),
               const SliverToBoxAdapter(child: _KpiHeader()),
-              // const SliverToBoxAdapter(child: SizedBox(height: 4)),
+              const SliverToBoxAdapter(child: SizedBox(height: 4)),
               const SliverToBoxAdapter(child: _Tabs()),
               if (p.tabIndex == 0) const _QueueTab(),
               if (p.tabIndex == 1) const _MenteesTab(),
@@ -173,7 +174,7 @@ class _KpiHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.watch<MentorProvider>();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: GridView(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -233,7 +234,7 @@ class _KpiTile extends StatelessWidget {
   }
 }
 
-/// ===== 커스텀 세그먼트(대기 큐 / 내 멘티 / 히스토리) - 깜빡임 제거 버전 =====
+/// ===== 커스텀 세그먼트(대기 큐 / 내 멘티 / 히스토리) - 단일 인디케이터 =====
 class _Tabs extends StatelessWidget {
   const _Tabs();
 
@@ -243,11 +244,11 @@ class _Tabs extends StatelessWidget {
     const labels = ['대기 큐', '내 멘티', '히스토리'];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
       child: LayoutBuilder(
         builder: (ctx, c) {
           final totalW = c.maxWidth;
-          final itemW = (totalW - 8) / labels.length; // 패딩 4+4 고려
+          final itemW = (totalW - 8) / labels.length; // 패딩 4+4
           final left = 4 + itemW * p.tabIndex;
 
           return Container(
@@ -259,7 +260,7 @@ class _Tabs extends StatelessWidget {
             height: 44,
             child: Stack(
               children: [
-                // ✅ 단 하나의 하이라이트만 이동
+                // ✅ 하나의 하이라이트만 이동
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOut,
@@ -275,7 +276,7 @@ class _Tabs extends StatelessWidget {
                     ),
                   ),
                 ),
-                // 라벨은 정적 텍스트로만 표시 → 깜빡임 없음
+                // 라벨(정적) – 깜빡임 없음
                 Row(
                   children: List.generate(labels.length, (i) {
                     final selected = p.tabIndex == i;
@@ -304,7 +305,6 @@ class _Tabs extends StatelessWidget {
     );
   }
 }
-
 
 /// ===== (A) 대기 큐 탭 =====
 class _QueueTab extends StatelessWidget {
@@ -341,7 +341,7 @@ class _QueueTab extends StatelessWidget {
     final p = context.watch<MentorProvider>();
     return SliverList.list(children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Row(
           children: [
             const Text('실습 대기/완료',
@@ -381,8 +381,12 @@ class _QueueTab extends StatelessWidget {
                 menteeName: '${it['mentee_name'] ?? ''}',
                 setCode: '${it['set_code'] ?? ''}',
                 attemptNo: it['attempt_no'] ?? 0,
-                status: '${it['status'] ?? ''}',
-                submittedAt: it['submitted_at'],
+                // 날짜는 제출일을 사용
+                date: it['submitted_at'],
+                dateLabel: '제출일',
+                // 대기 큐에서는 무조건 대기 배지
+                waiting: true,
+                rating: null,
                 onOpen: () async {
                   await Navigator.push(
                     ctx,
@@ -477,7 +481,6 @@ class _MenteesTab extends StatelessWidget {
             itemBuilder: (_, i) {
               final m = p.mentees[i];
               final has = (m['pending_count'] ?? 0) > 0;
-              final label = has ? '대기 ${m['pending_count']}건' : '대기 없음';
               final photoUrl = m['photo_url'] as String?;
               final joined = (m['joined_at'] ?? '').toString().split(' ').first;
 
@@ -606,8 +609,11 @@ class _HistoryTab extends StatelessWidget {
                 menteeName: '${it['mentee_name'] ?? ''}',
                 setCode: '${it['set_code'] ?? ''}',
                 attemptNo: it['attempt_no'] ?? 0,
-                status: '${it['rating'] ?? ''}', // 등급 표시
-                submittedAt: it['reviewed_at'],
+                // 검토일 표시 + 등급 배지
+                date: it['reviewed_at'],
+                dateLabel: '검토일',
+                waiting: false,
+                rating: (it['rating'] as String?),
                 onOpen: () {}, // 읽기 전용 상세 페이지(선택)
               );
             },
@@ -617,61 +623,172 @@ class _HistoryTab extends StatelessWidget {
   }
 }
 
+/// ===== 공통 카드 & 배지들 =====
+
+/// 날짜 문자열만 추출 (dynamic 안전 파서)
+String _fmtDateOnly(dynamic v) {
+  if (v == null) return '';
+  try {
+    if (v is DateTime) {
+      return '${v.year}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
+    }
+    final s = v.toString();
+    // ISO8601 or "YYYY-MM-DD ..."
+    final DateTime d = DateTime.tryParse(s) ??
+        DateTime.tryParse(s.split(' ').first) ??
+        DateTime.now();
+    return '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  } catch (_) {
+    return v.toString().split(' ').first;
+  }
+}
+
 class _QueueItemCard extends StatelessWidget {
   final String menteeName;
   final String setCode;
   final int attemptNo;
-  final String status;
-  final dynamic submittedAt;
+  final dynamic date;     // 제출일/검토일(any)
+  final String dateLabel; // '제출일' 또는 '검토일'
+  final bool waiting;     // 큐: true → '대기' 배지
+  final String? rating;   // 히스토리: 'high'|'mid'|'low'
   final VoidCallback onOpen;
+
   const _QueueItemCard({
     required this.menteeName,
     required this.setCode,
     required this.attemptNo,
-    required this.status,
-    required this.submittedAt,
+    required this.date,
+    required this.dateLabel,
+    required this.waiting,
+    required this.rating,
     required this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
-    final sub = (submittedAt ?? '').toString();
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: UiTokens.cardBorder),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [UiTokens.cardShadow],
-      ),
-      padding: const EdgeInsets.all(12),
-      child: Row(children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(10),
+    final dateText = _fmtDateOnly(date);
+
+    return GestureDetector(
+      onTap: onOpen,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: UiTokens.cardBorder),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [UiTokens.cardShadow],
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Row(children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.assignment_outlined, color: UiTokens.actionIcon),
           ),
-          child: const Icon(Icons.assignment_outlined, color: UiTokens.actionIcon),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('$menteeName • $setCode • #$attemptNo',
-                style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 4),
-            Text('시간: $sub · 상태: $status',
-                style: TextStyle(
-                    color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700)),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        FilledButton(
-          onPressed: onOpen,
-          style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
-          child: const Text('열기'),
-        ),
-      ]),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$menteeName • $setCode • $attemptNo회차',
+                  style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text('$dateLabel: $dateText',
+                      style: TextStyle(
+                        color: UiTokens.title.withOpacity(0.6),
+                        fontWeight: FontWeight.w700,
+                      )),
+                ],
+              ),
+            ]),
+          ),
+          if (waiting) const _StatusBadgeWaiting(),
+          if (!waiting && rating != null) _StatusBadgeRating(rating: rating!),
+        ]),
+      ),
+    );
+  }
+}
+
+class _StatusBadgeWaiting extends StatelessWidget {
+  const _StatusBadgeWaiting();
+
+  @override
+  Widget build(BuildContext context) {
+    const bg = Color(0xFFFFF7ED);
+    const border = Color(0xFFFCCFB3);
+    const fg = Color(0xFFEA580C);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.hourglass_bottom_rounded, size: 14, color: fg),
+          SizedBox(width: 4),
+          Text('대기', style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatusBadgeRating extends StatelessWidget {
+  final String rating; // 'high'|'mid'|'low'
+  const _StatusBadgeRating({required this.rating});
+
+  @override
+  Widget build(BuildContext context) {
+    late Color bg, border, fg;
+    late String label;
+    late IconData icon;
+
+    switch (rating) {
+      case 'high':
+        bg = const Color(0xFFECFDF5);
+        border = const Color(0xFFB7F3DB);
+        fg = const Color(0xFF059669);
+        label = '상';
+        icon = Icons.trending_up_rounded;
+        break;
+      case 'mid':
+        bg = const Color(0xFFF1F5F9);
+        border = const Color(0xFFE2E8F0);
+        fg = const Color(0xFF64748B);
+        label = '중';
+        icon = Icons.horizontal_rule_rounded;
+        break;
+      default: // 'low' or else
+        bg = const Color(0xFFFFFBEB);
+        border = const Color(0xFFFEF3C7);
+        fg = const Color(0xFFB45309);
+        label = '하';
+        icon = Icons.trending_down_rounded;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: fg),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
+        ],
+      ),
     );
   }
 }
