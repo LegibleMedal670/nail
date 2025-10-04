@@ -48,14 +48,12 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
         'set_code'   : 'PS-001',
         'attempt_no' : 3,
         'submitted_at': DateTime.now().toIso8601String(),
-        // 'reviewed_at': ...,
-        // 'rating': 'mid',
       };
       _instructions = '큐티클 정리 후 베이스 컬러 2코트. 라인 번짐 주의.\n참고 이미지를 확인하고 최대한 비슷하게 완성하세요.';
       _images = [
-        'https://picsum.photos/seed/1/800/600',
-        'https://picsum.photos/seed/2/800/600',
-        'https://picsum.photos/seed/3/800/600',
+        'https://picsum.photos/seed/1/1200/900',
+        'https://picsum.photos/seed/2/1200/900',
+        'https://picsum.photos/seed/3/1200/900',
       ];
       _prev = [
         {'attempt_no': 1, 'reviewed_at': DateTime.now().subtract(const Duration(days: 9)).toIso8601String(), 'rating': 'low'},
@@ -99,6 +97,22 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
 
   void _unfocus() => FocusScope.of(context).unfocus();
 
+  // ✅ 이미지 전체화면 갤러리 열기
+  void _openGallery(int initialIndex) {
+    if (_images.isEmpty) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        barrierColor: Colors.black,
+        opaque: false,
+        pageBuilder: (_, __, ___) => _ImageGalleryScreen(
+          images: _images,
+          initialIndex: initialIndex,
+        ),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewInsets = MediaQuery.of(context).viewInsets.bottom; // 키보드 높이
@@ -111,8 +125,9 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
         backgroundColor: Colors.white,
         appBar: AppBar(
           leading: IconButton(
+            tooltip: '나가기',
             icon: const Icon(Icons.arrow_back, color: UiTokens.title),
-            onPressed: () async {
+            onPressed: (){
               if (mounted) Navigator.pop(context);
             },
           ),
@@ -157,7 +172,11 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
               _InstructionsBoxGreen(text: _instructions!), // ✅ 초록 톤
             ],
             const SizedBox(height: 12),
-            _ImagesSection(images: _images),
+            // ✅ 이미지 섹션: 탭하면 전체화면
+            _ImagesSection(
+              images: _images,
+              onTapImage: _openGallery,
+            ),
             const SizedBox(height: 16),
             const _SectionTitle('등급'),
             const SizedBox(height: 8),
@@ -195,7 +214,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
                       attemptNo: no,
                       date: date,
                       rating: rating,
-                      onTap: () => _openPrevDetail(e), // ✅ 상세 모달
+                      onTap: () => _openPrevDetail(e), // 상세 모달
                     ),
                   );
                 }).toList(),
@@ -271,9 +290,6 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
                     controller: controller,
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     children: const [
-                      // 필요한 경우: 이전 시도 이미지, 피드백 전문 등
-                      // _PrevImagesGrid(urls: [...]),
-                      // _PrevFeedback(text: '...'),
                       SizedBox.shrink(),
                     ],
                   ),
@@ -356,10 +372,11 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-/// ===== 이미지 섹션(갤러리) =====
+/// ===== 이미지 섹션(갤러리) — 탭하면 전체화면 =====
 class _ImagesSection extends StatelessWidget {
   final List<String> images;
-  const _ImagesSection({required this.images});
+  final void Function(int index)? onTapImage;
+  const _ImagesSection({required this.images, this.onTapImage});
 
   @override
   Widget build(BuildContext context) {
@@ -387,16 +404,23 @@ class _ImagesSection extends StatelessWidget {
       ),
       itemBuilder: (_, i) {
         final url = images[i];
+        final tag = 'attempt_img_${i}_$url';
         return ClipRRect(
           borderRadius: BorderRadius.circular(10),
-          child: Image.network(url, fit: BoxFit.cover),
+          child: GestureDetector(
+            onTap: () => onTapImage?.call(i),
+            child: Hero(
+              tag: tag,
+              child: Image.network(url, fit: BoxFit.cover),
+            ),
+          ),
         );
       },
     );
   }
 }
 
-/// ===== 지시문 박스 (✅ 그린 톤) =====
+/// ===== 지시문 박스 (그린 톤) =====
 class _InstructionsBoxGreen extends StatelessWidget {
   final String text;
   const _InstructionsBoxGreen({required this.text});
@@ -618,6 +642,138 @@ class _StatusBadgeRating extends StatelessWidget {
           const SizedBox(width: 4),
           Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
         ],
+      ),
+    );
+  }
+}
+
+/// ===== 전체화면 이미지 갤러리 =====
+class _ImageGalleryScreen extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+  const _ImageGalleryScreen({required this.images, required this.initialIndex});
+
+  @override
+  State<_ImageGalleryScreen> createState() => _ImageGalleryScreenState();
+}
+
+class _ImageGalleryScreenState extends State<_ImageGalleryScreen> {
+  late final PageController _pc;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, widget.images.length - 1);
+    _pc = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _pc.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final imgs = widget.images;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pc,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemCount: imgs.length,
+            itemBuilder: (_, i) {
+              final url = imgs[i];
+              final tag = 'attempt_img_${i}_$url';
+              return Center(
+                child: _ZoomableHeroImage(tag: tag, url: url),
+              );
+            },
+          ),
+          // 상단 닫기/인덱스
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${_index + 1} / ${imgs.length}',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZoomableHeroImage extends StatefulWidget {
+  final String tag;
+  final String url;
+  const _ZoomableHeroImage({required this.tag, required this.url});
+
+  @override
+  State<_ZoomableHeroImage> createState() => _ZoomableHeroImageState();
+}
+
+class _ZoomableHeroImageState extends State<_ZoomableHeroImage> {
+  late TransformationController _tc;
+  TapDownDetails? _lastTapDown;
+
+  @override
+  void initState() {
+    super.initState();
+    _tc = TransformationController();
+  }
+
+  @override
+  void dispose() {
+    _tc.dispose();
+    super.dispose();
+  }
+
+  void _handleDoubleTap() {
+    // 더블탭: 원상/2.5x 토글
+    final m = _tc.value;
+    final isZoomed = m.getMaxScaleOnAxis() > 1.01;
+    _tc.value = isZoomed ? Matrix4.identity() : Matrix4.identity()..scale(2.5);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Hero(
+      tag: widget.tag,
+      child: GestureDetector(
+        onDoubleTapDown: (d) => _lastTapDown = d,
+        onDoubleTap: _handleDoubleTap,
+        child: InteractiveViewer(
+          transformationController: _tc,
+          minScale: 1.0,
+          maxScale: 6.0,
+          panEnabled: true,
+          scaleEnabled: true,
+          child: Image.network(widget.url, fit: BoxFit.contain),
+        ),
       ),
     );
   }
