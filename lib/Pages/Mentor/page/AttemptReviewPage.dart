@@ -1,8 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/MentorProvider.dart';
+import 'package:nail/Services/StorageService.dart'; // ✅ 키→서명URL 변환
 
 class AttemptReviewPage extends StatefulWidget {
   final String mentorLoginKey;
@@ -23,9 +25,9 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
 
   // 로드된 데이터
   Map<String, dynamic>? _attempt; // mentee_name, set_code, attempt_no, submitted_at ...
-  List<String> _images = [];       // 제출 이미지 url
+  List<String> _images = [];       // 제출 이미지 url (키→서명URL 변환 후)
   String? _instructions;           // 세트 지시문
-  List<Map<String, dynamic>> _prev = []; // {attempt_no, reviewed_at, rating}
+  List<Map<String, dynamic>> _prev = []; // {attempt_no, reviewed_at, rating, image_urls?}
 
   // 입력 상태
   String? _gradeKor; // '상'|'중'|'하'
@@ -35,35 +37,105 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
   @override
   void initState() {
     super.initState();
+
+    final api = SupabaseService.instance;
+    api.loginKey ??= widget.mentorLoginKey;
+
     _load();
+  }
+
+  // ===== 키 배열(List<dynamic>|List<String>)을 서명 URL(List<String>)로 변환 =====
+  Future<List<String>> _signAll(List keys) async {
+    final storage = StorageService();
+    final urls = <String>[];
+    for (final it in keys) {
+      if (it == null) continue;
+      final s = it.toString();
+      if (s.isEmpty) continue;
+      if (s.startsWith('http')) {
+        // 이미 URL이면 그대로 사용
+        urls.add(s);
+        continue;
+      }
+      final u = await storage.getOrCreateSignedUrlPractice(s);
+      if (u != null && u.isNotEmpty) {
+        urls.add(u);
+      } else {
+        // 필요시: 캐시 파기 후 재발급 시도
+        // await storage.evictSignedUrl(s);
+        // final retry = await storage.getOrCreateSignedUrlPractice(s);
+        // if (retry != null && retry.isNotEmpty) urls.add(retry);
+      }
+    }
+    return urls;
   }
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
 
     try {
-      // TODO: 실제 RPC로 교체
-      _attempt = {
-        'mentee_name': '홍길동',
-        'set_code'   : 'PS-001',
-        'attempt_no' : 3,
-        'submitted_at': DateTime.now().toIso8601String(),
-      };
-      _instructions = '큐티클 정리 후 베이스 컬러 2코트. 라인 번짐 주의.\n참고 이미지를 확인하고 최대한 비슷하게 완성하세요.';
-      _images = [
-        'https://picsum.photos/seed/1/1200/900',
-        'https://picsum.photos/seed/2/1200/900',
-        'https://picsum.photos/seed/3/1200/900',
-      ];
-      _prev = [
-        {'attempt_no': 1, 'reviewed_at': DateTime.now().subtract(const Duration(days: 9)).toIso8601String(), 'rating': 'low'},
-        {'attempt_no': 2, 'reviewed_at': DateTime.now().subtract(const Duration(days: 4)).toIso8601String(), 'rating': 'mid'},
-      ];
-      setState(() { _loading = false; });
+      final api = SupabaseService.instance;
+
+      // 1) 시도 단건 조회 (※ 서버 RPC: mentor_get_attempt)
+      //    예상 반환: mentee_id, mentee_name, set_code, attempt_no,
+      //             submitted_at, reviewed_at?, rating?, instructions?,
+      //             image_urls? / image_keys?
+      final row = await api.mentorGetAttempt(widget.attemptId);
+      if (row == null) throw Exception('attempt not found');
+
+      // 2) 메인 이미지: URL 우선, 없으면 키 → 서명URL
+      final List urlsRaw = (row['image_urls'] as List?) ?? const [];
+      final List keysRaw = (row['image_keys'] as List?) ?? const [];
+      List<String> images;
+      if (urlsRaw.isNotEmpty) {
+        images = urlsRaw.cast<String>();
+      } else if (keysRaw.isNotEmpty) {
+        images = await _signAll(keysRaw);
+      } else {
+        images = const [];
+      }
+
+      // 3) 이전 시도 목록 (※ 서버 RPC: mentor_list_prev_attempts)
+      final String menteeId = '${row['mentee_id']}';
+      final String setId  = '${row['set_code']}';
+      final int attemptNo   = (row['attempt_no'] as num?)?.toInt() ?? 0;
+
+      final prevList = await api.mentorListPrevAttempts(
+        menteeId: menteeId,
+        setId: setId,
+        // 지금 보고 있는 시도는 제외 (시그니처가 excludeAttemptId를 요구)
+        excludeAttemptId: widget.attemptId,
+        limit: 10,
+      );
+
+      // 각 prev의 이미지 키 → URL
+      final prevSigned = <Map<String, dynamic>>[];
+      for (final e in prevList) {
+        final pUrls = (e['image_urls'] as List?) ?? const [];
+        final pKeys = (e['image_keys'] as List?) ?? const [];
+        List<String> urls;
+        if (pUrls.isNotEmpty) {
+          urls = pUrls.cast<String>();
+        } else if (pKeys.isNotEmpty) {
+          urls = await _signAll(pKeys);
+        } else {
+          urls = const [];
+        }
+        prevSigned.add({...e, 'image_urls': urls});
+      }
+
+      setState(() {
+        _attempt = row;
+        _images = images;
+        _instructions = row['instructions'] as String?;
+        _prev = prevSigned;
+        _loading = false;
+      });
     } catch (e) {
       setState(() { _error = '불러오기 실패: $e'; _loading = false; });
     }
   }
+
 
   @override
   void dispose() {
@@ -97,16 +169,17 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
 
   void _unfocus() => FocusScope.of(context).unfocus();
 
-  // ✅ 이미지 전체화면 갤러리 열기
-  void _openGallery(int initialIndex) {
-    if (_images.isEmpty) return;
+  // 이미지 전체화면 갤러리
+  void _openGallery(int initialIndex, {List<String>? images}) {
+    final imgs = images ?? _images;
+    if (imgs.isEmpty) return;
     Navigator.of(context).push(
       PageRouteBuilder(
         barrierColor: Colors.black,
         opaque: false,
         pageBuilder: (_, __, ___) => _ImageGalleryScreen(
-          images: _images,
-          initialIndex: initialIndex,
+          images: imgs,
+          initialIndex: initialIndex.clamp(0, imgs.length - 1),
         ),
         transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
       ),
@@ -124,6 +197,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
+          backgroundColor: Colors.white, elevation: 0,
           leading: IconButton(
             tooltip: '나가기',
             icon: const Icon(Icons.arrow_back, color: UiTokens.title),
@@ -131,7 +205,6 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
               if (mounted) Navigator.pop(context);
             },
           ),
-          backgroundColor: Colors.white, elevation: 0,
           title: const Text('실습 리뷰',
               style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
         ),
@@ -169,13 +242,13 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
             _InfoCard(attempt: _attempt!),
             if (_instructions != null && _instructions!.trim().isNotEmpty) ...[
               const SizedBox(height: 12),
-              _InstructionsBoxGreen(text: _instructions!), // ✅ 초록 톤
+              _InstructionsBoxGreen(text: _instructions!), // 초록 톤
             ],
             const SizedBox(height: 12),
-            // ✅ 이미지 섹션: 탭하면 전체화면
+            // ✅ 메인 이미지(키→URL 변환 결과 활용) + 탭하면 전체화면
             _ImagesSection(
               images: _images,
-              onTapImage: _openGallery,
+              onTapImage: (i) => _openGallery(i),
             ),
             const SizedBox(height: 16),
             const _SectionTitle('등급'),
@@ -208,12 +281,14 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
                   final int no = (e['attempt_no'] ?? 0) as int;
                   final date = e['reviewed_at'];
                   final rating = (e['rating'] as String?) ?? 'low';
+                  final List<String> urls = ((e['image_urls'] as List?) ?? []).cast<String>();
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: _PrevItemTile(
                       attemptNo: no,
                       date: date,
                       rating: rating,
+                      hasImages: urls.isNotEmpty,
                       onTap: () => _openPrevDetail(e), // 상세 모달
                     ),
                   );
@@ -226,10 +301,13 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
     );
   }
 
+  // ===== 이전 시도 상세 모달 (키→URL 변환 결과 image_urls 사용, 확대 갤러리 재사용) =====
   Future<void> _openPrevDetail(Map<String, dynamic> e) async {
     final int no = (e['attempt_no'] ?? 0) as int;
     final date = e['reviewed_at'];
     final rating = (e['rating'] as String?) ?? 'low';
+    final List<String> urls = ((e['image_urls'] as List?) ?? []).cast<String>();
+    final String? fb = e['feedback'] as String?;
 
     await showModalBottomSheet(
       context: context,
@@ -244,14 +322,15 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
           padding: EdgeInsets.only(bottom: pad),
           child: DraggableScrollableSheet(
             expand: false,
-            initialChildSize: 0.5,
-            minChildSize: 0.4,
-            maxChildSize: 0.9,
+            initialChildSize: 0.65,
+            minChildSize: 0.45,
+            maxChildSize: 0.95,
             builder: (_, controller) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const SizedBox(height: 8),
-                Container(width: 40, height: 4,
+                Container(
+                  width: 40, height: 4,
                   decoration: BoxDecoration(
                     color: const Color(0xFFE2E8F0),
                     borderRadius: BorderRadius.circular(999),
@@ -284,14 +363,58 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
                         )),
                   ),
                 ),
-                const SizedBox(height: 16),
+                if (fb != null && fb.trim().isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        fb,
+                        style: TextStyle(
+                          color: UiTokens.title.withOpacity(0.85),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+
+                // ✅ 이미지 그리드 + 탭 시 전체화면 갤러리
                 Expanded(
-                  child: ListView(
+                  child: urls.isEmpty
+                      ? ListView(
                     controller: controller,
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    children: const [
-                      SizedBox.shrink(),
-                    ],
+                    children: const [ _EmptyBox(text: '이전 시도 이미지가 없습니다.') ],
+                  )
+                      : GridView.builder(
+                    controller: controller,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    itemCount: urls.length,
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3, crossAxisSpacing: 6, mainAxisSpacing: 6,
+                    ),
+                    itemBuilder: (_, i) {
+                      final url = urls[i];
+                      final tag = 'prev_${no}_img_$i';
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: GestureDetector(
+                          onTap: () => _openGallery(i, images: urls),
+                          child: Hero(
+                            tag: tag,
+                            child: Image.network(url, fit: BoxFit.cover),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -404,7 +527,7 @@ class _ImagesSection extends StatelessWidget {
       ),
       itemBuilder: (_, i) {
         final url = images[i];
-        final tag = 'attempt_img_${i}_$url';
+        final tag = 'attempt_img_$i';
         return ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: GestureDetector(
@@ -461,7 +584,7 @@ class _GradeSegment extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       _SegItem(label: '상', icon: Icons.trending_up_rounded, bg: const Color(0xFFECFDF5), bd: const Color(0xFFB7F3DB), fg: const Color(0xFF059669)),
-      _SegItem(label: '중', icon: Icons.horizontal_rule_rounded, bg: const Color(0xFFF1F5F9), bd: const Color(0xFFE2E8F0), fg: const Color(0xFF64748B)),
+      _SegItem(label: '중', icon: Icons.horizontal_rule_rounded, bg: const Color(0xFFEFF6FF), bd: const Color(0xFFDBEAFE), fg: const Color(0xFF2563EB)), // ← 업데이트
       _SegItem(label: '하', icon: Icons.trending_down_rounded, bg: const Color(0xFFFFFBEB), bd: const Color(0xFFFEF3C7), fg: const Color(0xFFB45309)),
     ];
     return Row(
@@ -516,12 +639,14 @@ class _PrevItemTile extends StatelessWidget {
   final int attemptNo;
   final dynamic date;
   final String rating; // 'high' | 'mid' | 'low'
+  final bool hasImages;
   final VoidCallback? onTap;
   const _PrevItemTile({
     super.key,
     required this.attemptNo,
     required this.date,
     required this.rating,
+    required this.hasImages,
     this.onTap,
   });
 
@@ -547,7 +672,9 @@ class _PrevItemTile extends StatelessWidget {
                 color: const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.history_rounded, color: UiTokens.actionIcon, size: 20),
+              child: Icon(
+                  hasImages ? Icons.image_rounded : Icons.history_rounded,
+                  color: UiTokens.actionIcon, size: 20),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -688,7 +815,7 @@ class _ImageGalleryScreenState extends State<_ImageGalleryScreen> {
             itemCount: imgs.length,
             itemBuilder: (_, i) {
               final url = imgs[i];
-              final tag = 'attempt_img_${i}_$url';
+              final tag = 'attempt_img_$i';
               return Center(
                 child: _ZoomableHeroImage(tag: tag, url: url),
               );
@@ -738,7 +865,6 @@ class _ZoomableHeroImage extends StatefulWidget {
 
 class _ZoomableHeroImageState extends State<_ZoomableHeroImage> {
   late TransformationController _tc;
-  TapDownDetails? _lastTapDown;
 
   @override
   void initState() {
@@ -753,7 +879,6 @@ class _ZoomableHeroImageState extends State<_ZoomableHeroImage> {
   }
 
   void _handleDoubleTap() {
-    // 더블탭: 원상/2.5x 토글
     final m = _tc.value;
     final isZoomed = m.getMaxScaleOnAxis() > 1.01;
     _tc.value = isZoomed ? Matrix4.identity() : Matrix4.identity()..scale(2.5);
@@ -764,7 +889,6 @@ class _ZoomableHeroImageState extends State<_ZoomableHeroImage> {
     return Hero(
       tag: widget.tag,
       child: GestureDetector(
-        onDoubleTapDown: (d) => _lastTapDown = d,
         onDoubleTap: _handleDoubleTap,
         child: InteractiveViewer(
           transformationController: _tc,

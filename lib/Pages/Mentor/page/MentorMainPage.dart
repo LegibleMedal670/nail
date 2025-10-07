@@ -377,17 +377,21 @@ class _QueueTab extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (ctx, i) {
               final it = p.queueItems[i];
+              final bool isWaiting = p.queueStatus == 'submitted';
+              final dynamic date = isWaiting ? it['submitted_at'] : it['reviewed_at'];
+              final String dateLabel = isWaiting ? '제출일' : '검토일';
+              final String? rating = isWaiting ? null : (it['rating'] as String?);
+
               return _QueueItemCard(
                 menteeName: '${it['mentee_name'] ?? ''}',
                 setCode: '${it['set_code'] ?? ''}',
-                attemptNo: it['attempt_no'] ?? 0,
-                // 날짜는 제출일을 사용
-                date: it['submitted_at'],
-                dateLabel: '제출일',
-                // 대기 큐에서는 무조건 대기 배지
-                waiting: true,
-                rating: null,
+                attemptNo: (it['attempt_no'] as num?)?.toInt() ?? 0,
+                date: date,
+                dateLabel: dateLabel,
+                waiting: isWaiting,
+                rating: rating,
                 onOpen: () async {
+                  // 완료건도 열 수는 있게 두되, 서버에서 중복 리뷰 방지하도록(권장)
                   await Navigator.push(
                     ctx,
                     MaterialPageRoute(

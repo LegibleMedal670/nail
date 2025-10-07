@@ -20,6 +20,9 @@ class SupabaseService {
   /// 관리자 편집용 키(관리자 접속코드). 로그인 성공 시 UserProvider가 주입.
   String? adminKey;
 
+  /// 현재 세션 로그인 키
+  String? loginKey;
+
   bool _adminLinkEnsured = false;
 
   // ---------------- 유저/멘티/멘토 관련 ----------------
@@ -422,20 +425,21 @@ class SupabaseService {
   // ===================== Mentors (Admin) =====================
 
   Future<Map<String, dynamic>?> _rpcSingle(String fn, Map<String, dynamic> params) async {
-    final res = await _sb.rpc(fn, params: params).select();
+    // ✅ .select() 제거
+    final res = await _sb.rpc(fn, params: params);
     if (res == null) return null;
-    final rows = (res is List) ? res : [res];
-    if (rows.isEmpty) return null;
-    return Map<String, dynamic>.from(rows.first as Map);
+    if (res is List && res.isNotEmpty) return Map<String, dynamic>.from(res.first as Map);
+    if (res is Map) return Map<String, dynamic>.from(res as Map);
+    return null;
   }
 
   Future<List<Map<String, dynamic>>> _rpcList(String fn, Map<String, dynamic> params) async {
-    final res = await _sb.rpc(fn, params: params).select();
+    // ✅ .select() 제거
+    final res = await _sb.rpc(fn, params: params);
     if (res == null) return const <Map<String, dynamic>>[];
     final rows = (res is List) ? res : [res];
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
-
   Future<Map<String, dynamic>?> adminMentorOverview({
     required String mentorId,
     int avgDays = 90,
@@ -627,6 +631,92 @@ class SupabaseService {
       },
     );
   }
+
+  // ===================== Mentor RPCs =====================
+
+  Future<Map<String, dynamic>?> mentorOverview({
+    int avgDays = 90,
+    int recentDays = 7,
+  }) {
+    return _rpcSingle('mentor_overview', {
+      'p_login_key': loginKey,
+      'p_avg_days': avgDays,
+      'p_recent_days': recentDays,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> mentorListMyMentees({
+    bool onlyPending = false,
+    int limit = 200,
+    int offset = 0,
+  }) {
+    return _rpcList('mentor_list_my_mentees', {
+      'p_login_key': loginKey,
+      'p_only_pending': onlyPending,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> mentorListPendingQueue({
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _rpcList('mentor_list_pending_queue', {
+      'p_login_key': loginKey,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> mentorListHistory({
+    int lastNDays = 30,
+    int limit = 50,
+    int offset = 0,
+  }) {
+    return _rpcList('mentor_list_history', {
+      'p_login_key': loginKey,
+      'p_last_n_days': lastNDays,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+  }
+
+  Future<Map<String, dynamic>?> mentorGetAttempt(String attemptId) {
+    return _rpcSingle('mentor_get_attempt', {
+      'p_login_key': loginKey,
+      'p_attempt_id': attemptId,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> mentorListPrevAttempts({
+    required String menteeId,
+    required String setId,
+    String? excludeAttemptId,
+    int limit = 20,
+  }) {
+    return _rpcList('mentor_list_prev_attempts', {
+      'p_login_key': loginKey,
+      'p_mentee_id': menteeId,
+      'p_set_id': setId,
+      'p_exclude_id': excludeAttemptId,
+      'p_limit': limit,
+    });
+  }
+
+  Future<Map<String, dynamic>?> mentorReviewAttempt({
+    required String attemptId,
+    required String gradeKor, // '상'|'중'|'하'
+    required String feedback,
+  }) {
+    return _rpcSingle('mentor_review_attempt', {
+      'p_login_key': loginKey,
+      'p_attempt_id': attemptId,
+      'p_grade_kor': gradeKor,
+      'p_feedback': feedback,
+    });
+  }
+
 
 
 }

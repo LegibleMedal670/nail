@@ -152,6 +152,8 @@ class UserProvider extends ChangeNotifier {
 
       // 멘티/멘토 세션이므로 adminKey는 null 유지
       _api.adminKey = null;
+
+      _api.loginKey = savedKey;
     } finally {
       _loading = false;
       notifyListeners();
@@ -190,6 +192,8 @@ class UserProvider extends ChangeNotifier {
         _adminKey = code;
         _api.adminKey = _adminKey;
         await _cache.clear();
+
+        _api.loginKey = null;
       } else {
         // 멘티/멘토 세션: 캐시에 저장, adminKey는 비움
         _adminKey = null;
@@ -199,6 +203,8 @@ class UserProvider extends ChangeNotifier {
           userId: _current!.userId,
           nickname: _current!.nickname,
         );
+
+        _api.loginKey = _current!.loginKey;
       }
       return true;
     } finally {
@@ -234,6 +240,7 @@ class UserProvider extends ChangeNotifier {
     _current = null;
     _adminKey = null;
     _api.adminKey = null;
+    _api.loginKey = null;
 
     await _cache.clear();
     notifyListeners();
