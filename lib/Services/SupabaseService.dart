@@ -717,6 +717,94 @@ class SupabaseService {
     });
   }
 
+  // ---------- Practice: Mentee ----------
 
+  // A) 실습 세트 목록 (active=true만) — RPC 없이 테이블 셀렉트로 시작해도 OK
+  Future<List<Map<String, dynamic>>> menteeListPracticeSets({bool onlyActive = true}) async {
+    final rows = await _sb
+        .from('practice_sets')
+        .select('id, code, title, instructions, reference_images, active')
+        .eq('active', true)                 // ← filter 먼저
+        .order('code', ascending: true);    // ← order는 마지막
+
+    if (rows is! List) return const [];
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  // B) 세트 상세(+히스토리 페이징)
+  Future<Map<String, dynamic>?> menteePracticeSetDetail({
+    required String setId,
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc('mentee_practice_set_detail', params: {
+      'p_set_id': setId,
+      'p_limit': limit,
+      'p_offset': offset,
+      'p_login_key': loginKey,
+    });
+    if (res == null) return null;
+    final row = (res is List && res.isNotEmpty) ? res.first : res;
+    return Map<String, dynamic>.from(row as Map);
+  }
+
+  // C) 시작/이어하기
+  Future<Map<String, dynamic>?> menteeStartOrContinue({required String setId}) async {
+    final res = await _sb.rpc('mentee_start_or_continue', params: {
+      'p_set_id': setId,
+      'p_login_key': loginKey,
+    });
+    if (res == null) return null;
+    final row = (res is List && res.isNotEmpty) ? res.first : res;
+    return Map<String, dynamic>.from(row as Map);
+  }
+
+  // D) 제출(이미 경로 배열이 준비됐다고 가정; 스토리지 후반)
+  Future<Map<String, dynamic>?> menteeSubmitAttempt({
+    required String attemptId,
+    required List<String> imagePaths,
+  }) async {
+    final res = await _sb.rpc('mentee_submit_attempt', params: {
+      'p_attempt_id': attemptId,
+      'p_image_paths': imagePaths,
+      'p_login_key': loginKey,
+    });
+    if (res == null) return null;
+    final row = (res is List && res.isNotEmpty) ? res.first : res;
+    return Map<String, dynamic>.from(row as Map);
+  }
+
+  // 공용 헬퍼: 상태 → 뱃지 라벨
+  String practiceStatusLabel(String? status) {
+    switch ((status ?? '').toLowerCase()) {
+      case 'draft': return '제출 준비';
+      case 'submitted': return '검토 대기';
+      case 'reviewing': return '검토 중';
+      case 'reviewed': return '검토 완료';
+      default: return '진행 없음';
+    }
+  }
+
+  // 완료율 계산(“검토 완료” 건 기준)
+  Future<double> menteePracticeCompletionRatio() async {
+
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing. Make sure UserProvider injected SupabaseService.loginKey after sign-in/hydrate.');
+    }
+
+    final res = await _sb.rpc('mentee_practice_completion_ratio', params: {
+      'p_login_key': key,
+    });
+
+    if (res == null) return 0.0;
+    // RPC는 row 또는 rows로 올 수 있음 → 통일 처리
+    final row = (res is List && res.isNotEmpty) ? res.first : res;
+    if (row is! Map) return 0.0;
+
+    final r = row['ratio'];
+    if (r is num) return r.toDouble();
+    return double.tryParse(r?.toString() ?? '0') ?? 0.0;
+  }
 
 }

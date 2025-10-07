@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
+import 'package:nail/Pages/Mentee/page/MenteeHomeScaffold.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorMainPage.dart'; // ✅ 멘토 라우팅
 import 'package:nail/Providers/UserProvider.dart';
@@ -162,7 +163,7 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
         );
       } else {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MenteeMainPage()),
+          MaterialPageRoute(builder: (_) => const MenteeHomeScaffold()),
               (route) => false,
         );
       }

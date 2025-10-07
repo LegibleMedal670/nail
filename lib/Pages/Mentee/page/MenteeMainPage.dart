@@ -16,7 +16,9 @@ enum LessonFilter { all, incomplete }
 enum Progress { notStarted, inProgress, done }
 
 class MenteeMainPage extends StatefulWidget {
-  const MenteeMainPage({super.key});
+  /// embedded=true 면 컨테이너(상위 Scaffold/AppBar/BottomNav)가 감싸는 모드
+  final bool embedded;
+  const MenteeMainPage({super.key, this.embedded = false});
 
   @override
   State<MenteeMainPage> createState() => _MenteeMainPageState();
@@ -159,7 +161,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
 
     // 사용자 표시 정보 (UserProvider가 보관)
     final String displayName = user.nickname.isNotEmpty ? user.nickname : '사용자';
-    final DateTime startedAt = user.joinedAt ?? DateTime.now();
+    final DateTime startedAt = user.joinedAt; // getter가 non-null 반환
     final String? photoUrl = user.photoUrl;
     final String mentorName = user.mentorName ?? '미배정';
 
@@ -176,35 +178,250 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     final progressPercentText = '${(progress * 100).round()}%';
     final started = _fmtDate(startedAt);
 
-    // 로딩/에러 처리 (커리큘럼 기준)
+    // ===== 로딩/에러: embedded 모드 고려 =====
     if (loading && items.isEmpty) {
+      if (widget.embedded) {
+        return const Center(child: CircularProgressIndicator());
+      }
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
       );
     }
     if (error != null && items.isEmpty) {
-      return Scaffold(
-        backgroundColor: Colors.white,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 16),
-              const Text('서버에서 커리큘럼을 찾을 수 없어요',
-                  style: TextStyle(color: UiTokens.title, fontSize: 16, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _refreshAll,
-                style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
-                child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
+      final errorChild = Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 16),
+            const Text('서버에서 커리큘럼을 찾을 수 없어요',
+                style: TextStyle(color: UiTokens.title, fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _refreshAll,
+              style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
+              child: const Text('다시 시도', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
         ),
       );
+      if (widget.embedded) {
+        return errorChild;
+      }
+      return Scaffold(backgroundColor: Colors.white, body: errorChild);
     }
 
+    // ===== 공통 본문 =====
+    final content = SafeArea(
+      top: !widget.embedded, // 상위 AppBar가 있을 땐 false (embedded=true면 상단패딩 제거)
+      child: SingleChildScrollView(
+        controller: _listController,
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ===== 상단 프로필 + 게이지 =====
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: UiTokens.cardBorder),
+                boxShadow: [UiTokens.cardShadow],
+              ),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundColor: Colors.grey[300],
+                          backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                          child: photoUrl == null ? const Icon(Icons.person, color: Color(0xFF8C96A1)) : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              displayName,
+                              style: const TextStyle(
+                                color: UiTokens.title,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '멘토 : $mentorName',
+                              style: TextStyle(
+                                color: UiTokens.title.withOpacity(0.6),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '시작일 : $started',
+                              style: TextStyle(
+                                color: UiTokens.title.withOpacity(0.6),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 84,
+                    height: 84,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 84,
+                          height: 84,
+                          child: CircularProgressIndicator(
+                            value: progress,
+                            strokeWidth: 10,
+                            backgroundColor: const Color(0xFFE9EEF6),
+                            valueColor: const AlwaysStoppedAnimation(UiTokens.primaryBlue),
+                            strokeCap: StrokeCap.round,
+                          ),
+                        ),
+                        Text(
+                          progressPercentText,
+                          style: const TextStyle(
+                            color: UiTokens.title,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // ===== 이어하기 버튼 =====
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton(
+                onPressed: () => _continueLearning(items),
+                style: FilledButton.styleFrom(
+                  backgroundColor: UiTokens.primaryBlue,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  _nextIncomplete(items) == null ? '복습하기' : '이어보기',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ===== 목록 헤더 + 필터 =====
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Row(
+                children: [
+                  const Text('내 학습',
+                      style: TextStyle(color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  if (_progLoading)
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  if (_progError)
+                    TextButton(
+                      onPressed: _loadProgress,
+                      child: const Text('진행도 재시도'),
+                    ),
+                  TextButton.icon(
+                    onPressed: _showFilterSheet,
+                    icon: const Icon(Icons.filter_list_rounded, color: UiTokens.actionIcon, size: 18),
+                    label: Text(
+                      _filter == LessonFilter.all ? '전체' : '미완료 강의',
+                      style: const TextStyle(color: UiTokens.actionIcon, fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      minimumSize: const Size(0, 0),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // ===== 커리큘럼 목록 =====
+            ListView.separated(
+              itemCount: list.length,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, i) {
+                final item = list[i];
+                final state = _progressOf(item.id);
+                final prog = _progressById[item.id] ??
+                    const CurriculumProgress(
+                      watchedRatio: 0.0,
+                      attempts: 0,
+                      bestScore: null,
+                      passed: false,
+                    );
+
+                return Stack(
+                  children: [
+                    CurriculumTile(
+                      item: item,
+                      onTap: () async {
+                        final changed = await Navigator.of(context).push<bool>(
+                          MaterialPageRoute(
+                            builder: (_) => CurriculumDetailPage(
+                              item: item,
+                              mode: CurriculumViewMode.mentee,
+                              progress: prog, // 실제 진행 객체 전달
+                            ),
+                          ),
+                        );
+
+                        // 디테일에서 진행도 변화가 있었다면(true), 즉시 최신화
+                        if (changed == true) {
+                          await _refreshAll(); // 내부에서 provider.refresh(force: true) + _loadProgress()
+                        }
+                      },
+                    ),
+                    if (state != Progress.notStarted)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: _progressBadge(state),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+
+    // ===== embedded 모드면 본문만 반환 =====
+    if (widget.embedded) {
+      return content;
+    }
+
+    // ===== 단독 페이지 모드면 기존처럼 AppBar 포함 =====
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -233,208 +450,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
           ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          controller: _listController,
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ===== 상단 프로필 + 게이지 =====
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: UiTokens.cardBorder),
-                  boxShadow: [UiTokens.cardShadow],
-                ),
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundColor: Colors.grey[300],
-                            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-                            child: photoUrl == null ? const Icon(Icons.person, color: Color(0xFF8C96A1)) : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                displayName,
-                                style: const TextStyle(
-                                  color: UiTokens.title,
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                mentorName != null ? '멘토 : $mentorName' : '멘토 : 미배정',
-                                style: TextStyle(
-                                  color: UiTokens.title.withOpacity(0.6),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '시작일 : $started',
-                                style: TextStyle(
-                                  color: UiTokens.title.withOpacity(0.6),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(
-                      width: 84,
-                      height: 84,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          SizedBox(
-                            width: 84,
-                            height: 84,
-                            child: CircularProgressIndicator(
-                              value: progress,
-                              strokeWidth: 10,
-                              backgroundColor: const Color(0xFFE9EEF6),
-                              valueColor: const AlwaysStoppedAnimation(UiTokens.primaryBlue),
-                              strokeCap: StrokeCap.round,
-                            ),
-                          ),
-                          Text(
-                            progressPercentText,
-                            style: const TextStyle(
-                              color: UiTokens.title,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // ===== 이어하기 버튼 =====
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton(
-                  onPressed: () => _continueLearning(items),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(
-                    _nextIncomplete(items) == null ? '복습하기' : '이어보기',
-                    style: const TextStyle(fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // ===== 목록 헤더 + 필터 =====
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Row(
-                  children: [
-                    const Text('내 학습',
-                        style: TextStyle(color: UiTokens.title, fontSize: 20, fontWeight: FontWeight.w700)),
-                    const Spacer(),
-                    if (_progLoading)
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    if (_progError)
-                      TextButton(
-                        onPressed: _loadProgress,
-                        child: const Text('진행도 재시도'),
-                      ),
-                    TextButton.icon(
-                      onPressed: _showFilterSheet,
-                      icon: const Icon(Icons.filter_list_rounded, color: UiTokens.actionIcon, size: 18),
-                      label: Text(
-                        _filter == LessonFilter.all ? '전체' : '미완료 강의',
-                        style: const TextStyle(color: UiTokens.actionIcon, fontSize: 14, fontWeight: FontWeight.w700),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                        minimumSize: const Size(0, 0),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ===== 커리큘럼 목록 =====
-              ListView.separated(
-                itemCount: list.length,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) {
-                  final item = list[i];
-                  final state = _progressOf(item.id);
-                  final prog = _progressById[item.id] ??
-                      const CurriculumProgress(
-                        watchedRatio: 0.0,
-                        attempts: 0,
-                        bestScore: null,
-                        passed: false,
-                      );
-
-                  return Stack(
-                    children: [
-                      CurriculumTile(
-                        item: item,
-                        onTap: () async {
-                          final changed = await Navigator.of(context).push<bool>(
-                            MaterialPageRoute(
-                              builder: (_) => CurriculumDetailPage(
-                                item: item,
-                                mode: CurriculumViewMode.mentee,
-                                progress: prog, // 실제 진행 객체 전달
-                              ),
-                            ),
-                          );
-
-                          // 디테일에서 진행도 변화가 있었다면(true), 즉시 최신화
-                          if (changed == true) {
-                            await _refreshAll(); // 내부에서 provider.refresh(force: true) + _loadProgress()
-                          }
-                        },
-                      ),
-                      if (state != Progress.notStarted)
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: _progressBadge(state),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
+      body: content,
     );
   }
 

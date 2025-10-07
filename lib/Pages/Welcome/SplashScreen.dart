@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Mentee/page/MenteeHomeScaffold.dart';
 import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
 import 'package:provider/provider.dart';
 
@@ -74,7 +75,7 @@ class _SplashScreenState extends State<SplashScreen> {
       );
     } else {
       // 멘티
-      dest = const MenteeMainPage();
+      dest = const MenteeHomeScaffold();
     }
 
     Navigator.pushReplacement(context, _buildPageRoute(dest));
