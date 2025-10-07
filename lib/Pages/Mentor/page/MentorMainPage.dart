@@ -59,7 +59,7 @@ class _ScaffoldView extends StatelessWidget {
           actions: [
             IconButton(
               tooltip: '로그아웃',
-              icon: const Icon(Icons.logout_rounded, color: UiTokens.actionIcon),
+              icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
               onPressed: () async {
                 await context.read<UserProvider>().signOut();
                 if (context.mounted) {
