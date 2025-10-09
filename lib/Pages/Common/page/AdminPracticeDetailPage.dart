@@ -1,4 +1,4 @@
-// lib/Pages/Manager/page/PracticeDetailPage.dart
+// lib/Pages/Manager/page/AdminPracticeDetailPage.dart
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';

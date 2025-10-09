@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Common/page/PracticeDetailPage.dart';
+import 'package:nail/Pages/Common/page/AdminPracticeDetailPage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';

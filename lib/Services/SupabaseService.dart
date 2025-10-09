@@ -744,6 +744,7 @@ class SupabaseService {
       'p_login_key': loginKey,
     });
     if (res == null) return null;
+    print(res);
     final row = (res is List && res.isNotEmpty) ? res.first : res;
     return Map<String, dynamic>.from(row as Map);
   }
@@ -805,6 +806,19 @@ class SupabaseService {
     final r = row['ratio'];
     if (r is num) return r.toDouble();
     return double.tryParse(r?.toString() ?? '0') ?? 0.0;
+  }
+
+  Future<List<Map<String, dynamic>>> menteeListLatestAttemptsBySet() async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing');
+    }
+    final res = await _sb.rpc('mentee_list_latest_attempts_by_set', params: {
+      'p_login_key': key,
+    });
+    if (res == null) return const <Map<String, dynamic>>[];
+    final rows = (res is List) ? res : [res];
+    return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
 }

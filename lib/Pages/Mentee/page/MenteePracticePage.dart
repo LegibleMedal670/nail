@@ -1,5 +1,6 @@
 // lib/Pages/Mentee/page/MenteePracticeMainPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -41,6 +42,7 @@ class _View extends StatelessWidget {
             photoUrl: user.photoUrl,
             mentorName: user.mentorName ?? '미배정',
             ratio: p.completionRatio,
+            startDate: _fmtDate(user.joinedAt),
           ),
           const SizedBox(height: 12),
           if (p.currentAttempt != null && p.currentSet != null) ...[
@@ -94,14 +96,27 @@ class _View extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 10),
                 itemBuilder: (_, i) {
                   final s = p.filteredSets[i];
-                  return _PracticeTile(
-                    setRow: s,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => PracticeDetailPage(setId: s['id'])),
-                      );
-                    },
+                  final setId = s['id'] as String;
+                  final badgeLabel = p.statusLabelFor(setId);
+
+                  return Stack(
+                    children: [
+                      CurriculumTile.practice(
+                        title: '${s['title']}',
+                        summary: '${s['code']}',
+                        onTap: () async {
+                          final changed = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(builder: (_) => PracticeDetailPage(setId: setId)),
+                          );
+                          if (changed == true && context.mounted) {
+                            await context.read<PracticeProvider>().refreshAll();
+                          }
+                        },
+                      ),
+                      if (badgeLabel != null)
+                        Positioned(top: 10, right: 10, child: _statusBadgeChip(badgeLabel)),
+                    ],
                   );
                 },
               ),
@@ -141,6 +156,10 @@ class _View extends StatelessWidget {
       body: content,
     );
   }
+
+  String _fmtDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
 }
 
 
@@ -151,7 +170,8 @@ class _ProfileGauge extends StatelessWidget {
   final String? photoUrl;
   final String mentorName;
   final double ratio;
-  const _ProfileGauge({required this.displayName, required this.photoUrl, required this.mentorName, required this.ratio});
+  final String startDate;
+  const _ProfileGauge({required this.displayName, required this.photoUrl, required this.mentorName, required this.ratio, required this.startDate});
 
   @override
   Widget build(BuildContext context) {
@@ -181,7 +201,22 @@ class _ProfileGauge extends StatelessWidget {
                   children: [
                     Text(displayName, style: const TextStyle(color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
-                    Text('멘토 : $mentorName', style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700)),
+                    Text(
+                      '멘토 : $mentorName',
+                      style: TextStyle(
+                        color: UiTokens.title.withOpacity(0.6),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),                    const SizedBox(height: 4),
+                    Text(
+                      '시작일 : $startDate',
+                      style: TextStyle(
+                        color: UiTokens.title.withOpacity(0.6),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -329,4 +364,27 @@ class _Empty extends StatelessWidget {
       child: Text(message, style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700)),
     );
   }
+}
+
+Widget _statusBadgeChip(String label) {
+  Color bg, bd, fg; IconData icon;
+  switch (label) {
+    case '검토 대기': // submitted
+      bg = const Color(0xFFFFF7ED); bd = const Color(0xFFFCCFB3); fg = const Color(0xFFEA580C); icon = Icons.upload_rounded; break;
+    case '검토 중':
+      bg = const Color(0xFFFFF7ED); bd = const Color(0xFFFCCFB3); fg = const Color(0xFFEA580C); icon = Icons.hourglass_bottom_rounded; break;
+    case '검토 완료':
+      bg = const Color(0xFFECFDF5); bd = const Color(0xFFA7F3D0); fg = const Color(0xFF059669); icon = Icons.verified_rounded; break;
+    default: // 제출 준비
+      bg = const Color(0xFFEFF6FF); bd = const Color(0xFFDBEAFE); fg = const Color(0xFF2563EB); icon = Icons.edit_note_rounded; break;
+  }
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    decoration: BoxDecoration(color: bg, border: Border.all(color: bd), borderRadius: BorderRadius.circular(10)),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 16, color: fg),
+      const SizedBox(width: 6),
+      Text(label, style: TextStyle(color: fg, fontWeight: FontWeight.w800)),
+    ]),
+  );
 }
