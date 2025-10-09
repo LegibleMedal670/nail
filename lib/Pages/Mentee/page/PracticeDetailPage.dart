@@ -115,6 +115,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       _showSnack('제출 완료! 멘토 검토를 기다려 주세요.');
     } catch (e) {
       setState(() => _loading = false);
+      print(e);
       _showSnack('제출 실패: $e');
     }
   }
