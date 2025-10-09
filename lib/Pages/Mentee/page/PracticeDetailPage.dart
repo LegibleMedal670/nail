@@ -20,14 +20,23 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
   final _picker = ImagePicker();
 
   Map<String, dynamic>? _detail;
-  bool _loading = false;
+  bool _loading = false;        // 초기 로딩
+  bool _submitting = false;     // 부분 로딩(제출 섹션)
+  bool _dirty = false;          // ← 목록으로 복귀 시 새로고침 필요 여부
+
   String? _error;
 
   // 참고 이미지(세트 reference; 표시용 URL)
   List<String> _refImages = const [];
 
-  // ✅ 로컬에서 새로 추가한 이미지(제출 전 미리보기 & 제출 소스)
+  // 서버에 저장된 "현재 시도"의 제출 이미지 (표시용 URL)
+  List<String> _serverSubmittedUrls = const [];
+
+  // 로컬에서 새로 추가한 이미지(제출 전)
   final List<XFile> _localPicks = [];
+
+  // 방금 제출한 로컬 이미지(서버 재조회 전에도 계속 보여주기)
+  List<XFile> _lastSubmittedLocal = const [];
 
   @override
   void initState() {
@@ -57,13 +66,21 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
         setId: widget.setId, limit: 30, offset: 0,
       );
 
-      // 참고 이미지만 유지
+      print(d);
+
+      // 참고 이미지
       final refRaw = (d?['set_reference_imgs'] as List?) ?? const [];
       final refUrls = await _signAll(refRaw);
+
+      // ✅ 서버 제출 이미지 (urls 우선, 없으면 paths → 서명URL)
+      final curUrls = (d?['current_image_urls'] as List?) ?? const [];
+      final curPaths = (d?['current_image_paths'] as List?) ?? const [];
+      final submittedUrls = curUrls.isNotEmpty ? curUrls.cast<String>() : await _signAll(curPaths);
 
       setState(() {
         _detail = d;
         _refImages = refUrls;
+        _serverSubmittedUrls = submittedUrls;
         _loading = false;
       });
     } catch (e) {
@@ -84,10 +101,10 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
 
   // ===== 제출: 로컬 선택분을 스토리지 업로드 → 서버 제출 =====
   Future<void> _submitImages() async {
-    if (_localPicks.isEmpty) return;
+    if (_localPicks.isEmpty || _submitting) return;
 
     try {
-      setState(() => _loading = true);
+      setState(() => _submitting = true);
 
       // 1) 진행중 시도 있으면 그대로, 없으면 새 시도 생성(pending)
       final attempt = await _api.menteeStartOrContinue(setId: widget.setId);
@@ -109,14 +126,18 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       // 3) 제출 RPC
       await _api.menteeSubmitAttempt(attemptId: attemptId, imagePaths: keys);
 
-      // 4) 초기화 + 새로고침
+      // 4) 상태 갱신 & 표시 지속
+      _dirty = true; // ← 목록 갱신 필요
+      final submittedCopy = List<XFile>.from(_localPicks);
       _localPicks.clear();
-      await _load();
+      _lastSubmittedLocal = submittedCopy;
+
+      await _load(); // 상태/뱃지(검토 대기) 반영
       _showSnack('제출 완료! 멘토 검토를 기다려 주세요.');
     } catch (e) {
-      setState(() => _loading = false);
-      print(e);
       _showSnack('제출 실패: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -134,6 +155,12 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     );
   }
 
+  void _openLocalGallery(List<XFile> files, int index) {
+    if (files.isEmpty) return;
+    final urls = files.map((f) => 'file://${f.path}').toList();
+    _openGallery(urls, index);
+  }
+
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
@@ -147,11 +174,17 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       );
     }
     if (_error != null) {
+      print(_error);
       return Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
           title: const Text('실습', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
           backgroundColor: Colors.white, elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+            onPressed: () => Navigator.pop(context, _dirty), // 버튼 back도 결과 전달
+            tooltip: '뒤로가기',
+          ),
         ),
         body: Center(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -174,80 +207,138 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     final feedback = (d['current_feedback'] as String?) ?? '';
     final attemptNo = (d['current_attempt_no'] as num?)?.toInt();
 
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Text(title,
+    // 제출 이미지 섹션 우선순위: 로컬 선택 > 방금 제출본(로컬 복사) > 서버 제출 URL
+    final localForView = _localPicks.isNotEmpty ? _localPicks : _lastSubmittedLocal;
+    final showLocal = localForView.isNotEmpty;
+    final showServer = !showLocal && _serverSubmittedUrls.isNotEmpty;
+
+    return WillPopScope(
+      onWillPop: () async {
+        Navigator.pop(context, _dirty); // 제스처 back에도 결과 전달
+        return false;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: Text(
+            title,
             style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700),
-            overflow: TextOverflow.ellipsis),
-        backgroundColor: Colors.white, elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
-          onPressed: () => Navigator.maybePop(context),
-          tooltip: '뒤로가기',
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _addPhotos,
-                  icon: const Icon(Icons.add_photo_alternate_rounded, color: UiTokens.title),
-                  label: const Text('사진 추가', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: UiTokens.cardBorder),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FilledButton(
-                  // ✅ 하나도 없으면 비활성화
-                  onPressed: _localPicks.isEmpty ? null : _submitImages,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: UiTokens.primaryBlue,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text('이미지 제출', style: TextStyle(fontWeight: FontWeight.w800)),
-                ),
-              ),
-            ],
+            overflow: TextOverflow.ellipsis,
+          ),
+          backgroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+            onPressed: () => Navigator.pop(context, _dirty), // 버튼 back도 결과 전달
+            tooltip: '뒤로가기',
           ),
         ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-        children: [
-          if (instructions.trim().isNotEmpty) _InstructionsBoxGreen(text: instructions),
-          if (instructions.trim().isNotEmpty) const SizedBox(height: 12),
 
-          _StatusCard(statusLabel: statusLabel, attemptNo: attemptNo, grade: grade, feedback: feedback),
-
-          const SizedBox(height: 16),
-          const _SectionTitle('예시 이미지'),
-          const SizedBox(height: 8),
-          _ImagesSection(
-            images: _refImages,
-            emptyText: '예시 이미지가 없습니다.',
-            onTapImage: (i) => _openGallery(_refImages, i),
+        // 하단 버튼만 부분 로딩
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _submitting ? null : _addPhotos,
+                    icon: const Icon(Icons.add_photo_alternate_rounded, color: UiTokens.title),
+                    label: const Text('사진 추가', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: UiTokens.cardBorder),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: (_localPicks.isEmpty || _submitting) ? null : _submitImages,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: UiTokens.primaryBlue,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _submitting
+                        ? const SizedBox(
+                      width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                        : const Text('이미지 제출', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ],
+            ),
           ),
+        ),
 
-          const SizedBox(height: 16),
-          const _SectionTitle('제출 이미지'),
-          const SizedBox(height: 8),
-          // ✅ 로컬 선택본만 보여줌
-          _LocalImagesGrid(
-            files: _localPicks,
-            onRemove: (i) => setState(() => _localPicks.removeAt(i)),
-          ),
-        ],
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+          children: [
+            if (instructions.trim().isNotEmpty) _InstructionsBoxGreen(text: instructions),
+            if (instructions.trim().isNotEmpty) const SizedBox(height: 12),
+
+            _StatusCard(
+              statusLabel: statusLabel,
+              attemptNo: attemptNo,
+              grade: grade,
+              feedback: feedback,
+            ),
+
+            const SizedBox(height: 16),
+            const _SectionTitle('예시 이미지'),
+            const SizedBox(height: 8),
+            _ImagesSection(
+              images: _refImages,
+              emptyText: '예시 이미지가 없습니다.',
+              onTapImage: (i) => _openGallery(_refImages, i),
+            ),
+
+            const SizedBox(height: 16),
+            const _SectionTitle('제출 이미지'),
+            const SizedBox(height: 8),
+
+            // 제출/업로드 구역만 부분 로딩 오버레이
+            Stack(
+              children: [
+                if (showLocal)
+                  _LocalImagesGrid(
+                    files: localForView,
+                    onRemove: _submitting && _localPicks.isNotEmpty
+                        ? null
+                        : (i) {
+                      if (_localPicks.isNotEmpty) {
+                        setState(() => _localPicks.removeAt(i));
+                      }
+                    },
+                    onTap: (i) => _openLocalGallery(localForView, i),
+                  )
+                else
+                  _ImagesSection(
+                    images: _serverSubmittedUrls,
+                    emptyText: '제출된 이미지가 없습니다.',
+                    onTapImage: (i) => _openGallery(_serverSubmittedUrls, i),
+                  ),
+
+                if (_submitting)
+                  Positioned.fill(
+                    child: Container(
+                      color: Colors.white.withOpacity(0.35),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 28, height: 28,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -460,11 +551,12 @@ class _ImagesSection extends StatelessWidget {
   }
 }
 
-/// 로컬 선택 이미지 미리보기(= 제출 이미지)
+/// 로컬(또는 방금 제출한 로컬) 이미지 미리보기
 class _LocalImagesGrid extends StatelessWidget {
   final List<XFile> files;
   final void Function(int index)? onRemove;
-  const _LocalImagesGrid({required this.files, this.onRemove});
+  final void Function(int index)? onTap; // 전체보기
+  const _LocalImagesGrid({required this.files, this.onRemove, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -497,23 +589,27 @@ class _LocalImagesGrid extends StatelessWidget {
             Positioned.fill(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.file(File(f.path), fit: BoxFit.cover),
-              ),
-            ),
-            Positioned(
-              top: 4, right: 4,
-              child: GestureDetector(
-                onTap: () => onRemove?.call(i),
-                child: Container(
-                  width: 24, height: 24,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                child: GestureDetector(
+                  onTap: () => onTap?.call(i),
+                  child: Image.file(File(f.path), fit: BoxFit.cover),
                 ),
               ),
             ),
+            if (onRemove != null) // 직전 제출본 표시는 삭제 버튼 숨김
+              Positioned(
+                top: 4, right: 4,
+                child: GestureDetector(
+                  onTap: () => onRemove?.call(i),
+                  child: Container(
+                    width: 24, height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Icon(Icons.close_rounded, color: Colors.white, size: 16),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -521,7 +617,7 @@ class _LocalImagesGrid extends StatelessWidget {
   }
 }
 
-/// 전체화면 이미지 갤러리
+/// 전체화면 이미지 갤러리(서명 URL 또는 file:// 모두 지원)
 class _ImageGalleryScreen extends StatefulWidget {
   final List<String> images;
   final int initialIndex;
@@ -572,6 +668,11 @@ class _ImageGalleryScreenState extends State<_ImageGalleryScreen> {
             itemBuilder: (_, i) {
               final url = imgs[i];
               final tag = 'img_s_$i';
+              final isFile = url.startsWith('file://');
+              final widgetImage = isFile
+                  ? Image.file(File(url.replaceFirst('file://', '')), fit: BoxFit.contain)
+                  : Image.network(url, fit: BoxFit.contain);
+
               return Center(
                 child: Hero(
                   tag: tag,
@@ -580,7 +681,7 @@ class _ImageGalleryScreenState extends State<_ImageGalleryScreen> {
                     child: InteractiveViewer(
                       transformationController: _tc,
                       minScale: 1.0, maxScale: 6.0,
-                      child: Image.network(url, fit: BoxFit.contain),
+                      child: widgetImage,
                     ),
                   ),
                 ),

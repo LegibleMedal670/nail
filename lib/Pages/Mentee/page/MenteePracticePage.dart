@@ -78,13 +78,14 @@ class _View extends StatelessWidget {
             _CurrentAttemptCard(
               set: p.currentSet!,
               attempt: p.currentAttempt!,
-              onOpen: () {
-                Navigator.push(
+              onOpen: () async {
+                final changed = await Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => PracticeDetailPage(setId: p.currentSet!['id']),
-                  ),
+                  MaterialPageRoute(builder: (_) => PracticeDetailPage(setId: p.currentSet!['id'])),
                 );
+                if (changed == true && context.mounted) {
+                  await context.read<PracticeProvider>().refreshAll();
+                }
               },
             ),
             const SizedBox(height: 16),
@@ -128,11 +129,14 @@ class _View extends StatelessWidget {
                     setId: s['id'],
                     title: s['title'] ?? '',
                     code: s['code'] ?? '',
-                    onTap: () {
-                      Navigator.push(
+                    onTap: () async {
+                      final changed = await Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => PracticeDetailPage(setId: s['id'])),
                       );
+                      if (changed == true && context.mounted) {
+                        await context.read<PracticeProvider>().refreshAll();
+                      }
                     },
                   );
                 },
