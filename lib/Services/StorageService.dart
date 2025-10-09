@@ -12,6 +12,13 @@ class SignedUrlCacheEntry {
 class StorageService {
   final SupabaseClient _sb = Supabase.instance.client;
 
+  // === 서명 URL 캐시 ===
+  final Map<String, SignedUrlCacheEntry> _signedCache = {};
+
+  // === 버킷 명 ===
+  static const String _videosBucket = 'videos';
+  static const String _practiceBucket = 'practice';
+
   // === 경로 표준화 ===
   String normalizeObjectPath(String raw) {
     var s = raw.trim();
@@ -21,7 +28,10 @@ class StorageService {
     return s;
   }
 
-  // === 공통 경로 ===
+  // ---------------------------------------------------------------------------
+  //                               비디오(학습) 섹션
+  // ---------------------------------------------------------------------------
+
   String _objectPath({
     required String moduleCode,
     required int version,
@@ -33,7 +43,6 @@ class StorageService {
     return 'modules/$moduleCode/v$version/week-$week/$kind/$safe';
   }
 
-  // === 비디오 업로드 ===
   Future<String> uploadVideo({
     required File file,
     required String moduleCode,
@@ -50,7 +59,7 @@ class StorageService {
       filename: name,
       kind: 'video',
     );
-    final returned = await _sb.storage.from('videos').upload(
+    final returned = await _sb.storage.from(_videosBucket).upload(
       key,
       file,
       fileOptions: FileOptions(cacheControl: '3600', upsert: upsert),
@@ -60,7 +69,6 @@ class StorageService {
     return key; // 항상 버킷 상대 경로로 리턴
   }
 
-  // === 썸네일 업로드(바이트) ===
   Future<String> uploadThumbnailBytes({
     required Uint8List bytes,
     required String moduleCode,
@@ -76,7 +84,7 @@ class StorageService {
       filename: filename,
       kind: 'thumb',
     );
-    await _sb.storage.from('videos').uploadBinary(
+    await _sb.storage.from(_videosBucket).uploadBinary(
       key,
       bytes,
       fileOptions: const FileOptions(cacheControl: '86400', upsert: true),
@@ -85,15 +93,11 @@ class StorageService {
     return key;
   }
 
-  // === 삭제 ===
   Future<void> deleteObject(String objectPath) async {
     final key = normalizeObjectPath(objectPath);
-    await _sb.storage.from('videos').remove([key]);
+    await _sb.storage.from(_videosBucket).remove([key]);
     evictSignedUrl(key);
   }
-
-  // === 서명 URL (비디오/이미지 공통) ===
-  final Map<String, SignedUrlCacheEntry> _signedCache = {};
 
   Future<String> getOrCreateSignedUrl(
       String objectPath, {
@@ -107,7 +111,7 @@ class StorageService {
         now.isBefore(cached.expiresAt.subtract(Duration(seconds: minTtlBufferSec)))) {
       return cached.url;
     }
-    final url = await _sb.storage.from('videos').createSignedUrl(key, expiresInSec);
+    final url = await _sb.storage.from(_videosBucket).createSignedUrl(key, expiresInSec);
     final exp = now.add(Duration(seconds: expiresInSec));
     _signedCache[key] = SignedUrlCacheEntry(url: url, expiresAt: exp);
     return url;
@@ -121,9 +125,9 @@ class StorageService {
 
   void clearAllCaches() => _signedCache.clear();
 
-  // === Practice images (실습 참고 이미지) ======================================
-
-  static const String _practiceBucket = 'practice';
+  // ---------------------------------------------------------------------------
+  //                      Practice(실습) - 세트 참고 이미지(관리자)
+  // ---------------------------------------------------------------------------
 
   /// practice_sets/{code}/refs/{filename}
   String practiceObjectPath({
@@ -134,7 +138,6 @@ class StorageService {
     return 'practice_sets/$code/refs/$safe';
   }
 
-  /// 바이트 업로드: DB에는 **객체 키**(버킷 상대 경로)만 저장하세요.
   Future<String> uploadPracticeImageBytes({
     required Uint8List bytes,
     required String code,
@@ -147,19 +150,17 @@ class StorageService {
     await _sb.storage.from(_practiceBucket).uploadBinary(
       key,
       bytes,
-      fileOptions: FileOptions(
+      fileOptions: const FileOptions(
         cacheControl: '3600',
-        upsert: upsert,
+        upsert: true,
         contentType: 'image/jpeg',
       ),
     );
 
-    // 서명 URL 캐시 무효화
     evictSignedUrl(key);
-    return key; // ← 이 값을 DB에 저장
+    return key; // DB에는 이 키를 저장
   }
 
-  /// 파일 업로드가 필요하면 이거 사용 (선택)
   Future<String> uploadPracticeImageFile({
     required File file,
     required String code,
@@ -179,14 +180,12 @@ class StorageService {
     return key;
   }
 
-  /// 삭제
   Future<void> deletePracticeObject(String objectPath) async {
     final key = normalizeObjectPath(objectPath);
     await _sb.storage.from(_practiceBucket).remove([key]);
     evictSignedUrl(key);
   }
 
-  /// (표시용) 서명 URL 발급 — DB에는 키만 저장하고, 화면에서 이걸로 URL을 만드세요.
   Future<String> getOrCreateSignedUrlPractice(
       String objectPath, {
         int expiresInSec = 21600, // 6h
@@ -208,5 +207,107 @@ class StorageService {
     final exp = now.add(Duration(seconds: expiresInSec));
     _signedCache[key] = SignedUrlCacheEntry(url: url, expiresAt: exp);
     return url;
+  }
+
+  // ---------------------------------------------------------------------------
+  //                  Practice(실습) - 멘티 제출 이미지(Attempt 단위)
+  // ---------------------------------------------------------------------------
+
+  /// attempts/{attempt_id}/{filename}
+  String practiceAttemptObjectPath({
+    required String attemptId,
+    required String filename,
+  }) {
+    final safe = filename.replaceAll(' ', '_');
+    return 'attempts/$attemptId/$safe';
+  }
+
+  /// 파일 한 장 업로드 → 키 반환
+  Future<String> uploadPracticeAttemptImageFile({
+    required File file,
+    required String attemptId,
+    bool upsert = false,
+  }) async {
+    final ext = p.extension(file.path).toLowerCase();
+    final name = 'img_${DateTime.now().millisecondsSinceEpoch}$ext';
+    final key = practiceAttemptObjectPath(attemptId: attemptId, filename: name);
+
+    await _sb.storage.from(_practiceBucket).upload(
+      key,
+      file,
+      fileOptions: FileOptions(
+        cacheControl: '3600',
+        upsert: upsert,
+        // contentType는 생략해도 되지만 넣고 싶다면 아래처럼:
+        // contentType: _inferImageContentTypeFromPath(file.path),
+      ),
+    );
+
+    evictSignedUrl(key);
+    return key;
+  }
+
+  /// 바이트 업로드 → 키 반환
+  Future<String> uploadPracticeAttemptImageBytes({
+    required Uint8List bytes,
+    required String attemptId,
+    String filename = 'img.jpg',
+    bool upsert = false,
+    String contentType = 'image/jpeg',
+  }) async {
+    final name = filename.isEmpty
+        ? 'img_${DateTime.now().millisecondsSinceEpoch}.jpg'
+        : filename.replaceAll(' ', '_');
+    final key = practiceAttemptObjectPath(attemptId: attemptId, filename: name);
+
+    await _sb.storage.from(_practiceBucket).uploadBinary(
+      key,
+      bytes,
+      fileOptions: FileOptions(
+        cacheControl: '3600',
+        upsert: upsert,
+        contentType: contentType,
+      ),
+    );
+
+    evictSignedUrl(key);
+    return key;
+  }
+
+  /// 파일 여러 장 배치 업로드 → 키 배열 반환
+  Future<List<String>> uploadPracticeAttemptFilesBatch({
+    required List<File> files,
+    required String attemptId,
+    bool upsert = false,
+  }) async {
+    final keys = <String>[];
+    for (final f in files) {
+      final k = await uploadPracticeAttemptImageFile(
+        file: f,
+        attemptId: attemptId,
+        upsert: upsert,
+      );
+      keys.add(k);
+    }
+    return keys;
+  }
+
+  // (선택) path 확장자를 보고 content-type 추정
+  String _inferImageContentTypeFromPath(String path) {
+    final ext = p.extension(path).toLowerCase();
+    switch (ext) {
+      case '.jpg':
+      case '.jpeg':
+        return 'image/jpeg';
+      case '.png':
+        return 'image/png';
+      case '.webp':
+        return 'image/webp';
+      case '.heic':
+      // Supabase가 heic 미지원일 수 있으니, 업로드 전 변환을 권장
+        return 'image/heic';
+      default:
+        return 'application/octet-stream';
+    }
   }
 }

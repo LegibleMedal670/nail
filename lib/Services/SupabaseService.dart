@@ -744,7 +744,6 @@ class SupabaseService {
       'p_login_key': loginKey,
     });
     if (res == null) return null;
-    print(res);
     final row = (res is List && res.isNotEmpty) ? res.first : res;
     return Map<String, dynamic>.from(row as Map);
   }
@@ -782,7 +781,7 @@ class SupabaseService {
       case 'submitted': return '검토 대기';
       case 'reviewing': return '검토 중';
       case 'reviewed': return '검토 완료';
-      default: return '진행 없음';
+      default: return '시도 없음';
     }
   }
 
