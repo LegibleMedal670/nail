@@ -621,17 +621,43 @@ class _HistoryTab extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             itemCount: p.history.length,
             separatorBuilder: (_, __) => const SizedBox(height: 10),
-            itemBuilder: (_, i) {
+            itemBuilder: (ctx, i) {
               final it = p.history[i];
+
+              // ✅ 히스토리 항목에 들어있는 시도 ID 키 이름이 환경마다 다를 수 있어 안전하게 추출
+              final String attemptId = '${it['attempt_id'] ?? it['id']}';
+
               return _QueueItemCard(
                 menteeName: '${it['mentee_name'] ?? ''}',
                 setCode: '${it['set_code'] ?? ''}',
-                attemptNo: it['attempt_no'] ?? 0,
+                attemptNo: (it['attempt_no'] as num?)?.toInt() ?? 0,
                 date: it['reviewed_at'],
                 dateLabel: '검토일',
-                waiting: false,
-                rating: (it['rating'] as String?),
-                onOpen: () {}, // 읽기 전용 상세 페이지(선택)
+                waiting: false,                           // 히스토리는 항상 검토 완료
+                rating: it['rating'] as String?,          // 'high' | 'mid' | 'low'
+                onOpen: () async {
+                  // ✅ 큐 탭과 동일한 방식으로 Provider 공유 + AttemptReviewPage 열기
+                  final mentorProvider = ctx.read<MentorProvider>();
+
+                  final refreshed = await Navigator.push<bool>(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: mentorProvider,
+                        child: AttemptReviewPage(
+                          mentorLoginKey: mentorProvider.mentorLoginKey,
+                          attemptId: attemptId,
+                        ),
+                      ),
+                    ),
+                  );
+
+                  // ✅ 돌아왔을 때 KPI/히스토리 갱신 (필요 시)
+                  if (ctx.mounted && (refreshed ?? false)) {
+                    await mentorProvider.refreshKpi();
+                    await mentorProvider.refreshHistory();
+                  }
+                },
               );
             },
           ),
