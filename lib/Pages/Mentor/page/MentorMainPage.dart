@@ -1,17 +1,16 @@
 // lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:provider/provider.dart';
-import 'package:nail/Providers/MentorProvider.dart';
+
+import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Mentor/page/AttemptReviewPage.dart';
-import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:nail/Providers/MentorProvider.dart';
+import 'package:nail/Providers/UserProvider.dart';
 
 class MentorMainPage extends StatelessWidget {
   final String mentorLoginKey;
-
-  /// 체크패스워드에서 넘어오는 간단 프로필 (없으면 Provider가 KPI 로드 후 표기)
   final String? mentorName;
   final String? mentorPhotoUrl;
   final DateTime? mentorHiredAt;
@@ -26,6 +25,7 @@ class MentorMainPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // ✅ 멘토 플로우 최상단에서 한 번만 생성
     return ChangeNotifierProvider(
       create: (_) => MentorProvider(
         mentorLoginKey: mentorLoginKey,
@@ -45,17 +45,15 @@ class _ScaffoldView extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = context.watch<MentorProvider>();
     return WillPopScope(
-      onWillPop: () async => false, // ⛔ 뒤로가기 금지
+      onWillPop: () async => false, // 뒤로가기 금지
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          automaticallyImplyLeading: false, // ⛔ 기본 뒤로가기 제거
-          title: const Text(
-            '멘토 대시보드',
-            style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
-          ),
+          automaticallyImplyLeading: false,
+          title: const Text('멘토 대시보드',
+              style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
           actions: [
             IconButton(
               tooltip: '로그아웃',
@@ -136,11 +134,11 @@ class _ProfileHeader extends StatelessWidget {
             CircleAvatar(
               radius: 26,
               backgroundColor: Colors.grey[300],
-              backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                  ? NetworkImage(photoUrl)
+              backgroundImage:
+              (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
+              child: (photoUrl == null || photoUrl.isEmpty)
+                  ? const Icon(Icons.person, color: Color(0xFF8C96A1))
                   : null,
-              child:
-              (photoUrl == null || photoUrl.isEmpty) ? const Icon(Icons.person, color: Color(0xFF8C96A1)) : null,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -234,7 +232,7 @@ class _KpiTile extends StatelessWidget {
   }
 }
 
-/// ===== 커스텀 세그먼트(대기 큐 / 내 멘티 / 히스토리) - 단일 인디케이터 =====
+/// ===== 탭 =====
 class _Tabs extends StatelessWidget {
   const _Tabs();
 
@@ -248,7 +246,7 @@ class _Tabs extends StatelessWidget {
       child: LayoutBuilder(
         builder: (ctx, c) {
           final totalW = c.maxWidth;
-          final itemW = (totalW - 8) / labels.length; // 패딩 4+4
+          final itemW = (totalW - 8) / labels.length;
           final left = 4 + itemW * p.tabIndex;
 
           return Container(
@@ -260,23 +258,17 @@ class _Tabs extends StatelessWidget {
             height: 44,
             child: Stack(
               children: [
-                // ✅ 하나의 하이라이트만 이동
                 AnimatedPositioned(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOut,
-                  left: left,
-                  top: 4,
-                  bottom: 4,
-                  width: itemW,
+                  left: left, top: 4, bottom: 4, width: itemW,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
+                      color: Colors.white, borderRadius: BorderRadius.circular(10),
                       boxShadow: [UiTokens.cardShadow],
                     ),
                   ),
                 ),
-                // 라벨(정적) – 깜빡임 없음
                 Row(
                   children: List.generate(labels.length, (i) {
                     final selected = p.tabIndex == i;
@@ -323,7 +315,7 @@ class _QueueTab extends StatelessWidget {
       builder: (_) => SortBottomSheet<_QueueFilter>(
         current: current,
         title: '상태 필터',
-        options: [
+        options: const [
           SortOption(value: _QueueFilter.waiting, label: '대기', icon: Icons.hourglass_bottom_rounded),
           SortOption(value: _QueueFilter.reviewed, label: '완료', icon: Icons.done_all_rounded),
         ],
@@ -366,9 +358,7 @@ class _QueueTab extends StatelessWidget {
       ),
       const SizedBox(height: 8),
       if (p.queueItems.isEmpty)
-        _Empty(
-          message: p.queueStatus == 'submitted' ? '리뷰할 과제가 없습니다.' : '완료된 리뷰가 없습니다.',
-        ),
+        _Empty(message: p.queueStatus == 'submitted' ? '리뷰할 과제가 없습니다.' : '완료된 리뷰가 없습니다.'),
       if (p.queueItems.isNotEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -391,19 +381,24 @@ class _QueueTab extends StatelessWidget {
                 waiting: isWaiting,
                 rating: rating,
                 onOpen: () async {
-                  // 완료건도 열 수는 있게 두되, 서버에서 중복 리뷰 방지하도록(권장)
+                  // ✅ 같은 인스턴스를 상세 페이지에 전달
+                  final mentorProvider = ctx.read<MentorProvider>();
                   await Navigator.push(
                     ctx,
                     MaterialPageRoute(
-                      builder: (inner) => AttemptReviewPage(
-                        mentorLoginKey: p.mentorLoginKey,
-                        attemptId: '${it['id']}',
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: mentorProvider,
+                        child: AttemptReviewPage(
+                          mentorLoginKey: mentorProvider.mentorLoginKey,
+                          attemptId: '${it['id']}',
+                        ),
                       ),
                     ),
                   );
                   if (ctx.mounted) {
-                    ctx.read<MentorProvider>().refreshQueue(status: p.queueStatus);
-                    ctx.read<MentorProvider>().refreshKpi();
+                    // 돌아오면 큐/KPI 갱신
+                    mentorProvider.refreshQueue(status: p.queueStatus);
+                    mentorProvider.refreshKpi();
                   }
                 },
               );
@@ -484,13 +479,12 @@ class _MenteesTab extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 10),
             itemBuilder: (_, i) {
               final m = p.mentees[i];
-              final has = (m['pending_count'] ?? 0) > 0;
               final photoUrl = m['photo_url'] as String?;
-              final joined = (m['joined_at'] ?? '').toString().split(' ').first;
+              final joined = _fmtDateOnly((m['joined_at'] ?? '').toString().split(' ').first);
 
               return InkWell(
                 onTap: () {
-                  // TODO: 멘티 드릴다운 페이지 연결(이전 시도 목록 등)
+                  // TODO: 멘티 드릴다운 페이지 연결
                 },
                 borderRadius: BorderRadius.circular(14),
                 child: Container(
@@ -506,9 +500,8 @@ class _MenteesTab extends StatelessWidget {
                       CircleAvatar(
                         radius: 22,
                         backgroundColor: Colors.grey[300],
-                        backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                            ? NetworkImage(photoUrl)
-                            : null,
+                        backgroundImage:
+                        (photoUrl != null && photoUrl.isNotEmpty) ? NetworkImage(photoUrl) : null,
                         child: (photoUrl == null || photoUrl.isEmpty)
                             ? const Icon(Icons.person, color: Color(0xFF8C96A1))
                             : null,
@@ -613,7 +606,6 @@ class _HistoryTab extends StatelessWidget {
                 menteeName: '${it['mentee_name'] ?? ''}',
                 setCode: '${it['set_code'] ?? ''}',
                 attemptNo: it['attempt_no'] ?? 0,
-                // 검토일 표시 + 등급 배지
                 date: it['reviewed_at'],
                 dateLabel: '검토일',
                 waiting: false,
@@ -627,9 +619,8 @@ class _HistoryTab extends StatelessWidget {
   }
 }
 
-/// ===== 공통 카드 & 배지들 =====
+/// ===== 공통 =====
 
-/// 날짜 문자열만 추출 (dynamic 안전 파서)
 String _fmtDateOnly(dynamic v) {
   if (v == null) return '';
   try {
@@ -637,7 +628,6 @@ String _fmtDateOnly(dynamic v) {
       return '${v.year}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
     }
     final s = v.toString();
-    // ISO8601 or "YYYY-MM-DD ..."
     final DateTime d = DateTime.tryParse(s) ??
         DateTime.tryParse(s.split(' ').first) ??
         DateTime.now();
@@ -684,8 +674,7 @@ class _QueueItemCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 48, height: 48,
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(10),
@@ -728,9 +717,7 @@ class _StatusBadgeWaiting extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: bg,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(10),
+        color: bg, border: Border.all(color: border), borderRadius: BorderRadius.circular(10),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
@@ -756,34 +743,20 @@ class _StatusBadgeRating extends StatelessWidget {
 
     switch (rating) {
       case 'high':
-        bg = const Color(0xFFECFDF5);
-        border = const Color(0xFFB7F3DB);
-        fg = const Color(0xFF059669);
-        label = '상';
-        icon = Icons.trending_up_rounded;
-        break;
+        bg = const Color(0xFFECFDF5); border = const Color(0xFFB7F3DB);
+        fg = const Color(0xFF059669); label = '상'; icon = Icons.trending_up_rounded; break;
       case 'mid':
-        bg = const Color(0xFFF1F5F9);
-        border = const Color(0xFFE2E8F0);
-        fg = const Color(0xFF64748B);
-        label = '중';
-        icon = Icons.horizontal_rule_rounded;
-        break;
-      default: // 'low' or else
-        bg = const Color(0xFFFFFBEB);
-        border = const Color(0xFFFEF3C7);
-        fg = const Color(0xFFB45309);
-        label = '하';
-        icon = Icons.trending_down_rounded;
-        break;
+        bg = const Color(0xFFF1F5F9); border = const Color(0xFFE2E8F0);
+        fg = const Color(0xFF64748B); label = '중'; icon = Icons.horizontal_rule_rounded; break;
+      default: // 'low'
+        bg = const Color(0xFFFFFBEB); border = const Color(0xFFFEF3C7);
+        fg = const Color(0xFFB45309); label = '하'; icon = Icons.trending_down_rounded; break;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: bg,
-        border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(10),
+        color: bg, border: Border.all(color: border), borderRadius: BorderRadius.circular(10),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -826,8 +799,7 @@ class _Empty extends StatelessWidget {
       child: Center(
         child: Text(
           message,
-          style: TextStyle(
-              color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700),
+          style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -841,15 +813,15 @@ class _Error extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(message,
-              style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          FilledButton(
-            onPressed: onRetry,
-            style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
-            child: const Text('다시 시도'),
-          ),
-        ]));
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(message, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        FilledButton(
+          onPressed: onRetry,
+          style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue),
+          child: const Text('다시 시도'),
+        ),
+      ]),
+    );
   }
 }

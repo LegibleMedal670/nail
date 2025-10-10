@@ -97,7 +97,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
 
       // 3) 이전 시도 목록 (※ 서버 RPC: mentor_list_prev_attempts)
       final String menteeId = '${row['mentee_id']}';
-      final String setId  = '${row['set_code']}';
+      final String setId  = '${row['set_id']}';
       final int attemptNo   = (row['attempt_no'] as num?)?.toInt() ?? 0;
 
       final prevList = await api.mentorListPrevAttempts(
@@ -157,6 +157,9 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
+
+      print(e);
+
       _showSnack('저장 실패: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -944,6 +947,9 @@ class _Error extends StatelessWidget {
   const _Error({required this.message, required this.onRetry});
   @override
   Widget build(BuildContext context) {
+
+    print(message);
+
     return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
       Text(message, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
       const SizedBox(height: 8),
