@@ -1,5 +1,6 @@
 // lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Mentee/page/MentorMenteeDetailPage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
@@ -487,7 +488,24 @@ class _MenteesTab extends StatelessWidget {
 
               return InkWell(
                 onTap: () {
-                  // TODO: 멘티 드릴다운 페이지 연결
+                  final mp = context.read<MentorProvider>();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider.value(
+                        value: mp,
+                        child: MentorMenteeDetailPage(
+                          mentorLoginKey: mp.mentorLoginKey,
+                          menteeId: '${m['id']}',
+                          menteeName: '${m['nickname'] ?? '멘티'}',
+                          menteePhotoUrl: m['photo_url'] as String?,
+                          joinedAt: (m['joined_at'] is String)
+                              ? DateTime.tryParse(m['joined_at']) // 문자열인 경우
+                              : m['joined_at'] as DateTime?,       // DateTime인 경우
+                        ),
+                      ),
+                    ),
+                  );
                 },
                 borderRadius: BorderRadius.circular(14),
                 child: Container(

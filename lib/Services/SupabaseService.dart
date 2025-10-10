@@ -820,4 +820,49 @@ class SupabaseService {
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
+  Future<List<Map<String, dynamic>>> fetchMenteeSetsForMentor({
+    required String menteeId,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final key = loginKey?.trim();
+    if (key == null || key.isEmpty) {
+      throw StateError('mentor loginKey가 필요합니다.');
+    }
+
+    try {
+      final result = await _sb.rpc(
+        'mentor_list_mentee_sets',
+        params: {
+          'p_login_key': key,
+          'p_mentee_id': menteeId,
+          'p_limit': limit,
+          'p_offset': offset,
+        },
+      );
+
+      // supabase rpc()는 List/Map 그대로 내려옵니다.
+      final list = (result as List?)?.cast<Map<String, dynamic>>() ?? const [];
+      return list;
+    } on PostgrestException catch (e) {
+      // 서버 에러 메시지 그대로 보면서 디버그 용이하게
+      throw Exception('RPC mentor_list_mentee_sets 실패: ${e.message}');
+    } catch (e) {
+      throw Exception('RPC mentor_list_mentee_sets 실패: $e');
+    }
+  }
+
+  /// 진행률 계산 도우미 (필요시 사용)
+  /// - attempted == true 인 항목 수를 완료로 간주
+  Map<String, dynamic> computeMenteeProgress(List<Map<String, dynamic>> sets) {
+    final total = sets.length;
+    final done = sets.where((e) => (e['attempted'] == true)).length;
+    final percent = total == 0 ? 0.0 : (done / total);
+    return {
+      'total': total,
+      'done': done,
+      'percent': percent, // 0.0 ~ 1.0
+    };
+  }
+
 }
