@@ -381,9 +381,9 @@ class _QueueTab extends StatelessWidget {
                 waiting: isWaiting,
                 rating: rating,
                 onOpen: () async {
-                  // ✅ 같은 인스턴스를 상세 페이지에 전달
                   final mentorProvider = ctx.read<MentorProvider>();
-                  await Navigator.push(
+
+                  final refreshed = await Navigator.push<bool>(
                     ctx,
                     MaterialPageRoute(
                       builder: (_) => ChangeNotifierProvider.value(
@@ -395,10 +395,13 @@ class _QueueTab extends StatelessWidget {
                       ),
                     ),
                   );
-                  if (ctx.mounted) {
-                    // 돌아오면 큐/KPI 갱신
-                    mentorProvider.refreshQueue(status: p.queueStatus);
-                    mentorProvider.refreshKpi();
+
+                  if (ctx.mounted && (refreshed ?? false)) {
+                    // ✅ 리뷰 성공 시 전부 갱신
+                    await mentorProvider.refreshKpi();
+                    await mentorProvider.refreshQueue(status: p.queueStatus);
+                    await mentorProvider.refreshMentees(onlyPending: mentorProvider.onlyPendingMentees);
+                    await mentorProvider.refreshHistory();
                   }
                 },
               );

@@ -157,9 +157,6 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
       );
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-
-      print(e);
-
       _showSnack('저장 실패: $e');
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -263,15 +260,9 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
             const SizedBox(height: 16),
             const _SectionTitle('피드백'),
             const SizedBox(height: 8),
-            TextField(
+            _FeedbackBox(
               controller: _fbCtrl,
-              maxLines: 8,
-              textInputAction: TextInputAction.done,
-              onEditingComplete: _unfocus,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: '상세 피드백을 작성하세요',
-              ),
+              onSubmit: _unfocus,
             ),
             const SizedBox(height: 16),
             const _SectionTitle('이전 시도'),
@@ -566,9 +557,12 @@ class _InstructionsBoxGreen extends StatelessWidget {
           const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFF059669)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(color: Color(0xFF065F46), fontWeight: FontWeight.w700),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 3.0),
+              child: Text(
+                text,
+                style: const TextStyle(color: Color(0xFF065F46), fontWeight: FontWeight.w700),
+              ),
             ),
           ),
         ],
@@ -960,3 +954,127 @@ class _Error extends StatelessWidget {
     ]));
   }
 }
+
+class _FeedbackBox extends StatefulWidget {
+  final TextEditingController controller;
+  final VoidCallback? onSubmit;
+  const _FeedbackBox({required this.controller, this.onSubmit});
+
+  @override
+  State<_FeedbackBox> createState() => _FeedbackBoxState();
+}
+
+class _FeedbackBoxState extends State<_FeedbackBox> {
+  final _focus = FocusNode();
+  static const int _maxLen = 800;
+  String get _text => widget.controller.text;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChanged);
+  }
+
+  void _onChanged() => setState(() {});
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onChanged);
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filled = _text.trim().isNotEmpty;
+    final remain = _maxLen - _text.characters.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(
+          color: UiTokens.cardBorder,
+          width: _focus.hasFocus ? 1.2 : 1,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [UiTokens.cardShadow],
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 헤더
+          Row(
+            children: [
+              const Icon(Icons.rate_review_rounded, size: 18, color: UiTokens.actionIcon),
+              const SizedBox(width: 6),
+              const Text('멘토 피드백',
+                  style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
+              const Spacer(),
+              if (filled)
+                TextButton.icon(
+                  onPressed: () { widget.controller.clear(); },
+                  icon: const Icon(Icons.backspace_outlined, size: 16),
+                  label: const Text('지우기'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF64748B),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+
+          // 입력창
+          TextField(
+            controller: widget.controller,
+            focusNode: _focus,
+            maxLines: 8,
+            maxLength: _maxLen,
+            textInputAction: TextInputAction.done,
+            onEditingComplete: widget.onSubmit,
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: '예) 큐티클 라인 좌우 두께가 달라요',
+              hintStyle: TextStyle(color: const Color(0xFF64748B).withOpacity(0.8), fontSize: 14),
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              contentPadding: const EdgeInsets.all(12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: UiTokens.primaryBlue, width: 1.2),
+              ),
+              counterText: '',
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // 푸터(남은 글자수)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '남은 글자: $remain',
+              style: TextStyle(
+                color: remain < 50 ? const Color(0xFFB45309) : UiTokens.title.withOpacity(0.45),
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
