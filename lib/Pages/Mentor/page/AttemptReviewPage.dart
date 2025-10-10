@@ -140,11 +140,17 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
     if (_gradeKor == null) { _showSnack('등급을 선택해주세요'); return; }
     setState(() => _saving = true);
     try {
-      await context.read<MentorProvider>().reviewAttempt(
+      final mp = context.read<MentorProvider>();
+
+      await mp.reviewAttempt(
         attemptId: widget.attemptId,
         gradeKor: _gradeKor!,
         feedback: _fbCtrl.text,
       );
+
+      // ✅ 저장 직후 전역 상태 한 방 갱신 (KPI/큐/멘티/히스토리)
+      await mp.refreshAllAfterReview();
+
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       _showSnack('저장 실패: $e');
@@ -356,6 +362,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Container(
+                      width: double.infinity,
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
                         border: Border.all(color: const Color(0xFFE2E8F0)),

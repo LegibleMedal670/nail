@@ -134,4 +134,13 @@ class MentorProvider extends ChangeNotifier {
     if (error != _error) { _error = error; changed = true; }
     if (changed) notifyListeners();
   }
+
+  Future<void> refreshAllAfterReview() async {
+    await Future.wait([
+      refreshKpi(),
+      refreshQueue(status: queueStatus),
+      refreshMentees(onlyPending: onlyPendingMentees),
+      refreshHistory(),
+    ]);
+  }
 }
