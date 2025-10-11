@@ -5,15 +5,16 @@ class PracticeAttempt {
   final String id;
   final int attemptNo;
   final String setCode;
+  final String? setTitle;        // ★ 추가: 실습 이름
   final DateTime submittedAt;
   final DateTime? reviewedAt;
-  final String status;        // 'pending' | 'reviewed'
-  final String? rating;       // 'high' | 'mid' | 'low' | null
-  final String? feedbackText; // null 가능
+  final String status;           // 'pending' | 'reviewed'
+  final String? rating;          // 'high' | 'mid' | 'low' | null
+  final String? feedbackText;    // null 가능
   final String? reviewerId;
   final String? reviewerName;
-  final List<String> images;
-  final double? feedbackDays; // 일 단위 평균 계산용
+  final List<String> images;     // 서버: 키 배열 (URL 아님)
+  final double? feedbackDays;    // 일 단위 평균 계산용
 
   const PracticeAttempt({
     required this.id,
@@ -21,6 +22,7 @@ class PracticeAttempt {
     required this.setCode,
     required this.submittedAt,
     required this.status,
+    this.setTitle,               // ★ 추가
     this.reviewedAt,
     this.rating,
     this.feedbackText,
@@ -65,6 +67,7 @@ class PracticeAttempt {
       id: (r['id'] ?? '').toString(),
       attemptNo: _i(r['attempt_no']),
       setCode: (r['set_code'] ?? '').toString(),
+      setTitle: (r['set_title'] as String?)?.toString(), // ★ 추가
       submittedAt: _d(r['submitted_at']),
       reviewedAt: _dN(r['reviewed_at']),
       status: (r['status'] ?? '').toString(),

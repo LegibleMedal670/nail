@@ -527,7 +527,7 @@ class SupabaseService {
   }) async {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
-    return _rpcList('admin_list_mentee_practice_attempts', {
+    return _rpcList('admin_list_mentee_attempts', {
       'p_admin_key': key,
       'p_mentee_id': menteeId,
       'p_limit': limit,
