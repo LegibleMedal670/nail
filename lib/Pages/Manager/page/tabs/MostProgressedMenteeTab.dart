@@ -1,6 +1,7 @@
 // lib/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Manager/page/ManagerMenteePracticeDetailPage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
@@ -261,6 +262,32 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ManagerMenteePracticeDetailPage(
+                              menteeId: top.id,
+                              menteeName: top.name,
+                              menteePhotoUrl: top.photoUrl,
+                              joinedAt: top.startedAt,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.assignment_turned_in_rounded),
+                      label: const Text('실습 확인하기'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: UiTokens.primaryBlue,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+
                   IconButton(
                     tooltip: '새로고침',
                     iconSize: 20,

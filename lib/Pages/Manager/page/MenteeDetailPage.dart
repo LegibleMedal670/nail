@@ -2,6 +2,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
+import 'package:nail/Pages/Manager/page/ManagerMenteePracticeDetailPage.dart';
+import 'package:nail/Providers/UserProvider.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -384,6 +386,34 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
               ),
 
               const SizedBox(height: 12),
+
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.fact_check_rounded),
+                  label: const Text('실습 확인하기'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: UiTokens.primaryBlue,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ManagerMenteePracticeDetailPage(
+                          menteeId: _mentee.id,
+                          menteeName: _mentee.name,
+                          menteePhotoUrl: _mentee.photoUrl,
+                          joinedAt: _mentee.startedAt,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 8),
 
               // ===== 목록 헤더 + 필터 =====
               Row(

@@ -865,4 +865,27 @@ class SupabaseService {
     };
   }
 
+  Future<List<Map<String, dynamic>>> adminFetchMenteeSets({
+    required String menteeId,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final key = adminKey ?? this.adminKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('adminKey is missing');
+    }
+
+    final rows = await _sb
+        .rpc('admin_list_mentee_sets', params: {
+      'p_admin_key': key,
+      'p_mentee_id': menteeId,
+      'p_limit': limit,
+      'p_offset': offset,
+    })
+        .select(); // Supabase Dart v2
+
+    return (rows as List).cast<Map<String, dynamic>>();
+  }
+
+
 }
