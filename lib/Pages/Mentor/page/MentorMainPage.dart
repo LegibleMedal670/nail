@@ -1,6 +1,6 @@
 // lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
-import 'package:nail/Pages/Mentee/page/MentorMenteeDetailPage.dart';
+import 'package:nail/Pages/Mentor/page/MentorMenteeDetailPage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
