@@ -66,7 +66,6 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
         setId: widget.setId, limit: 30, offset: 0,
       );
 
-      print(d);
 
       // 참고 이미지
       final refRaw = (d?['set_reference_imgs'] as List?) ?? const [];
