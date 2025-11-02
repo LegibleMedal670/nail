@@ -1,6 +1,7 @@
 // lib/Pages/Manager/page/ManagerMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Pages/Manager/page/ManagerTodoStatusPage.dart';
 import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MenteeManageTab.dart';
@@ -67,8 +68,20 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
             );
           },
         ),
-        // ✅ 앱바 우측에 이론/실습 토글(디자인 커스텀, 그림자/애니/아이콘)
+        // ✅ 앱바 우측 액션:
+        // - 대시보드(0) / 멘토 관리(1) / 멘티 관리(2)일 때만 "TODO 현황" 아이콘 표시
+        // - 교육 관리(3)일 때는 기존 이론/실습 토글 노출(유지)
         actions: [
+          if (_currentIndex != 3)
+            IconButton(
+              tooltip: 'TODO 현황',
+              icon: const Icon(Icons.fact_check_outlined, color: UiTokens.title),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const ManagerTodoStatusPage()),
+                );
+              },
+            ),
           if (_currentIndex == 3)
             Center(
               child: Padding(
