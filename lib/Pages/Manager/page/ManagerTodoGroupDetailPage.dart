@@ -67,20 +67,22 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
         centerTitle: false,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: UiTokens.title,
-          ),
+          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
           tooltip: '뒤로가기',
-          onPressed: () {
-            Navigator.maybePop(context); // 평소엔 곧바로 뒤로
-          },
+          onPressed: () => Navigator.maybePop(context),
         ),
         actions: [
+          // 삭제 버튼 (모달 확인 후 삭제)
+          IconButton(
+            tooltip: '그룹 삭제',
+            icon: const Icon(Icons.delete_outline, color: UiTokens.title),
+            onPressed: _confirmDelete,
+          ),
+          // 활성/비활성 토글
           IconButton(
             tooltip: _isArchived ? '활성으로 전환' : '비활성으로 전환',
-            icon: Icon( _isArchived ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: UiTokens.title),
-            onPressed: _confirmToggle, // ✔ 바로 모달
+            icon: Icon(_isArchived ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: UiTokens.title),
+            onPressed: _confirmToggle,
           ),
         ],
         bottom: TabBar(
@@ -138,16 +140,30 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
     );
     if (!ok) return;
 
-    // TODO: 서버 연동
-    // final success = await rpc.toggleArchive(groupId: widget.groupId, toArchived: toArchived);
-    // if (!success) { 에러 스낵바; return; }
-
+    // TODO: 서버 연동 (예: supabase.rpc('admin_toggle_group_archive', params: {'p_group_id': widget.groupId, 'p_to_archived': toArchived}))
     setState(() => _isArchived = toArchived);
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(toArchived ? '비활성화되었습니다.' : '활성화되었습니다.')),
     );
+  }
+
+  // 삭제 확인 모달 → 삭제 → 상위로 결과 반환
+  Future<void> _confirmDelete() async {
+    final ok = await _showConfirmDialog(
+      context,
+      title: '이 공지를 삭제할까요?',
+      message: '모든 수신자 기록(확인/완료)이 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.',
+      confirmText: '삭제',
+    );
+    if (!ok) return;
+
+    // TODO: 서버 연동 (예: supabase.rpc('admin_delete_group', params: {'p_group_id': widget.groupId}))
+    if (!mounted) return;
+
+    // 상위(현황 페이지)로 "삭제됨" 신호를 주어, 재조회/스낵바 표시하게 함
+    Navigator.pop(context, 'deleted');
   }
 
   String _shorten(String s) => s.length > 22 ? '${s.substring(0, 22)}…' : s;
@@ -418,7 +434,6 @@ Future<bool> _showConfirmDialog(
   final cs = Theme.of(context).colorScheme;
   const Color accent = UiTokens.primaryBlue; // ✔ 항상 파란색
   const Color badgeBg = Color(0xFFEAF3FF);
-  final IconData usedIcon = confirmText.contains('비활성') ? Icons.pause_circle_outline : Icons.play_circle_outline;
 
   final result = await showDialog<bool>(
     context: context,
@@ -437,11 +452,7 @@ Future<bool> _showConfirmDialog(
               width: 56,
               height: 56,
               decoration: const BoxDecoration(color: badgeBg, shape: BoxShape.circle),
-              child: const Icon( // 색상만 파랑으로
-                Icons.info_outline,
-                size: 30,
-                color: accent,
-              ),
+              child: const Icon(Icons.info_outline, size: 30, color: accent),
             ),
             const SizedBox(height: 14),
 
