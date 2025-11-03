@@ -62,7 +62,7 @@ class TodoService {
   /// filter: 'active' | 'completed' | 'inactive' | 'all'
   Future<List<Map<String, dynamic>>> listTodoGroups({
     required String loginKey,
-    String filter = 'active',
+    required String filter,
   }) async {
     final res = await _sb.rpc('rpc_list_todo_groups', params: {
       'p_login_key': loginKey,
