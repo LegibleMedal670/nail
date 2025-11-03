@@ -2,15 +2,14 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/TodoTypes.dart';
-import 'package:nail/Pages/Manager/page/ManagerTodoStatusPage.dart';
 import 'package:nail/Services/TodoService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Providers/UserProvider.dart';
 
 class ManagerTodoGroupDetailPage extends StatefulWidget {
   final String groupId;
-  final String title;          // 진입 시 전달된 제목(요약용) – 서버 요약에서 최신값 다시 씀
-  final TodoAudience audience; // 진입 시 전달된 대상(요약용)
+  final String title;
+  final TodoAudience audience;
 
   const ManagerTodoGroupDetailPage({
     super.key,
@@ -27,269 +26,185 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tab;
 
-  // ------ 로딩/에러 ------
-  bool _loadingSummary = false;
-  bool _loadingMembers = false;
-  String? _errSummary;
-  String? _errMembers;
+  bool _loading = false;
+  String? _error;
 
-  // ------ 서버 데이터 ------
-  _GroupSummaryVm? _summary; // 요약
-  List<_AssigneeVm> _done = const [];
-  List<_AssigneeVm> _notDone = const [];
-  List<_AssigneeVm> _notAck = const [];
+  // 서버 요약
+  bool _isArchived = false;
+  int _total = 0;
+  int _done = 0;
+  int _notDone = 0;
+  int _notAck = 0;
 
-  // 현재 탭 인덱스 편의
-  int get _tabIndex => _tab.index;
+  // 탭 리스트(최초 진입 시 모두 로드)
+  List<_AssigneeVm> _doneItems = const [];
+  List<_AssigneeVm> _notDoneItems = const [];
+  List<_AssigneeVm> _notAckItems = const [];
 
   @override
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _fetchSummary();
-      // 최초에는 현재 탭(0=done) 말고, UX 상 미완료/미확인이 더 유용하므로 1 탭(미완료) 먼저 가져가도 됨.
-      // 요구사항상 헤더/탭 숫자 정확도를 위해 전 탭을 즉시 로드하지 않고, Lazy Load로 처리.
-      await _fetchMembers(_tabKeyByIndex(_tab.index));
-      _tab.addListener(_onTabChanged);
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAll());
   }
 
   @override
   void dispose() {
-    _tab.removeListener(_onTabChanged);
     _tab.dispose();
     super.dispose();
   }
 
-  // ========================= 서버 연동 =========================
-
-  Future<void> _fetchSummary() async {
+  Future<void> _fetchAll() async {
     setState(() {
-      _loadingSummary = true;
-      _errSummary = null;
+      _loading = true;
+      _error = null;
     });
 
     try {
       final loginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
       if (loginKey.isEmpty) {
         setState(() {
-          _loadingSummary = false;
-          _errSummary = '로그인이 필요합니다. (adminKey 없음)';
+          _loading = false;
+          _error = '로그인이 필요합니다. (adminKey 없음)';
         });
         return;
       }
 
-      final m = await TodoService.instance.getTodoGroupSummary(
-        loginKey: loginKey,
-        groupId: widget.groupId,
-      );
+      // 요약 + 3탭 병렬 로드
+      final results = await Future.wait([
+        TodoService.instance.getTodoGroupSummary(loginKey: loginKey, groupId: widget.groupId),
+        TodoService.instance.getTodoGroupMembers(loginKey: loginKey, groupId: widget.groupId, tab: 'done'),
+        TodoService.instance.getTodoGroupMembers(loginKey: loginKey, groupId: widget.groupId, tab: 'not_done'),
+        TodoService.instance.getTodoGroupMembers(loginKey: loginKey, groupId: widget.groupId, tab: 'not_ack'),
+      ]);
+
+      final summary = results[0] as Map<String, dynamic>;
+      final doneRows = (results[1] as List).cast<Map<String, dynamic>>();
+      final notDoneRows = (results[2] as List).cast<Map<String, dynamic>>();
+      final notAckRows = (results[3] as List).cast<Map<String, dynamic>>();
+
+      // 요약 바인딩
+      final isArchived = summary['is_archived'] == true;
+      final total = int.tryParse('${summary['total_count'] ?? 0}') ?? 0;
+      final done = int.tryParse('${summary['done_count'] ?? 0}') ?? 0;
+      final ack = int.tryParse('${summary['ack_count'] ?? 0}') ?? 0;
+      final notDone = total - done;
+      final notAck = total - ack;
+
+      // 리스트 매핑
+      List<_AssigneeVm> mapRows(List<Map<String, dynamic>> rows) {
+        return rows.map((m) {
+          final nick = (m['nickname'] ?? '').toString();
+          final isMentor = m['is_mentor'] == true;
+          DateTime? ackAt;
+          final a = m['ack_at'];
+          if (a is DateTime) {
+            ackAt = a;
+          } else if (a != null) {
+            ackAt = DateTime.tryParse(a.toString());
+          }
+          final doneAt = m['done_at'];
+          final isDone = doneAt != null;
+          return _AssigneeVm(
+            name: nick.isEmpty ? '(이름 없음)' : nick,
+            role: isMentor ? '멘토' : '멘티',
+            acknowledgedAt: ackAt,
+            isDone: isDone,
+          );
+        }).toList(growable: false);
+      }
 
       setState(() {
-        _summary = _mapSummary(m);
+        _isArchived = isArchived;
+        _total = total;
+        _done = done;
+        _notDone = notDone;
+        _notAck = notAck;
+
+        _doneItems = mapRows(doneRows);
+        _notDoneItems = mapRows(notDoneRows);
+        _notAckItems = mapRows(notAckRows);
       });
     } catch (e) {
-      print(e);
-      setState(() => _errSummary = '요약 불러오기 실패: $e');
+      setState(() => _error = '불러오기 실패: $e');
     } finally {
-      if (mounted) setState(() => _loadingSummary = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _fetchMembers(String tabKey) async {
-    setState(() {
-      _loadingMembers = true;
-      _errMembers = null;
-    });
+  // 보관/해제
+  Future<void> _confirmToggle() async {
+    final toArchived = !_isArchived;
+    final title = toArchived ? '이 공지를 비활성화할까요?' : '이 공지를 활성화할까요?';
+    final message = toArchived
+        ? '현황의 “비활성” 필터에서만 보이게 됩니다.'
+        : '현황의 “활성/완료” 필터에서 다시 보이게 됩니다.';
+    final confirmText = toArchived ? '비활성화' : '활성화';
+
+    final ok = await _showConfirmDialog(
+      context,
+      title: title,
+      message: message,
+      confirmText: confirmText,
+    );
+    if (!ok) return;
 
     try {
       final loginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
-      if (loginKey.isEmpty) {
-        setState(() {
-          _loadingMembers = false;
-          _errMembers = '로그인이 필요합니다. (adminKey 없음)';
-        });
-        return;
-      }
-
-      final rows = await TodoService.instance.getTodoGroupMembers(
-        loginKey: loginKey,
-        groupId: widget.groupId,
-        tab: tabKey, // 'done' | 'not_done' | 'not_ack'
-      );
-
-      final mapped = rows.map(_mapAssignee).toList(growable: false);
-
-      setState(() {
-        switch (tabKey) {
-          case 'done':
-            _done = mapped;
-            break;
-          case 'not_done':
-            _notDone = mapped;
-            break;
-          case 'not_ack':
-            _notAck = mapped;
-            break;
-        }
-      });
-    } catch (e) {
-      print(e);
-      setState(() => _errMembers = '목록 불러오기 실패: $e');
-    } finally {
-      if (mounted) setState(() => _loadingMembers = false);
-    }
-  }
-
-  Future<void> _toggleArchive(bool toArchived) async {
-    try {
-      final loginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
-      if (loginKey.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('로그인이 필요합니다. (adminKey 없음)')),
-        );
-        return;
-      }
-
-      final res = await TodoService.instance.toggleGroupArchive(
+      await TodoService.instance.toggleGroupArchive(
         loginKey: loginKey,
         groupId: widget.groupId,
         toArchived: toArchived,
       );
-
-      // 서버 결과 반영
-      setState(() {
-        _summary = _summary?.copyWith(
-          isArchived: (res['is_archived'] == true),
-          updatedAt: _tryParseDateTime(res['updated_at']),
-        );
-      });
-
+      setState(() => _isArchived = toArchived);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(toArchived ? '비활성화되었습니다.' : '활성화되었습니다.')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('처리 실패: $e')),
+        SnackBar(content: Text('변경 실패: $e')),
       );
     }
   }
 
-  Future<void> _deleteGroup() async {
+  // 삭제
+  Future<void> _confirmDelete() async {
+    final ok = await _showConfirmDialog(
+      context,
+      title: '이 공지를 삭제할까요?',
+      message: '모든 수신자 기록(확인/완료)이 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.',
+      confirmText: '삭제',
+    );
+    if (!ok) return;
+
     try {
       final loginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
-      if (loginKey.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('로그인이 필요합니다. (adminKey 없음)')),
-        );
-        return;
-      }
-
       await TodoService.instance.deleteTodoGroup(
         loginKey: loginKey,
         groupId: widget.groupId,
       );
-
       if (!mounted) return;
-      Navigator.pop(context, 'deleted'); // 상위에서 재조회
+      Navigator.pop(context, 'deleted'); // 상위 목록에서 새로고침하도록
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('삭제 실패: $e')),
-      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('삭제 실패: $e')));
     }
   }
-
-  // ========================= 맵퍼/유틸 =========================
-
-  _GroupSummaryVm _mapSummary(Map<String, dynamic> m) {
-    final audienceStr = (m['audience'] ?? 'mentee').toString();
-    final audience = switch (audienceStr) {
-      'all' => TodoAudience.all,
-      'mentor' => TodoAudience.mentor,
-      _ => TodoAudience.mentee,
-    };
-    final createdAt = _tryParseDateTime(m['created_at']);
-    final updatedAt = _tryParseDateTime(m['updated_at']);
-    return _GroupSummaryVm(
-      title: (m['title'] ?? '').toString(),
-      audience: audience,
-      isArchived: m['is_archived'] == true,
-      createdAt: createdAt,
-      updatedAt: updatedAt,
-      totalCount: int.tryParse('${m['total_count'] ?? 0}') ?? 0,
-      doneCount: int.tryParse('${m['done_count'] ?? 0}') ?? 0,
-      ackCount: int.tryParse('${m['ack_count'] ?? 0}') ?? 0,
-      doneRate: _tryParseNum(m['done_rate']),
-      ackRate: _tryParseNum(m['ack_rate']),
-      description: (m['description'] ?? '').toString(),
-    );
-  }
-
-  _AssigneeVm _mapAssignee(Map<String, dynamic> m) {
-    final isMentor = (m['is_mentor'] == true);
-    return _AssigneeVm(
-      name: (m['nickname'] ?? '').toString(),
-      role: isMentor ? '멘토' : '멘티',
-      ackAt: _tryParseDateTime(m['ack_at']),
-      doneAt: _tryParseDateTime(m['done_at']),
-    );
-  }
-
-  DateTime? _tryParseDateTime(dynamic v) {
-    if (v == null) return null;
-    if (v is DateTime) return v;
-    return DateTime.tryParse(v.toString());
-  }
-
-  double _tryParseNum(dynamic v) {
-    if (v == null) return 0;
-    if (v is num) return v.toDouble();
-    return double.tryParse(v.toString()) ?? 0;
-  }
-
-  // 탭 변경 시 Lazy Load
-  void _onTabChanged() {
-    if (!_tab.indexIsChanging) {
-      final k = _tabKeyByIndex(_tab.index);
-      // 이미 데이터가 있으면 패스, 없으면 로드
-      final needLoad = switch (k) {
-        'done' => _done.isEmpty,
-        'not_done' => _notDone.isEmpty,
-        'not_ack' => _notAck.isEmpty,
-        _ => false,
-      };
-      if (needLoad) {
-        _fetchMembers(k);
-      }
-    }
-  }
-
-  String _tabKeyByIndex(int idx) {
-    switch (idx) {
-      case 0:
-        return 'done';
-      case 1:
-        return 'not_done';
-      case 2:
-      default:
-        return 'not_ack';
-    }
-  }
-
-  // ========================= UI =========================
 
   @override
   Widget build(BuildContext context) {
-    final titleForAppBar = _summary?.title ?? widget.title;
+    final total = _total;
+    final done = _done;
+    final notDone = _notDone;
+    final notAck = _notAck;
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text(
-          _shorten(titleForAppBar),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 20),
+          _shorten(widget.title),
         ),
         backgroundColor: Colors.white,
         centerTitle: false,
@@ -306,10 +221,8 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
             onPressed: _confirmDelete,
           ),
           IconButton(
-            tooltip: (_summary?.isArchived ?? false) ? '활성으로 전환' : '비활성으로 전환',
-            icon: Icon((_summary?.isArchived ?? false)
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined, color: UiTokens.title),
+            tooltip: _isArchived ? '활성으로 전환' : '비활성으로 전환',
+            icon: Icon(_isArchived ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: UiTokens.title),
             onPressed: _confirmToggle,
           ),
         ],
@@ -319,96 +232,43 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
           unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
           indicatorColor: UiTokens.primaryBlue,
           tabs: [
-            Tab(text: '완료(${_done.length})'),
-            Tab(text: '미완료(${_notDone.length})'),
-            Tab(text: '미확인(${_notAck.length})'),
+            Tab(text: '완료($done)'),
+            Tab(text: '미완료($notDone)'),
+            Tab(text: '미확인($notAck)'),
           ],
         ),
       ),
-      body: _loadingSummary && _summary == null
+      body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _errSummary != null
-          ? _ErrorView(message: _errSummary!, onRetry: _fetchSummary)
-          : Column(
-        children: [
-          // 헤더 요약
-          _HeaderSummary(
-            audience: _summary?.audience ?? widget.audience,
-            total: _summary?.totalCount ?? 0,
-            done: _summary?.doneCount ?? 0,
-            notDone: (_summary?.totalCount ?? 0) - (_summary?.doneCount ?? 0),
-            notAck: (_summary?.totalCount ?? 0) - (_summary?.ackCount ?? 0),
-            isArchived: _summary?.isArchived ?? false,
-            createdAt: _summary?.createdAt,
-            description: _summary?.description,
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async {
-                await _fetchSummary();
-                await _fetchMembers(_tabKeyByIndex(_tab.index));
-              },
+          : _error != null
+          ? _Error(message: _error!, onRetry: _fetchAll)
+          : RefreshIndicator(
+        onRefresh: _fetchAll,
+        child: Column(
+          children: [
+            _HeaderSummary(
+              audience: widget.audience,
+              total: total,
+              done: done,
+              notDone: notDone,
+              notAck: notAck,
+              isArchived: _isArchived,
+            ),
+            const SizedBox(height: 8),
+            Expanded(
               child: TabBarView(
                 controller: _tab,
                 children: [
-                  _MembersPane(
-                    loading: _loadingMembers && _tabIndex == 0 && _done.isEmpty,
-                    error: _tabIndex == 0 ? _errMembers : null,
-                    onRetry: () => _fetchMembers('done'),
-                    items: _done,
-                  ),
-                  _MembersPane(
-                    loading: _loadingMembers && _tabIndex == 1 && _notDone.isEmpty,
-                    error: _tabIndex == 1 ? _errMembers : null,
-                    onRetry: () => _fetchMembers('not_done'),
-                    items: _notDone,
-                  ),
-                  _MembersPane(
-                    loading: _loadingMembers && _tabIndex == 2 && _notAck.isEmpty,
-                    error: _tabIndex == 2 ? _errMembers : null,
-                    onRetry: () => _fetchMembers('not_ack'),
-                    items: _notAck,
-                  ),
+                  _AssigneeList(items: _doneItems),
+                  _AssigneeList(items: _notDoneItems),
+                  _AssigneeList(items: _notAckItems),
                 ],
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
-  }
-
-  // 확인/토글 모달
-  Future<void> _confirmToggle() async {
-    final toArchived = !(_summary?.isArchived ?? false);
-    final title = toArchived ? '이 공지를 비활성화할까요?' : '이 공지를 활성화할까요?';
-    final message = toArchived
-        ? '현황의 “비활성” 필터에서만 보이게 됩니다.'
-        : '현황의 “활성/완료” 필터에서 다시 보이게 됩니다.';
-    final confirmText = toArchived ? '비활성화' : '활성화';
-
-    final ok = await _showConfirmDialog(
-      context,
-      title: title,
-      message: message,
-      confirmText: confirmText,
-    );
-    if (!ok) return;
-
-    await _toggleArchive(toArchived);
-  }
-
-  Future<void> _confirmDelete() async {
-    final ok = await _showConfirmDialog(
-      context,
-      title: '이 공지를 삭제할까요?',
-      message: '모든 수신자 기록(확인/완료)이 함께 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.',
-      confirmText: '삭제',
-    );
-    if (!ok) return;
-
-    await _deleteGroup();
   }
 
   String _shorten(String s) => s.length > 22 ? '${s.substring(0, 22)}…' : s;
@@ -423,8 +283,6 @@ class _HeaderSummary extends StatelessWidget {
   final int notDone;
   final int notAck;
   final bool isArchived;
-  final DateTime? createdAt;
-  final String? description;
 
   const _HeaderSummary({
     required this.audience,
@@ -433,8 +291,6 @@ class _HeaderSummary extends StatelessWidget {
     required this.notDone,
     required this.notAck,
     required this.isArchived,
-    this.createdAt,
-    this.description,
   });
 
   String get _audienceLabel {
@@ -471,20 +327,9 @@ class _HeaderSummary extends StatelessWidget {
                 Text(_audienceLabel, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
                 const SizedBox(width: 8),
                 _StatusChip(text: isArchived ? '비활성' : '활성', color: isArchived ? Colors.grey : UiTokens.primaryBlue),
-                const Spacer(),
-                if (createdAt != null)
-                  Text(_fmtDate(createdAt!),
-                      style: TextStyle(color: c.onSurfaceVariant, fontSize: 12)),
               ],
             ),
-            if ((description ?? '').isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                description!,
-                style: TextStyle(color: c.onSurface, fontWeight: FontWeight.w600),
-              ),
-            ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
                 _SummaryPill(label: '총원', value: '$total'),
@@ -505,9 +350,6 @@ class _HeaderSummary extends StatelessWidget {
       ),
     );
   }
-
-  String _fmtDate(DateTime d) =>
-      '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 }
 
 class _StatusChip extends StatelessWidget {
@@ -591,32 +433,20 @@ class _LabeledBar extends StatelessWidget {
   }
 }
 
-class _MembersPane extends StatelessWidget {
-  final bool loading;
-  final String? error;
-  final VoidCallback onRetry;
+class _AssigneeList extends StatelessWidget {
   final List<_AssigneeVm> items;
-
-  const _MembersPane({
-    required this.loading,
-    required this.error,
-    required this.onRetry,
-    required this.items,
-  });
+  const _AssigneeList({required this.items});
 
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
 
-    if (loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (error != null) {
-      return _ErrorView(message: error!, onRetry: onRetry);
-    }
     if (items.isEmpty) {
-      return Center(
-        child: Text('해당되는 사용자가 없습니다.', style: TextStyle(color: c.onSurfaceVariant)),
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+        children: [
+          Center(child: Text('해당되는 사용자가 없습니다.', style: TextStyle(color: c.onSurfaceVariant))),
+        ],
       );
     }
 
@@ -634,8 +464,8 @@ class _MembersPane extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                it.doneAt != null ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: it.doneAt != null ? UiTokens.primaryBlue : c.onSurfaceVariant,
+                it.isDone ? Icons.check_circle : Icons.radio_button_unchecked,
+                color: it.isDone ? UiTokens.primaryBlue : c.onSurfaceVariant,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -651,7 +481,7 @@ class _MembersPane extends StatelessWidget {
                         Icon(Icons.visibility_outlined, size: 14, color: c.onSurfaceVariant),
                         const SizedBox(width: 4),
                         Text(
-                          it.ackAt == null ? '미확인' : _fmtDateTime(it.ackAt!),
+                          it.acknowledgedAt == null ? '미확인' : _fmtDateTime(it.acknowledgedAt!),
                           style: TextStyle(color: c.onSurfaceVariant, fontSize: 12),
                         ),
                       ],
@@ -689,78 +519,22 @@ class _RoleChip extends StatelessWidget {
 
 class _AssigneeVm {
   final String name;
-  final String role;     // '멘토' | '멘티'
-  final DateTime? ackAt; // 열람(확인) 시각
-  final DateTime? doneAt;
+  final String role;
+  final DateTime? acknowledgedAt;
+  final bool isDone;
 
   _AssigneeVm({
     required this.name,
     required this.role,
-    required this.ackAt,
-    required this.doneAt,
+    required this.acknowledgedAt,
+    required this.isDone,
   });
 }
 
-class _GroupSummaryVm {
-  final String title;
-  final TodoAudience audience;
-  final bool isArchived;
-  final DateTime? createdAt;
-  final DateTime? updatedAt;
-  final int totalCount;
-  final int doneCount;
-  final int ackCount;
-  final double doneRate; // % 값이 아닌 0~100 숫자를 보내지 않고, 소수 퍼센트를 서버에서 줬으니 그대로 표시는 하지 않고 내부 계산만 사용 가능
-  final double ackRate;
-  final String? description;
-
-  _GroupSummaryVm({
-    required this.title,
-    required this.audience,
-    required this.isArchived,
-    required this.createdAt,
-    required this.updatedAt,
-    required this.totalCount,
-    required this.doneCount,
-    required this.ackCount,
-    required this.doneRate,
-    required this.ackRate,
-    required this.description,
-  });
-
-  _GroupSummaryVm copyWith({
-    String? title,
-    TodoAudience? audience,
-    bool? isArchived,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-    int? totalCount,
-    int? doneCount,
-    int? ackCount,
-    double? doneRate,
-    double? ackRate,
-    String? description,
-  }) {
-    return _GroupSummaryVm(
-      title: title ?? this.title,
-      audience: audience ?? this.audience,
-      isArchived: isArchived ?? this.isArchived,
-      createdAt: createdAt ?? this.createdAt,
-      updatedAt: updatedAt ?? this.updatedAt,
-      totalCount: totalCount ?? this.totalCount,
-      doneCount: doneCount ?? this.doneCount,
-      ackCount: ackCount ?? this.ackCount,
-      doneRate: doneRate ?? this.doneRate,
-      ackRate: ackRate ?? this.ackRate,
-      description: description ?? this.description,
-    );
-  }
-}
-
-class _ErrorView extends StatelessWidget {
+class _Error extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
+  const _Error({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
@@ -785,6 +559,7 @@ class _ErrorView extends StatelessWidget {
     );
   }
 }
+
 
 // =================== 확인 다이얼로그(파란톤) ===================
 
