@@ -8,8 +8,8 @@ import 'package:nail/Providers/UserProvider.dart';
 
 class ManagerTodoGroupDetailPage extends StatefulWidget {
   final String groupId;
-  final String title;
-  final TodoAudience audience;
+  final String title;           // 네비게이션 직후 즉시 표시용(서버 로드 전 임시)
+  final TodoAudience audience;  // 네비게이션 직후 즉시 표시용(서버 로드 전 임시)
 
   const ManagerTodoGroupDetailPage({
     super.key,
@@ -29,14 +29,17 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
   bool _loading = false;
   String? _error;
 
-  // 서버 요약
+  // ── 요약(서버) ───────────────────────────────────────────
+  String _title = '';
+  String _description = '';
+  TodoAudience _audience = TodoAudience.mentee;
   bool _isArchived = false;
   int _total = 0;
   int _done = 0;
   int _notDone = 0;
   int _notAck = 0;
 
-  // 탭 리스트(최초 진입 시 모두 로드)
+  // ── 탭 리스트(최초 진입 시 모두 로드) ─────────────────────
   List<_AssigneeVm> _doneItems = const [];
   List<_AssigneeVm> _notDoneItems = const [];
   List<_AssigneeVm> _notAckItems = const [];
@@ -45,6 +48,10 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
   void initState() {
     super.initState();
     _tab = TabController(length: 3, vsync: this);
+    // 서버 로드 전 임시 표시
+    _title = widget.title;
+    _audience = widget.audience;
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _fetchAll());
   }
 
@@ -78,24 +85,29 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
         TodoService.instance.getTodoGroupMembers(loginKey: loginKey, groupId: widget.groupId, tab: 'not_ack'),
       ]);
 
-      final summary = results[0] as Map<String, dynamic>;
+      final summary = (results[0] as Map).cast<String, dynamic>();
       final doneRows = (results[1] as List).cast<Map<String, dynamic>>();
       final notDoneRows = (results[2] as List).cast<Map<String, dynamic>>();
       final notAckRows = (results[3] as List).cast<Map<String, dynamic>>();
 
-      // 요약 바인딩
-      final isArchived = summary['is_archived'] == true;
+      // ── 요약 바인딩 ──
+      final audienceStr = (summary['audience'] ?? 'mentee').toString();
+      final audience = switch (audienceStr) {
+        'all' => TodoAudience.all,
+        'mentor' => TodoAudience.mentor,
+        _ => TodoAudience.mentee,
+      };
+
       final total = int.tryParse('${summary['total_count'] ?? 0}') ?? 0;
       final done = int.tryParse('${summary['done_count'] ?? 0}') ?? 0;
-      final ack = int.tryParse('${summary['ack_count'] ?? 0}') ?? 0;
-      final notDone = total - done;
-      final notAck = total - ack;
+      final ack  = int.tryParse('${summary['ack_count'] ?? 0}') ?? 0;
 
-      // 리스트 매핑
+      // ── 리스트 매핑 ──
       List<_AssigneeVm> mapRows(List<Map<String, dynamic>> rows) {
         return rows.map((m) {
           final nick = (m['nickname'] ?? '').toString();
           final isMentor = m['is_mentor'] == true;
+
           DateTime? ackAt;
           final a = m['ack_at'];
           if (a is DateTime) {
@@ -105,6 +117,7 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
           }
           final doneAt = m['done_at'];
           final isDone = doneAt != null;
+
           return _AssigneeVm(
             name: nick.isEmpty ? '(이름 없음)' : nick,
             role: isMentor ? '멘토' : '멘티',
@@ -115,11 +128,15 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
       }
 
       setState(() {
-        _isArchived = isArchived;
+        _title = (summary['title'] ?? '').toString();
+        _description = (summary['description'] ?? '').toString();
+        _audience = audience;
+        _isArchived = summary['is_archived'] == true;
+
         _total = total;
         _done = done;
-        _notDone = notDone;
-        _notAck = notAck;
+        _notDone = total - done;
+        _notAck = total - ack;
 
         _doneItems = mapRows(doneRows);
         _notDoneItems = mapRows(notDoneRows);
@@ -132,7 +149,7 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
     }
   }
 
-  // 보관/해제
+  // ── 보관/해제 ──
   Future<void> _confirmToggle() async {
     final toArchived = !_isArchived;
     final title = toArchived ? '이 공지를 비활성화할까요?' : '이 공지를 활성화할까요?';
@@ -169,7 +186,7 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
     }
   }
 
-  // 삭제
+  // ── 삭제 ──
   Future<void> _confirmDelete() async {
     final ok = await _showConfirmDialog(
       context,
@@ -203,9 +220,7 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(
-          _shorten(widget.title),
-        ),
+        title: Text(_shorten(_title), style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 22),),
         backgroundColor: Colors.white,
         centerTitle: false,
         elevation: 0,
@@ -247,7 +262,9 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
         child: Column(
           children: [
             _HeaderSummary(
-              audience: widget.audience,
+              title: _title,
+              description: _description,
+              audience: _audience,
               total: total,
               done: done,
               notDone: notDone,
@@ -274,9 +291,11 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
   String _shorten(String s) => s.length > 22 ? '${s.substring(0, 22)}…' : s;
 }
 
-// =================== 헤더 요약 + 상태 뱃지 ===================
+// =================== 헤더 요약 + 제목/설명 + 상태 뱃지 ===================
 
 class _HeaderSummary extends StatelessWidget {
+  final String title;
+  final String description;
   final TodoAudience audience;
   final int total;
   final int done;
@@ -285,6 +304,8 @@ class _HeaderSummary extends StatelessWidget {
   final bool isArchived;
 
   const _HeaderSummary({
+    required this.title,
+    required this.description,
     required this.audience,
     required this.total,
     required this.done,
@@ -292,17 +313,6 @@ class _HeaderSummary extends StatelessWidget {
     required this.notAck,
     required this.isArchived,
   });
-
-  String get _audienceLabel {
-    switch (audience) {
-      case TodoAudience.all:
-        return '전체 공지';
-      case TodoAudience.mentor:
-        return '멘토 공지';
-      case TodoAudience.mentee:
-        return '멘티 공지';
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -322,14 +332,45 @@ class _HeaderSummary extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 상단: 제목 + 상태
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_audienceLabel, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+                Expanded(
+                  child: Text(
+                    title.isEmpty ? '(제목 없음)' : title,
+                    style: const TextStyle(
+                      color: UiTokens.title,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 18,
+                      height: 1.25,
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 _StatusChip(text: isArchived ? '비활성' : '활성', color: isArchived ? Colors.grey : UiTokens.primaryBlue),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
+
+            // 중간: 설명(있을 때만)
+            if (description.trim().isNotEmpty)
+              Container(
+                width: double.infinity,
+                // padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  description,
+                  style: TextStyle(color: c.onSurface, height: 1.35),
+                ),
+              ),
+
+            const SizedBox(height: 10),
+
+            // 하단: 대상/요약 수치
             Row(
               children: [
                 _SummaryPill(label: '총원', value: '$total'),
@@ -388,14 +429,18 @@ class _SummaryPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Theme.of(context).colorScheme;
+    final hasValue = value.isNotEmpty;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(color: c.surfaceVariant, borderRadius: BorderRadius.circular(999)),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Text(label, style: TextStyle(color: c.onSurfaceVariant, fontSize: 12)),
-          const SizedBox(width: 6),
-          Text(value, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+          if (hasValue) ...[
+            const SizedBox(width: 6),
+            Text(value, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+          ],
         ],
       ),
     );
@@ -559,7 +604,6 @@ class _Error extends StatelessWidget {
     );
   }
 }
-
 
 // =================== 확인 다이얼로그(파란톤) ===================
 
