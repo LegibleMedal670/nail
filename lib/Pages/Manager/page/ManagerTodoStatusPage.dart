@@ -387,7 +387,7 @@ class _TodoGroupCard extends StatelessWidget {
           ),
         )
         // 상세에서 완료/보관 등 변경했을 수도 있으므로 복귀 시 새로고침하고 싶다면 주석 해제
-        // .then((_) => (context.mounted) ? context.findAncestorStateOfType<_ManagerTodoStatusPageState>()?._fetch() : null)
+        .then((_) => (context.mounted) ? context.findAncestorStateOfType<_ManagerTodoStatusPageState>()?._fetch() : null)
             ;
       },
       borderRadius: BorderRadius.circular(16),

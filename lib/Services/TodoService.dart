@@ -71,4 +71,67 @@ class TodoService {
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
+
+  /// 상세: 요약 1row (rpc_get_todo_group_summary)
+  Future<Map<String, dynamic>> getTodoGroupSummary({
+    required String loginKey,
+    required String groupId,
+  }) async {
+    final res = await _sb.rpc('rpc_get_todo_group_summary', params: {
+      'p_login_key': loginKey,
+      'p_group_id': groupId,
+    });
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first as Map);
+    } else if (res is Map) {
+      return Map<String, dynamic>.from(res);
+    }
+    return <String, dynamic>{};
+  }
+
+  /// 상세: 멤버 리스트 (rpc_get_todo_group_members)
+  /// tab: 'done' | 'not_done' | 'not_ack'
+  Future<List<Map<String, dynamic>>> getTodoGroupMembers({
+    required String loginKey,
+    required String groupId,
+    required String tab,
+  }) async {
+    final res = await _sb.rpc('rpc_get_todo_group_members', params: {
+      'p_login_key': loginKey,
+      'p_group_id': groupId,
+      'p_tab': tab,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  /// 보관/해제 (rpc_toggle_group_archive)
+  Future<Map<String, dynamic>> toggleGroupArchive({
+    required String loginKey,
+    required String groupId,
+    required bool toArchived,
+  }) async {
+    final res = await _sb.rpc('rpc_toggle_group_archive', params: {
+      'p_login_key': loginKey,
+      'p_group_id': groupId,
+      'p_to_archived': toArchived,
+    });
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first as Map);
+    } else if (res is Map) {
+      return Map<String, dynamic>.from(res);
+    }
+    return <String, dynamic>{};
+  }
+
+  /// 삭제 (rpc_delete_todo_group)
+  Future<void> deleteTodoGroup({
+    required String loginKey,
+    required String groupId,
+  }) async {
+    await _sb.rpc('rpc_delete_todo_group', params: {
+      'p_login_key': loginKey,
+      'p_group_id': groupId,
+    });
+  }
 }
