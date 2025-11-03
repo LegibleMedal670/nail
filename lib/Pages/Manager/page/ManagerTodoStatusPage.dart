@@ -4,8 +4,9 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/TodoTypes.dart';
 import 'package:nail/Pages/Manager/page/ManagerTodoCreatePage.dart';
 import 'package:nail/Pages/Manager/page/ManagerTodoGroupDetailPage.dart';
-
-
+import 'package:nail/Services/TodoService.dart';
+import 'package:provider/provider.dart';
+import 'package:nail/Providers/UserProvider.dart';
 
 class ManagerTodoStatusPage extends StatefulWidget {
   const ManagerTodoStatusPage({super.key});
@@ -17,161 +18,183 @@ class ManagerTodoStatusPage extends StatefulWidget {
 class _ManagerTodoStatusPageState extends State<ManagerTodoStatusPage> {
   TodoViewFilter _filter = TodoViewFilter.active;
 
-  // 데모 데이터 (isArchived 포함)
-  final List<_TodoGroupVm> _allAudience = [
-    _TodoGroupVm(
-      id: 'g-all-1',
-      title: '전사 공지: 이번 주 안전 교육 리마인드',
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-      audience: TodoAudience.all,
-      doneCount: 18,
-      ackCount: 24,
-      totalCount: 30,
-      isArchived: false,
-    ),
-    _TodoGroupVm(
-      id: 'g-all-2',
-      title: '전사 공지: 지난 주 설비 점검 결과 공유',
-      createdAt: DateTime.now().subtract(const Duration(days: 10)),
-      audience: TodoAudience.all,
-      doneCount: 30,
-      ackCount: 30,
-      totalCount: 30,
-      isArchived: true, // 비활성(보관)
-    ),
-  ];
-  final List<_TodoGroupVm> _mentorAudience = [
-    _TodoGroupVm(
-      id: 'g-men-1',
-      title: '멘토 대상: 신규 멘티 OT 준비',
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-      audience: TodoAudience.mentor,
-      doneCount: 7,
-      ackCount: 10,
-      totalCount: 12,
-      isArchived: false,
-    ),
-  ];
-  final List<_TodoGroupVm> _menteeAudience = [
-    _TodoGroupVm(
-      id: 'g-mee-1',
-      title: '멘티 대상: 금일 교육일지 업로드',
-      createdAt: DateTime.now(),
-      audience: TodoAudience.mentee,
-      doneCount: 9,
-      ackCount: 15,
-      totalCount: 25,
-      isArchived: false,
-    ),
-    _TodoGroupVm(
-      id: 'g-mee-2',
-      title: '멘티 대상: 1강 수강 확인',
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-      audience: TodoAudience.mentee,
-      doneCount: 30,
-      ackCount: 30,
-      totalCount: 30,
-      isArchived: false, // 완료
-    ),
-  ];
+  bool _loading = false;
+  String? _error;
+
+  /// 서버에서 받아온 전체 그룹(캐시)
+  List<_TodoGroupVm> _rowsAll = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _fetch());
+  }
+
+  Future<void> _fetch() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final loginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
+      if (loginKey.isEmpty) {
+        setState(() {
+          _loading = false;
+          _error = '로그인이 필요합니다. (adminKey 없음)';
+        });
+        return;
+      }
+
+      // ✅ 최초/새로고침 시에는 항상 'all' 로 전체를 받아 캐시
+      final list = await TodoService.instance.listTodoGroups(
+        loginKey: loginKey,
+        filter: 'all',
+      );
+
+      final mapped = list.map(_mapRowToVm).toList(growable: false);
+      setState(() => _rowsAll = mapped);
+    } catch (e) {
+      setState(() => _error = '목록 불러오기 실패: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  _TodoGroupVm _mapRowToVm(Map<String, dynamic> m) {
+    final audienceStr = (m['audience'] ?? 'mentee').toString();
+    final audience = switch (audienceStr) {
+      'all' => TodoAudience.all,
+      'mentor' => TodoAudience.mentor,
+      _ => TodoAudience.mentee,
+    };
+
+    DateTime createdAt;
+    final ca = m['created_at'];
+    if (ca is DateTime) {
+      createdAt = ca;
+    } else {
+      createdAt = DateTime.tryParse(ca?.toString() ?? '') ?? DateTime.now();
+    }
+
+    return _TodoGroupVm(
+      id: (m['group_id'] ?? '').toString(),
+      title: (m['title'] ?? '').toString(),
+      createdAt: createdAt,
+      audience: audience,
+      doneCount: int.tryParse('${m['done_count'] ?? 0}') ?? 0,
+      ackCount: int.tryParse('${m['ack_count'] ?? 0}') ?? 0,
+      totalCount: int.tryParse('${m['total_count'] ?? 0}') ?? 0,
+      isArchived: m['is_archived'] == true,
+    );
+  }
+
+  // 상태 계산(서버는 all로 받고, 화면에서 필터)
+  _Status _calcStatus(_TodoGroupVm v) {
+    final completed = (v.totalCount > 0) && (v.doneCount == v.totalCount);
+    if (v.isArchived) return _Status.inactive; // 보관됨
+    return completed ? _Status.completed : _Status.active;
+  }
+
+  bool _passByFilter(_TodoGroupVm v) {
+    final st = _calcStatus(v);
+    switch (_filter) {
+      case TodoViewFilter.active:
+        return st == _Status.active;
+      case TodoViewFilter.completed:
+        return st == _Status.completed;
+      case TodoViewFilter.inactive:
+        return st == _Status.inactive;
+      case TodoViewFilter.all:
+        return true;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final hasAny = _allAudience.isNotEmpty || _mentorAudience.isNotEmpty || _menteeAudience.isNotEmpty;
-
-    // 상태 계산
-    _Status calcStatus(_TodoGroupVm v) {
-      final completed = (v.totalCount > 0) && (v.doneCount == v.totalCount);
-      if (v.isArchived) return _Status.inactive; // 비활성(보관)
-      return completed ? _Status.completed : _Status.active; // 완료 or 활성
-    }
-
-    // 필터링
-    bool pass(_TodoGroupVm v) {
-      final st = calcStatus(v);
-      switch (_filter) {
-        case TodoViewFilter.active:
-          return st == _Status.active;
-        case TodoViewFilter.completed:
-          return st == _Status.completed;
-        case TodoViewFilter.inactive:
-          return st == _Status.inactive;
-        case TodoViewFilter.all:
-          return true;
-      }
-    }
-
-    final fa = _allAudience.where(pass).toList();
-    final fm = _mentorAudience.where(pass).toList();
-    final fe = _menteeAudience.where(pass).toList();
+    final rows = _rowsAll.where(_passByFilter).toList();
+    final fa = rows.where((e) => e.audience == TodoAudience.all).toList();
+    final fm = rows.where((e) => e.audience == TodoAudience.mentor).toList();
+    final fe = rows.where((e) => e.audience == TodoAudience.mentee).toList();
 
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('TODO 현황', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 22)),
+        title: const Text('TODO 현황',
+            style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 22)),
         backgroundColor: Colors.white,
         centerTitle: false,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
-            Icons.arrow_back,
-            color: UiTokens.title,
-          ),
+          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
           tooltip: '뒤로가기',
-          onPressed: () {
-            Navigator.maybePop(context); // 평소엔 곧바로 뒤로
-          },
+          onPressed: () => Navigator.maybePop(context),
         ),
         actions: [
           IconButton(
             tooltip: 'TODO 추가',
             icon: const Icon(Icons.add_task_outlined, color: UiTokens.title),
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ManagerTodoCreatePage()));
+              Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => const ManagerTodoCreatePage()))
+                  .then((_) => _fetch()); // 생성 후 자동 새로고침
             },
           ),
         ],
       ),
-      body: hasAny
-          ? ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        children: [
-          _FilterChips(
-            value: _filter,
-            onChanged: (v) => setState(() => _filter = v),
-          ),
-          const SizedBox(height: 12),
-          _AudienceSection(
-            title: '전체 공지',
-            icon: Icons.campaign_outlined,
-            items: fa,
-            emptyHint: '해당 상태의 전체 공지가 없습니다.',
-            statusOf: calcStatus,
-          ),
-          const SizedBox(height: 16),
-          _AudienceSection(
-            title: '멘토 공지',
-            icon: Icons.support_agent_outlined,
-            items: fm,
-            emptyHint: '해당 상태의 멘토 공지가 없습니다.',
-            statusOf: calcStatus,
-          ),
-          const SizedBox(height: 16),
-          _AudienceSection(
-            title: '멘티 공지',
-            icon: Icons.people_outline,
-            items: fe,
-            emptyHint: '해당 상태의 멘티 공지가 없습니다.',
-            statusOf: calcStatus,
-          ),
-        ],
-      )
-          : const _EmptyView(),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? _ErrorView(message: _error!, onRetry: _fetch)
+          : RefreshIndicator(
+        onRefresh: _fetch, // 당겨서 새로고침은 서버 호출
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          children: [
+            _FilterChips(
+              value: _filter,
+              onChanged: (v) {
+                // ✅ 클라이언트 사이드 필터만 변경 (서버 호출 X)
+                setState(() => _filter = v);
+              },
+            ),
+            const SizedBox(height: 12),
+
+            // 전체가 비었을 때도 칩 아래에 안내만 노출 (칩은 항상 보임)
+            if (fa.isEmpty && fm.isEmpty && fe.isEmpty)
+              _NoResultBanner(filter: _filter),
+
+            _AudienceSection(
+              title: '전체 공지',
+              icon: Icons.campaign_outlined,
+              items: fa,
+              emptyHint: '해당 상태의 전체 공지가 없습니다.',
+              statusOf: _calcStatus,
+            ),
+            const SizedBox(height: 16),
+            _AudienceSection(
+              title: '멘토 공지',
+              icon: Icons.support_agent_outlined,
+              items: fm,
+              emptyHint: '해당 상태의 멘토 공지가 없습니다.',
+              statusOf: _calcStatus,
+            ),
+            const SizedBox(height: 16),
+            _AudienceSection(
+              title: '멘티 공지',
+              icon: Icons.people_outline,
+              items: fe,
+              emptyHint: '해당 상태의 멘티 공지가 없습니다.',
+              statusOf: _calcStatus,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-// ---------- 상단 필터 칩(예쁘게) ----------
+// ---------- 상단 필터 칩 ----------
 class _FilterChips extends StatelessWidget {
   final TodoViewFilter value;
   final ValueChanged<TodoViewFilter> onChanged;
@@ -192,7 +215,7 @@ class _FilterChips extends StatelessWidget {
         onTap: () => onChanged(v),
         borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: selected ? color.withOpacity(0.12) : c.surface,
@@ -229,6 +252,40 @@ class _FilterChips extends StatelessWidget {
         chip(v: TodoViewFilter.inactive,  label: '비활성', icon: Icons.pause_circle_outline,  color: Colors.grey),
         chip(v: TodoViewFilter.all,       label: '전체',   icon: Icons.all_inclusive,         color: c.primary),
       ],
+    );
+  }
+}
+
+// ---------- “결과 없음” 배너 ----------
+class _NoResultBanner extends StatelessWidget {
+  final TodoViewFilter filter;
+  const _NoResultBanner({required this.filter});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    String txt;
+    switch (filter) {
+      case TodoViewFilter.active:    txt = '활성 상태의 공지가 없습니다.'; break;
+      case TodoViewFilter.completed: txt = '완료된 공지가 없습니다.'; break;
+      case TodoViewFilter.inactive:  txt = '비활성 공지가 없습니다.'; break;
+      case TodoViewFilter.all:       txt = '공지 목록이 비어 있습니다.'; break;
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF6F8FB),
+        border: Border.all(color: const Color(0xFFE6EBF0)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: c.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(child: Text(txt, style: TextStyle(color: c.onSurfaceVariant))),
+        ],
+      ),
     );
   }
 }
@@ -328,7 +385,10 @@ class _TodoGroupCard extends StatelessWidget {
               audience: vm.audience,
             ),
           ),
-        );
+        )
+        // 상세에서 완료/보관 등 변경했을 수도 있으므로 복귀 시 새로고침하고 싶다면 주석 해제
+        // .then((_) => (context.mounted) ? context.findAncestorStateOfType<_ManagerTodoStatusPageState>()?._fetch() : null)
+            ;
       },
       borderRadius: BorderRadius.circular(16),
       child: Container(
@@ -380,7 +440,8 @@ class _TodoGroupCard extends StatelessWidget {
     );
   }
 
-  String _fmtDate(DateTime d) => '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
+  String _fmtDate(DateTime d) =>
+      '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 }
 
 class _StatusChip extends StatelessWidget {
@@ -443,23 +504,28 @@ class _LabeledProgress extends StatelessWidget {
   }
 }
 
-class _EmptyView extends StatelessWidget {
-  const _EmptyView();
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+  const _ErrorView({required this.message, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.fact_check_outlined, size: 56, color: c.outline),
+            const Icon(Icons.error_outline, size: 36, color: Colors.redAccent),
             const SizedBox(height: 12),
-            const Text('아직 만든 공지가 없습니다', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 18)),
-            const SizedBox(height: 6),
-            Text('우측 상단의 [TODO 추가] 버튼으로 공지를 생성하세요.', style: TextStyle(color: c.onSurfaceVariant)),
+            Text(message, textAlign: TextAlign.center),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('다시 시도'),
+            ),
           ],
         ),
       ),
@@ -475,7 +541,7 @@ class _TodoGroupVm {
   final int doneCount;
   final int ackCount;
   final int totalCount;
-  final bool isArchived; // 비활성 플래그
+  final bool isArchived;
 
   _TodoGroupVm({
     required this.id,

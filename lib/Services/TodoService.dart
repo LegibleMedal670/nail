@@ -57,4 +57,18 @@ class TodoService {
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
+
+  /// TODO 그룹 목록
+  /// filter: 'active' | 'completed' | 'inactive' | 'all'
+  Future<List<Map<String, dynamic>>> listTodoGroups({
+    required String loginKey,
+    String filter = 'active',
+  }) async {
+    final res = await _sb.rpc('rpc_list_todo_groups', params: {
+      'p_login_key': loginKey,
+      'p_filter': filter,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
 }
