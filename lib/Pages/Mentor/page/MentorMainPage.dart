@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
 import 'package:nail/Pages/Common/widgets/MyTodoModal.dart';
 import 'package:nail/Pages/Mentor/page/MentorMenteeDetailPage.dart';
+import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
+import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
 import 'package:nail/Services/TodoService.dart';
 import 'package:provider/provider.dart';
 
@@ -100,7 +102,6 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
             style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
           ),
           actions: [
-            // ✅ "내 TODO" 페이지로 이동하는 액션 (로그아웃 왼쪽에 배치) + 미완료 배지
             Stack(
               children: [
                 IconButton(
@@ -138,6 +139,27 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
                     ),
                   ),
               ],
+            ),
+            const SizedBox(width: 2),
+            IconButton(
+              tooltip: 'TODO 현황',
+              icon: const Icon(Icons.fact_check_outlined, color: UiTokens.title),
+              onPressed: () async {
+                final mp = context.read<MentorProvider>();
+                final refreshed = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ChangeNotifierProvider.value(
+                      value: mp,
+                      child: const MentorTodoGroupsPage(),
+                    ),
+                  ),
+                );
+                if (refreshed == true && mounted) {
+                  await mp.refreshKpi();
+                  await mp.refreshMentees(onlyPending: mp.onlyPendingMentees);
+                }
+              },
             ),
             const SizedBox(width: 2),
             IconButton(

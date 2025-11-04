@@ -4,15 +4,15 @@ import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
 
-enum MyTodoFilter { all, notDone, done }
+enum MyTodoFilter { notDone, all, done }
 
 extension _F on MyTodoFilter {
   String get label {
     switch (this) {
-      case MyTodoFilter.all:
-        return '전체'; // = active
       case MyTodoFilter.notDone:
         return '미완료';
+      case MyTodoFilter.all:
+        return '전체'; // = active
       case MyTodoFilter.done:
         return '완료';
     }
@@ -20,10 +20,10 @@ extension _F on MyTodoFilter {
 
   String get param {
     switch (this) {
-      case MyTodoFilter.all:
-        return 'active'; // ✅ 전체는 활성 목록과 동일
       case MyTodoFilter.notDone:
         return 'not_done';
+      case MyTodoFilter.all:
+        return 'active'; // ✅ 전체는 활성 목록과 동일
       case MyTodoFilter.done:
         return 'done';
     }
@@ -40,7 +40,7 @@ class MyTodoPage extends StatefulWidget {
 class _MyTodoPageState extends State<MyTodoPage> {
   bool _loading = true;
   String? _error;
-  MyTodoFilter _filter = MyTodoFilter.all;
+  MyTodoFilter _filter = MyTodoFilter.notDone;
   List<Map<String, dynamic>> _items = const [];
 
   @override
