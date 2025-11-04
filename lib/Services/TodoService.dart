@@ -134,4 +134,67 @@ class TodoService {
       'p_group_id': groupId,
     });
   }
+
+  Future<List<Map<String, dynamic>>> listMyUnreadActiveTodos({
+    required String loginKey,
+  }) async {
+    final res = await _sb.rpc('rpc_list_my_unread_active_todos', params: {
+      'p_login_key': loginKey,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  /// 페이지용: 내 TODO 목록
+  /// filter: 'active'|'not_done'|'done'|'all'
+  /// returns: [{group_id,title,description,audience,is_archived,created_by_role,created_at,updated_at,ack_at,done_at}, ...]
+  Future<List<Map<String, dynamic>>> listMyTodos({
+    required String loginKey,
+    String filter = 'active',
+  }) async {
+    final res = await _sb.rpc('rpc_list_my_todos', params: {
+      'p_login_key': loginKey,
+      'p_filter': filter,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  /// 확인(ACK) - 모달/페이지 공용
+  /// returns: {group_id,user_id,ack_at}
+  Future<Map<String, dynamic>> acknowledgeTodo({
+    required String loginKey,
+    required String groupId,
+  }) async {
+    final res = await _sb.rpc('rpc_acknowledge_todo', params: {
+      'p_login_key': loginKey,
+      'p_group_id': groupId,
+    });
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first as Map);
+    } else if (res is Map) {
+      return Map<String, dynamic>.from(res);
+    }
+    return <String, dynamic>{};
+  }
+
+  /// 완료/해제 - 페이지 공용
+  /// returns: {group_id,user_id,done_at}
+  Future<Map<String, dynamic>> setMyTodoDone({
+    required String loginKey,
+    required String groupId,
+    required bool done,
+  }) async {
+    final res = await _sb.rpc('rpc_set_my_todo_done', params: {
+      'p_login_key': loginKey,
+      'p_group_id': groupId,
+      'p_done': done,
+    });
+    if (res is List && res.isNotEmpty) {
+      return Map<String, dynamic>.from(res.first as Map);
+    } else if (res is Map) {
+      return Map<String, dynamic>.from(res);
+    }
+    return <String, dynamic>{};
+  }
 }

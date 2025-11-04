@@ -1,6 +1,9 @@
 // lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/page/MyTodoPage.dart';
+import 'package:nail/Pages/Common/widgets/MyTodoModal.dart';
 import 'package:nail/Pages/Mentor/page/MentorMenteeDetailPage.dart';
+import 'package:nail/Services/TodoService.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
@@ -39,23 +42,104 @@ class MentorMainPage extends StatelessWidget {
   }
 }
 
-class _ScaffoldView extends StatelessWidget {
+class _ScaffoldView extends StatefulWidget {
   const _ScaffoldView();
+
+  @override
+  State<_ScaffoldView> createState() => _ScaffoldViewState();
+}
+
+class _ScaffoldViewState extends State<_ScaffoldView> {
+  bool _initialized = false;      // 첫 진입 1회만 모달/배지 로딩
+  int _todoNotDoneCount = 0;      // 완료하지 않은 TODO 카운트 배지
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initTodosOnce());
+  }
+
+  Future<void> _initTodosOnce() async {
+    if (_initialized || !mounted) return;
+    _initialized = true;
+
+    // 1) 로그인 직후 미확인 활성 TODO 있으면 리스트형 모달 강제 노출
+    await showMyTodosModalIfNeeded(context);
+
+    // 2) 배지용 "완료하지 않은 TODO" 카운트 1회 로딩
+    await _refreshTodoBadge();
+  }
+
+  Future<void> _refreshTodoBadge() async {
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+    try {
+      final rows = await TodoService.instance
+          .listMyTodos(loginKey: loginKey, filter: 'not_done'); // ✅ 미완료만
+      if (!mounted) return;
+      setState(() => _todoNotDoneCount = rows.length);
+    } catch (_) {
+      // 조용히 무시 (배지 실패해도 기능 영향 없음)
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = context.watch<MentorProvider>();
+
     return WillPopScope(
-      onWillPop: () async => false, // 뒤로가기 금지
+      onWillPop: () async => false,
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
           automaticallyImplyLeading: false,
-          title: const Text('멘토 대시보드',
-              style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+          title: const Text(
+            '멘토 대시보드',
+            style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
+          ),
           actions: [
+            // ✅ "내 TODO" 페이지로 이동하는 액션 (로그아웃 왼쪽에 배치) + 미완료 배지
+            Stack(
+              children: [
+                IconButton(
+                  tooltip: '내 TODO',
+                  icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MyTodoPage()),
+                    );
+                    if (!mounted) return;
+                    // 페이지에서 돌아오면 배지 카운트만 재계산 (주기: 진입시 1회 + 복귀시 동기화)
+                    await _refreshTodoBadge();
+                  },
+                ),
+                if (_todoNotDoneCount > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(999),
+                        boxShadow: [UiTokens.cardShadow],
+                      ),
+                      child: Text(
+                        _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 2),
             IconButton(
               tooltip: '로그아웃',
               icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
@@ -75,10 +159,14 @@ class _ScaffoldView extends StatelessWidget {
         body: p.loading && p.error == null
             ? const Center(child: CircularProgressIndicator())
             : p.error != null
-            ? _Error(message: p.error!, onRetry: () => p.ensureLoaded())
+            ? _Error(message: p.error!, onRetry: () async {
+          await p.ensureLoaded();
+          await _refreshTodoBadge(); // 오류 후 재시도 때도 배지 동기화
+        })
             : RefreshIndicator(
           color: UiTokens.primaryBlue,
           onRefresh: () async {
+            // 기존 KPI/탭 데이터 리프레시
             await p.refreshKpi();
             if (p.tabIndex == 0) {
               await p.refreshQueue(status: p.queueStatus);
@@ -87,6 +175,8 @@ class _ScaffoldView extends StatelessWidget {
             } else {
               await p.refreshHistory();
             }
+            // ✅ 리프레시 시 배지도 동기화 1회
+            await _refreshTodoBadge();
           },
           child: CustomScrollView(
             slivers: [
@@ -105,6 +195,7 @@ class _ScaffoldView extends StatelessWidget {
     );
   }
 }
+
 
 /// ===== 상단 프로필 카드 =====
 class _ProfileHeader extends StatelessWidget {
