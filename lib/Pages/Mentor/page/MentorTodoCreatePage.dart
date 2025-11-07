@@ -422,18 +422,19 @@ class _MenteeList extends StatelessWidget {
         final id = '${m['id']}';
         final name = '${m['nickname'] ?? '멘티'}';
         final checked = selected.contains(id);
-        final subtitle = m['joined_at'] != null
-            ? '가입일: ${('${m['joined_at']}'.split(' ').first)}'
-            : null;
         return CheckboxListTile(
           value: checked,
           onChanged: (v) => onChange(id, v ?? false),
           title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-          subtitle: subtitle==null?null:Text(subtitle, style: TextStyle(color: c.onSurfaceVariant)),
           controlAffinity: ListTileControlAffinity.leading,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          secondary: const CircleAvatar(child: Icon(Icons.person_outline)),
-        );
+          secondary: CircleAvatar(
+            backgroundColor: Colors.transparent,
+            foregroundColor: Colors.black54,
+            child: Icon(
+              Icons.person_outline,
+            ),
+          ),        );
       },
     );
   }
