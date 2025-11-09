@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:nail/Providers/AdminProgressProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -19,6 +20,10 @@ Future<void> main() async {
       autoRefreshToken: true,
     ),
   );
+
+  await initializeDateFormatting('ko');
+  await initializeDateFormatting('ko_KR');
+
 
   // ✅ 세션이 없을 때만 익명 로그인 (핵심 수정)
   final auth = Supabase.instance.client.auth;

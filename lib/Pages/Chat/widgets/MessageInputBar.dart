@@ -1,0 +1,276 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:nail/Pages/Common/ui_tokens.dart';
+
+class MessageInputBar extends StatefulWidget {
+  final void Function(String text) onSendText;
+  final void Function(String localImagePath) onSendImageLocalPath;
+  final void Function(String localFilePath, String fileName, int fileBytes) onSendFileLocalPath;
+
+  const MessageInputBar({
+    Key? key,
+    required this.onSendText,
+    required this.onSendImageLocalPath,
+    required this.onSendFileLocalPath,
+  }) : super(key: key);
+
+  @override
+  State<MessageInputBar> createState() => MessageInputBarState();
+}
+
+class MessageInputBarState extends State<MessageInputBar> with SingleTickerProviderStateMixin {
+  final _ctrl = TextEditingController();
+  final _picker = ImagePicker();
+  bool _sending = false;
+  bool _panelOpen = false;
+
+  late final AnimationController _ac;
+  late final Animation<double> _h; // 0.0~1.0
+
+  void closeExtraPanel() {
+    if (_panelOpen) {
+      setState(() => _panelOpen = false);
+      _ac.reverse();
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 180));
+    _h  = CurvedAnimation(parent: _ac, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ac.dispose();
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSend = _ctrl.text.trim().isNotEmpty && !_sending;
+
+    return Container(
+      color: Colors.white, // ✅ 입력바 배경 흰색 고정
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 입력행
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              child: Row(
+                children: [
+                  _PlusButton(onTap: () {
+                    setState(() => _panelOpen = !_panelOpen);
+                    if (_panelOpen) {
+                      FocusScope.of(context).unfocus(); // 패널 열면 키보드 닫기
+                      _ac.forward();
+                    } else {
+                      _ac.reverse();
+                    }
+                  }),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: TextField(
+                        controller: _ctrl,
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.newline,
+                        decoration: const InputDecoration(
+                          hintText: '메세지',
+                          border: InputBorder.none,
+                        ),
+                        onTap: () {
+                          if (_panelOpen) {
+                            setState(() => _panelOpen = false);
+                            _ac.reverse();
+                          }
+                        },
+                        onChanged: (_) => setState((){}),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _SendButton(enabled: canSend, sending: _sending, onSend: _sendText),
+                ],
+              ),
+            ),
+
+            // ▶ 패널(입력바 아래, 오버플로우 방지)
+            SizeTransition(
+              sizeFactor: _h,
+              axisAlignment: -1.0, // 위쪽에서 펼쳐지는 느낌
+              child: ClipRect(
+                child: Container(
+                  width: double.infinity,
+                  height: 160,                // 콘텐츠 고정 높이
+                  color: Colors.white,
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: _buildPlusPanel(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlusPanel(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _PanelAction(
+          icon: Icons.photo_library_outlined,
+          label: '갤러리',
+          onTap: () async { await _pickImage(ImageSource.gallery); },
+        ),
+        _PanelAction(
+          icon: Icons.photo_camera_outlined,
+          label: '카메라',
+          onTap: () async { await _pickImage(ImageSource.camera); },
+        ),
+        _PanelAction(
+          icon: Icons.attach_file,
+          label: '파일',
+          onTap: () async { await _pickFile(); },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _sendText() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    setState(()=>_sending=true);
+    await Future.delayed(const Duration(milliseconds: 120)); // 목업 딜레이
+    widget.onSendText(text);
+    _ctrl.clear();
+    setState(()=>_sending=false);
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    closeExtraPanel();
+    final picked = await _picker.pickImage(source: source, imageQuality: 85);
+    if (picked == null) return;
+    final f = File(picked.path);
+    final size = await f.length();
+    if (size > 20 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('20MB 이하 파일만 전송 가능합니다.')));
+      return;
+    }
+    widget.onSendImageLocalPath(picked.path);
+  }
+
+  Future<void> _pickFile() async {
+    closeExtraPanel();
+    final res = await FilePicker.platform.pickFiles(withReadStream: false);
+    if (res == null || res.files.isEmpty) return;
+    final f = res.files.first;
+    final path = f.path;
+    if (path == null) return;
+    final size = f.size;
+    if (size > 20 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('20MB 이하 파일만 전송 가능합니다.')));
+      return;
+    }
+    widget.onSendFileLocalPath(path, f.name, size);
+  }
+}
+
+// --- 작은 구성요소들 ---
+
+class _PlusButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _PlusButton({required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 34, height: 34,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.grey[300]!),
+          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0,2))],
+        ),
+        alignment: Alignment.center,
+        child: const Text('+', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.black87)),
+      ),
+    );
+  }
+}
+
+class _SendButton extends StatelessWidget {
+  final bool enabled;
+  final bool sending;
+  final VoidCallback onSend;
+  const _SendButton({required this.enabled, required this.sending, required this.onSend});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = enabled ? UiTokens.primaryBlue : Colors.grey[300];
+    return GestureDetector(
+      onTap: (enabled && !sending) ? onSend : null,
+      child: Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: bg,
+          shape: BoxShape.circle,
+          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0,2))],
+        ),
+        alignment: Alignment.center,
+        child: sending
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(Icons.arrow_upward_sharp, size: 18, color: Colors.white),
+      ),
+    );
+  }
+}
+
+class _PanelAction extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _PanelAction({required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Container(
+            width: 56, height: 56,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey[300]!),
+              boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0,2))],
+            ),
+            alignment: Alignment.center,
+            child: Icon(icon, color: Colors.black87, size: 26),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+      ],
+    );
+  }
+}
