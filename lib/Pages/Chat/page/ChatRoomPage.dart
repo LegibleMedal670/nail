@@ -42,6 +42,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   _PinnedNotice? _pinned;
   bool _noticeExpanded = false;
 
+  // ✅ 로컬 전용: 사용자가 "다시 보지 않기"한 공지 message_id 저장
+  final Set<int> _dismissedNoticeIds = <int>{};
+
+  bool get _hideCurrentNotice {
+    final p = _pinned;
+    if (p == null) return true;              // 공지 자체가 없으면 숨김과 동일
+    return _dismissedNoticeIds.contains(p.msgId);
+  }
+
   // 목업 데이터
   final List<_Msg> _messages = [
     _Msg.system(
@@ -317,10 +326,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           body:  _buildNoticeBodyFromMessage(m),
           createdAt: m.createdAt,
           author: m.nickname ?? '사용자',
-        );
+        );                               // ✅ 항상 교체
         _noticeExpanded = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('공지로 등록했습니다.')));
     }
   }
 
@@ -408,7 +416,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         },
         child: Stack(
           children: [
-            // 본체: 리스트 + 입력바 (추가 패딩/보정 없음)
+            // 본체: 리스트 + 입력바
             Column(
               children: [
                 Expanded(
@@ -505,12 +513,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               ],
             ),
 
-            // 상단 공지 오버레이 (레이아웃에 영향 없음, 가려지더라도 단순성 유지)
             if (_pinned != null)
               Positioned(
-                left: 0,
-                right: 0,
-                top: 0,
+                left: 0, right: 0, top: 0,
                 child: SafeArea(
                   bottom: false,
                   child: _NoticeBanner(
@@ -524,6 +529,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         MaterialPageRoute(builder: (_) => _NoticeDetailPage(data: _pinned!)),
                       );
                     },
+                    onDismiss: () => setState(() {
+                      _pinned = null;          // ✅ 현재 공지 배너만 숨김
+                      _noticeExpanded = false;
+                    }),
                   ),
                 ),
               ),
@@ -697,6 +706,7 @@ class _NoticeBanner extends StatelessWidget {
   final double expandedHeight;
   final VoidCallback onToggle;
   final VoidCallback onOpenDetail;
+  final VoidCallback onDismiss;
 
   const _NoticeBanner({
     Key? key,
@@ -706,6 +716,7 @@ class _NoticeBanner extends StatelessWidget {
     required this.expandedHeight,
     required this.onToggle,
     required this.onOpenDetail,
+    required this.onDismiss,
   }) : super(key: key);
 
   @override
@@ -721,63 +732,114 @@ class _NoticeBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 2))],
+          boxShadow: const [BoxShadow(
+              color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 2)
+          )],
         ),
-        clipBehavior: Clip.antiAlias,
+        clipBehavior: Clip.hardEdge,
         child: Material(
           color: Colors.transparent,
-          child: InkWell(
-            onTap: onOpenDetail,
-            child: Column(
-              children: [
-                // 헤더
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.campaign_outlined, color: UiTokens.title),
-                      const SizedBox(width: 8),
-                      Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 헤더
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 28, height: 28,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0x14FF6B6B),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Center(
+                          child: Icon(Icons.campaign_outlined,
+                              color: UiTokens.title, size: 18),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: onOpenDetail,
+                        behavior: HitTestBehavior.opaque,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(date, style: const TextStyle(fontWeight: FontWeight.w800, color: UiTokens.title)),
+                            Text(date, style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: UiTokens.title,
+                              fontSize: 12.5,
+                            )),
                             const SizedBox(height: 2),
                             Text(
                               data.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: UiTokens.title),
+                              style: const TextStyle(
+                                color: UiTokens.title,
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
-                        onPressed: onToggle,
-                      ),
-                    ],
-                  ),
+                    ),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(expanded
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down),
+                      onPressed: onToggle,
+                    ),
+                  ],
                 ),
-                // 본문(펼침 시)
-                if (expanded)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        child: Align(
-                          alignment: Alignment.topLeft,
-                          child: Text(
+              ),
+
+              // 본문 + '다시 보지 않기'
+              if (expanded)
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
                             data.body.isEmpty ? '(내용 없음)' : data.body,
-                            style: const TextStyle(color: Colors.black87),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              height: 1.34,
+                              fontSize: 14.5,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: onDismiss,
+                              icon: const Icon(Icons.visibility_off_outlined, size: 18),
+                              label: const Text('다시 보지 않기'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                                foregroundColor: const Color(0xFF555555),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),
