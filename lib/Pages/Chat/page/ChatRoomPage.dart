@@ -1,7 +1,6 @@
-// lib/Pages/Chat/ChatRoomPage.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart'; // ✅ 추가
+import 'package:provider/provider.dart';
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomInfoPage.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
@@ -12,17 +11,21 @@ import 'package:nail/Pages/Chat/widgets/IncomingMessageTile.dart';
 import 'package:nail/Pages/Chat/widgets/MessageBubble.dart';
 import 'package:nail/Pages/Chat/widgets/MessageInputBar.dart';
 import 'package:nail/Pages/Chat/widgets/SystemEventChip.dart';
-import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart'; // ✅ 추가
+import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Providers/UserProvider.dart'; // ✅ 추가
+import 'package:nail/Providers/UserProvider.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String roomId;
   final String roomName;
   final List<String>? invitedNamesOnCreate;
 
-  const ChatRoomPage({Key? key, required this.roomId, required this.roomName, this.invitedNamesOnCreate,})
-      : super(key: key);
+  const ChatRoomPage({
+    Key? key,
+    required this.roomId,
+    required this.roomName,
+    this.invitedNamesOnCreate,
+  }) : super(key: key);
 
   @override
   State<ChatRoomPage> createState() => _ChatRoomPageState();
@@ -30,11 +33,9 @@ class ChatRoomPage extends StatefulWidget {
 
 class _ChatRoomPageState extends State<ChatRoomPage> {
   final ScrollController _scroll = ScrollController();
-  final GlobalKey<MessageInputBarState> _inputKey =
-  GlobalKey<MessageInputBarState>();
+  final GlobalKey<MessageInputBarState> _inputKey = GlobalKey<MessageInputBarState>();
 
-  static const double _kInputBarHeight = 68;
-
+  // 목업 데이터
   final List<_Msg> _messages = [
     _Msg.system(
       id: 900,
@@ -121,12 +122,11 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   void initState() {
     super.initState();
 
-    // ✅ 방 생성 플로우에서 넘어왔다면, 가장 위에 “초대했습니다” 시스템 이벤트 삽입
-    if (widget.invitedNamesOnCreate != null &&
-        widget.invitedNamesOnCreate!.isNotEmpty) {
-      final who = context.read<UserProvider>().nickname.isNotEmpty
-             ? context.read<UserProvider>().nickname
-             : '관리자';      final list = widget.invitedNamesOnCreate!.join(', ');
+    // 방 생성 직후 “초대했습니다” 시스템 메시지(목업)
+    if (widget.invitedNamesOnCreate != null && widget.invitedNamesOnCreate!.isNotEmpty) {
+      final up = context.read<UserProvider>();
+      final who = up.nickname.isNotEmpty ? up.nickname : '관리자';
+      final list = widget.invitedNamesOnCreate!.join(', ');
       _messages.insert(
         0,
         _Msg.system(
@@ -137,23 +137,24 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       );
     }
 
+    // 첫 프레임 후 한 번만 바닥 점프 (reverse:true와 충돌 없게 최소 호출)
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
-  }
-
-  void _jumpToBottom({bool animate = false}) {
-    if (!_scroll.hasClients) return;
-    final dest = _scroll.position.maxScrollExtent;
-    if (animate) {
-      _scroll.animateTo(dest, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
-    } else {
-      _scroll.jumpTo(dest);
-    }
   }
 
   @override
   void dispose() {
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _jumpToBottom({bool animate = false}) {
+    if (!_scroll.hasClients) return;
+    final dest = _scroll.position.minScrollExtent; // reverse:true에서는 min이 바닥
+    if (animate) {
+      _scroll.animateTo(dest, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    } else {
+      _scroll.jumpTo(dest);
+    }
   }
 
   void _openImageFullscreen(_Msg imageMsg) {
@@ -164,7 +165,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         barrierColor: Colors.black,
         opaque: false,
         pageBuilder: (_, __, ___) => ChatImageViewer(
-          images: [src],  // ✅ 단건만
+          images: [src],
           initialIndex: 0,
           heroTagPrefix: 'chat_img_',
         ),
@@ -173,17 +174,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     );
   }
 
-  // ✅ 현재 세션 역할 라벨
   String _currentRoleLabel(UserProvider up) {
     if (up.isAdmin) return '관리자';
     if (up.isMentor) return '멘토';
     return '멘티';
   }
 
-  // ✅ 아바타 탭 시 프로필 시트
   void _openMemberSheetFromMsg(_Msg m, UserProvider up) {
     final isAdmin = up.isAdmin;
-    final isSelf = m.me; // 목업 기준: me 플래그로 본인 판단 (실서비스면 senderId 비교)
+    final isSelf = m.me;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -194,7 +193,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       builder: (_) => MemberProfileSheet(
         nickname: m.nickname ?? (m.me ? up.nickname : '사용자'),
         photoUrl: m.photoUrl,
-        role: m.me ? _currentRoleLabel(up) : '멘티', // 상대역할은 서버 연결 후 매핑
+        role: m.me ? _currentRoleLabel(up) : '멘티',
         isAdmin: isAdmin,
         isSelf: isSelf,
         onViewProfile: () {
@@ -205,7 +204,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         },
         onKick: () async {
           await Future.delayed(const Duration(milliseconds: 250));
-          return true; // 서버 연결 시 실제 결과 반환
+          return true;
         },
       ),
     );
@@ -269,15 +268,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 세션/권한 가져오기
     final user = context.watch<UserProvider>();
     final isAdmin = user.isAdmin;
-
     final items = _buildItemsWithSeparators(_messages);
-    final double bottomSafe = MediaQuery.of(context).padding.bottom;
-    final double listBottomPadding = _kInputBarHeight + bottomSafe + 24;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true, // ✅ 키보드 뜨면 body 높이 자동 조절
       appBar: AppBar(
         title: Text(
           widget.roomName,
@@ -290,14 +286,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           IconButton(
             icon: const Icon(Icons.menu),
             onPressed: () {
-              // ✅ 멤버 빌드 시 현재 사용자의 역할 라벨 반영
               final myRole = _currentRoleLabel(user);
               final members = _messages
                   .where((m) => !m.isSystem)
                   .map((m) => RoomMemberBrief(
                 userId: m.me ? (user.current?.userId ?? 'me') : 'u${m.id}',
                 nickname: m.nickname ?? (m.me ? user.nickname : '사용자'),
-                role: m.me ? myRole : '멘티', // 상대 역할은 서버 연결 시 갱신
+                role: m.me ? myRole : '멘티',
                 photoUrl: m.photoUrl,
               ))
                   .toSet()
@@ -308,7 +303,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                   builder: (_) => ChatRoomInfoPage(
                     roomId: widget.roomId,
                     roomName: widget.roomName,
-                    isAdmin: isAdmin, // ✅ 실제 권한 전달
+                    isAdmin: isAdmin,
                     members: members,
                   ),
                 ),
@@ -318,99 +313,104 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         ],
       ),
       backgroundColor: Colors.white,
+
+      // ✅ Stack 제거: Column + Expanded(ListView) + MessageInputBar
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () {
           _inputKey.currentState?.closeExtraPanel();
           FocusScope.of(context).unfocus();
         },
-        child: Stack(
+        child: Column(
           children: [
-            ListView.builder(
-              controller: _scroll,
-              padding: EdgeInsets.fromLTRB(12, 12, 12, listBottomPadding),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final it = items[index];
+            Expanded(
+              child: ListView.builder(
+                controller: _scroll,
+                reverse: true,                                // ✅ 바닥 앵커
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                itemCount: items.length,
+                itemBuilder: (context, index) {
+                  // reverse:true에 맞춰 뒤에서부터 뽑기
+                  final it = items[items.length - 1 - index];
 
-                if (it.kind == _RowKind.separator && it.day != null) {
-                  return ChatDaySeparator(day: it.day!);
-                }
-                if (it.kind == _RowKind.system && it.msg != null) {
-                  return SystemEventChip(text: it.msg!.systemText ?? '');
-                }
-
-                final m = it.msg!;
-                final isMe = m.me;
-
-                Widget bubbleRow;
-                if (m.deleted) {
-                  bubbleRow = MessageBubble(
-                    isMe: isMe,
-                    text: '관리자에 의해 삭제됨',
-                    createdAt: m.createdAt,
-                    readCount: m.readCount,
-                    onLongPressDelete: () => _confirmDelete(context, m),
-                  );
-                } else {
-                  switch (m.type!) {
-                    case _MsgType.text:
-                      bubbleRow = MessageBubble(
-                        isMe: isMe,
-                        text: m.text ?? '',
-                        createdAt: m.createdAt,
-                        readCount: m.readCount,
-                        onLongPressDelete: () => _confirmDelete(context, m),
-                      );
-                      break;
-                    case _MsgType.image:
-                      final heroTag = 'chat_img_${m.id}';
-                      bubbleRow = ImageBubble(
-                        isMe: isMe,
-                        imageUrl: m.imageUrl,
-                        localPreviewPath: m.imageLocal,
-                        createdAt: m.createdAt,
-                        readCount: m.readCount,
-                        onLongPressDelete: () => _confirmDelete(context, m),
-                        onTap: () => _openImageFullscreen(m),
-                        heroTag: heroTag,
-                      );
-                      break;
-                    case _MsgType.file:
-                      bubbleRow = FileBubble(
-                        isMe: isMe,
-                        fileName: m.fileName ?? '파일',
-                        fileBytes: m.fileBytes ?? 0,
-                        localPath: m.fileLocal,
-                        fileUrl: m.fileUrl,
-                        createdAt: m.createdAt,
-                        readCount: m.readCount,
-                        onTapOpen: () {},
-                        onLongPressDelete: () => _confirmDelete(context, m),
-                      );
-                      break;
+                  if (it.kind == _RowKind.separator && it.day != null) {
+                    return ChatDaySeparator(day: it.day!);
                   }
-                }
+                  if (it.kind == _RowKind.system && it.msg != null) {
+                    return SystemEventChip(text: it.msg!.systemText ?? '');
+                  }
 
-                if (!isMe) {
-                  return IncomingMessageTile(
-                    nickname: m.nickname ?? '사용자',
-                    photoUrl: m.photoUrl,
-                    childRow: bubbleRow,
-                    onTapAvatar: () => _openMemberSheetFromMsg(m, user), // ✅ 아바타 탭 → 시트
-                  );
-                }
-                return bubbleRow;
-              },
-            ),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: MessageInputBar(
-                key: _inputKey,
-                onSendText: _appendMockText,
-                onSendImageLocalPath: _appendMockImage,
-                onSendFileLocalPath: _appendMockFile,
+                  final m = it.msg!;
+                  final isMe = m.me;
+
+                  Widget bubbleRow;
+                  if (m.deleted) {
+                    bubbleRow = MessageBubble(
+                      isMe: isMe,
+                      text: '관리자에 의해 삭제됨',
+                      createdAt: m.createdAt,
+                      readCount: m.readCount,
+                      onLongPressDelete: () => _confirmDelete(context, m),
+                    );
+                  } else {
+                    switch (m.type!) {
+                      case _MsgType.text:
+                        bubbleRow = MessageBubble(
+                          isMe: isMe,
+                          text: m.text ?? '',
+                          createdAt: m.createdAt,
+                          readCount: m.readCount,
+                          onLongPressDelete: () => _confirmDelete(context, m),
+                        );
+                        break;
+                      case _MsgType.image:
+                        final heroTag = 'chat_img_${m.id}';
+                        bubbleRow = ImageBubble(
+                          isMe: isMe,
+                          imageUrl: m.imageUrl,
+                          localPreviewPath: m.imageLocal,
+                          createdAt: m.createdAt,
+                          readCount: m.readCount,
+                          onLongPressDelete: () => _confirmDelete(context, m),
+                          onTap: () => _openImageFullscreen(m),
+                          heroTag: heroTag,
+                        );
+                        break;
+                      case _MsgType.file:
+                        bubbleRow = FileBubble(
+                          isMe: isMe,
+                          fileName: m.fileName ?? '파일',
+                          fileBytes: m.fileBytes ?? 0,
+                          localPath: m.fileLocal,
+                          fileUrl: m.fileUrl,
+                          createdAt: m.createdAt,
+                          readCount: m.readCount,
+                          onTapOpen: () {},
+                          onLongPressDelete: () => _confirmDelete(context, m),
+                        );
+                        break;
+                    }
+                  }
+
+                  if (!isMe) {
+                    return IncomingMessageTile(
+                      nickname: m.nickname ?? '사용자',
+                      photoUrl: m.photoUrl,
+                      childRow: bubbleRow,
+                      onTapAvatar: () => _openMemberSheetFromMsg(m, user),
+                    );
+                  }
+                  return bubbleRow;
+                },
               ),
+            ),
+
+            // ✅ SafeArea 내부에서 높이 변화(패널/키보드)를 Column이 그대로 흡수
+            MessageInputBar(
+              key: _inputKey,
+              onSendText: _appendMockText,
+              onSendImageLocalPath: _appendMockImage,
+              onSendFileLocalPath: _appendMockFile,
             ),
           ],
         ),
@@ -447,7 +447,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 }
 
-// ===== 아래는 내부 모델들 (동일) =====
+// ===== 내부 모델 =====
 enum _MsgType { text, image, file }
 enum _SendStatus { sending, sent }
 
@@ -564,26 +564,16 @@ class _RowItem {
 
   _RowItem._(this.kind, {this.day, this.msg});
 
-  factory _RowItem.separator(DateTime day) =>
-      _RowItem._(_RowKind.separator, day: day);
-
+  factory _RowItem.separator(DateTime day) => _RowItem._(_RowKind.separator, day: day);
   factory _RowItem.system(_Msg m) => _RowItem._(_RowKind.system, msg: m);
-
   factory _RowItem.message(_Msg m) => _RowItem._(_RowKind.message, msg: m);
 }
 
-String formatRoomCreated({required String creator}) {
-  return '$creator님이 대화방을 생성했습니다.';
-}
-
-String formatInvitedSingle({required String inviter, required String invitee}) {
-  return '$inviter님이 $invitee님을 초대했습니다.';
-}
-
-String formatInvitedMany({
-  required String inviter,
-  required List<String> invitees,
-}) {
+// ===== 헬퍼 위젯 =====
+String formatRoomCreated({required String creator}) => '$creator님이 대화방을 생성했습니다.';
+String formatInvitedSingle({required String inviter, required String invitee}) =>
+    '$inviter님이 $invitee님을 초대했습니다.';
+String formatInvitedMany({required String inviter, required List<String> invitees}) {
   final list = invitees.map((e) => '$e님').join(', ');
   return '$inviter님이 $list을 초대했습니다.';
 }
@@ -600,9 +590,7 @@ class ChatDaySeparator extends StatelessWidget {
     this.padding = const EdgeInsets.symmetric(vertical: 10),
   }) : super(key: key);
 
-  String _labelKo(DateTime d) {
-    return DateFormat('yyyy년 M월 d일 EEEE', 'ko').format(d);
-  }
+  String _labelKo(DateTime d) => DateFormat('yyyy년 M월 d일 EEEE', 'ko').format(d);
 
   @override
   Widget build(BuildContext context) {
