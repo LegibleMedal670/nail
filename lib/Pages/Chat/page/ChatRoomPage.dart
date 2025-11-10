@@ -19,8 +19,9 @@ import 'package:nail/Providers/UserProvider.dart'; // ✅ 추가
 class ChatRoomPage extends StatefulWidget {
   final String roomId;
   final String roomName;
+  final List<String>? invitedNamesOnCreate;
 
-  const ChatRoomPage({Key? key, required this.roomId, required this.roomName})
+  const ChatRoomPage({Key? key, required this.roomId, required this.roomName, this.invitedNamesOnCreate,})
       : super(key: key);
 
   @override
@@ -119,6 +120,23 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   @override
   void initState() {
     super.initState();
+
+    // ✅ 방 생성 플로우에서 넘어왔다면, 가장 위에 “초대했습니다” 시스템 이벤트 삽입
+    if (widget.invitedNamesOnCreate != null &&
+        widget.invitedNamesOnCreate!.isNotEmpty) {
+      final who = context.read<UserProvider>().nickname.isNotEmpty
+             ? context.read<UserProvider>().nickname
+             : '관리자';      final list = widget.invitedNamesOnCreate!.join(', ');
+      _messages.insert(
+        0,
+        _Msg.system(
+          id: 8000 + DateTime.now().millisecondsSinceEpoch % 1000,
+          createdAt: DateTime.now(),
+          systemText: '$who님이 $list님을 초대했습니다.',
+        ),
+      );
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
   }
 

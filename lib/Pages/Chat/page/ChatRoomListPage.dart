@@ -1,6 +1,7 @@
 // lib/Pages/Chat/ChatRoomListPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomPage.dart';
+import 'package:nail/Pages/Chat/page/CreateChatRoomPage.dart';
 import 'package:nail/Pages/Chat/widgets/CreateChatRoomModal.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -40,20 +41,10 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
             IconButton(
               icon: const Icon(Icons.add),
               onPressed: () async {
-                final created = await showModalBottomSheet<_RoomItem>(
-                  context: context,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.white,
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  builder: (_) => const CreateChatRoomModal(),
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CreateChatRoomPage()),
                 );
-                if (created != null) {
-                  setState(() {
-                    rooms.insert(0, created);
-                  });
-                }
+                // 돌아오면 리스트 갱신은 서버 붙일 때 처리
               },
             ),
         ],
