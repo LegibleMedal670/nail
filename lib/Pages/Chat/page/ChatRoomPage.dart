@@ -1,3 +1,4 @@
+// lib/Pages/Chat/ChatRoomPage.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -34,6 +35,12 @@ class ChatRoomPage extends StatefulWidget {
 class _ChatRoomPageState extends State<ChatRoomPage> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey<MessageInputBarState> _inputKey = GlobalKey<MessageInputBarState>();
+
+  // ------- 공지 상태(간단 버전: 오버레이만) -------
+  static const double _kNoticeCollapsed = 76.0;
+  static const double _kNoticeExpanded  = 140.0;
+  _PinnedNotice? _pinned;
+  bool _noticeExpanded = false;
 
   // 목업 데이터
   final List<_Msg> _messages = [
@@ -137,7 +144,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       );
     }
 
-    // 첫 프레임 후 한 번만 바닥 점프 (reverse:true와 충돌 없게 최소 호출)
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
   }
 
@@ -149,7 +155,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   void _jumpToBottom({bool animate = false}) {
     if (!_scroll.hasClients) return;
-    final dest = _scroll.position.minScrollExtent; // reverse:true에서는 min이 바닥
+    final dest = _scroll.position.minScrollExtent; // reverse:true일 때 min이 바닥
     if (animate) {
       _scroll.animateTo(dest, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
     } else {
@@ -266,6 +272,85 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
   }
 
+  // ===== 공지 등록/삭제(간단 시트) =====
+  Future<void> _onLongPressMessage(BuildContext ctx, _Msg m, {required bool isAdmin}) async {
+    final action = await showModalBottomSheet<String>(
+      context: ctx,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) {
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              if (isAdmin)
+                ListTile(
+                  leading: const Icon(Icons.campaign_outlined),
+                  title: const Text('공지로 등록'),
+                  onTap: () => Navigator.pop(ctx, 'notice'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('삭제'),
+                onTap: () => Navigator.pop(ctx, 'delete'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (action == 'delete') {
+      _confirmDelete(ctx, m);
+      return;
+    }
+    if (action == 'notice' && isAdmin) {
+      setState(() {
+        _pinned = _PinnedNotice(
+          msgId: m.id,
+          title: _buildNoticeTitleFromMessage(m),
+          body:  _buildNoticeBodyFromMessage(m),
+          createdAt: m.createdAt,
+          author: m.nickname ?? '사용자',
+        );
+        _noticeExpanded = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('공지로 등록했습니다.')));
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, _Msg m) async {
+    final ok = await confirmDeleteMessage(context);
+    if (!ok) return;
+    setState(() {
+      final idx = _messages.indexWhere((x) => x.id == m.id);
+      if (idx >= 0) _messages[idx] = _messages[idx].copyAsDeleted();
+      if (_pinned?.msgId == m.id) _pinned = null;
+    });
+  }
+
+  String _buildNoticeTitleFromMessage(_Msg m) {
+    if (m.type == _MsgType.text && (m.text ?? '').trim().isNotEmpty) {
+      final firstLine = m.text!.split('\n').first.trim();
+      return firstLine.length > 30 ? '${firstLine.substring(0, 30)}…' : firstLine;
+    }
+    if (m.type == _MsgType.file) return m.fileName ?? '파일 공지';
+    if (m.type == _MsgType.image) return '이미지 공지';
+    return '공지';
+  }
+
+  String _buildNoticeBodyFromMessage(_Msg m) {
+    if (m.type == _MsgType.text) return m.text ?? '';
+    if (m.type == _MsgType.file) return '${m.fileName ?? '파일'} • ${(m.fileBytes ?? 0) ~/ 1024}KB';
+    if (m.type == _MsgType.image) return '이미지 1장';
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<UserProvider>();
@@ -273,7 +358,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     final items = _buildItemsWithSeparators(_messages);
 
     return Scaffold(
-      resizeToAvoidBottomInset: true, // ✅ 키보드 뜨면 body 높이 자동 조절
+      resizeToAvoidBottomInset: true, // 키보드 뜨면 body(=Column) 높이 자동 조절
       appBar: AppBar(
         title: Text(
           widget.roomName,
@@ -314,104 +399,134 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       ),
       backgroundColor: Colors.white,
 
-      // ✅ Stack 제거: Column + Expanded(ListView) + MessageInputBar
+      // ===== 핵심: Column(리스트+입력바) 위에 공지 오버레이를 Stack으로 얹기 =====
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () {
           _inputKey.currentState?.closeExtraPanel();
           FocusScope.of(context).unfocus();
         },
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: ListView.builder(
-                controller: _scroll,
-                reverse: true,                                // ✅ 바닥 앵커
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  // reverse:true에 맞춰 뒤에서부터 뽑기
-                  final it = items[items.length - 1 - index];
+            // 본체: 리스트 + 입력바 (추가 패딩/보정 없음)
+            Column(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    controller: _scroll,
+                    reverse: true, // 바닥 앵커
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      // reverse:true 구조에 맞춰 역인덱싱
+                      final it = items[items.length - 1 - index];
 
-                  if (it.kind == _RowKind.separator && it.day != null) {
-                    return ChatDaySeparator(day: it.day!);
-                  }
-                  if (it.kind == _RowKind.system && it.msg != null) {
-                    return SystemEventChip(text: it.msg!.systemText ?? '');
-                  }
+                      if (it.kind == _RowKind.separator && it.day != null) {
+                        return ChatDaySeparator(day: it.day!);
+                      }
+                      if (it.kind == _RowKind.system && it.msg != null) {
+                        return SystemEventChip(text: it.msg!.systemText ?? '');
+                      }
 
-                  final m = it.msg!;
-                  final isMe = m.me;
+                      final m = it.msg!;
+                      final isMe = m.me;
 
-                  Widget bubbleRow;
-                  if (m.deleted) {
-                    bubbleRow = MessageBubble(
-                      isMe: isMe,
-                      text: '관리자에 의해 삭제됨',
-                      createdAt: m.createdAt,
-                      readCount: m.readCount,
-                      onLongPressDelete: () => _confirmDelete(context, m),
-                    );
-                  } else {
-                    switch (m.type!) {
-                      case _MsgType.text:
+                      // 롱프레스: 관리자일 때 공지/삭제, 일반은 삭제만(모달에서 분기)
+                      void _onLong() => _onLongPressMessage(context, m, isAdmin: isAdmin);
+
+                      Widget bubbleRow;
+                      if (m.deleted) {
                         bubbleRow = MessageBubble(
                           isMe: isMe,
-                          text: m.text ?? '',
+                          text: '관리자에 의해 삭제됨',
                           createdAt: m.createdAt,
                           readCount: m.readCount,
-                          onLongPressDelete: () => _confirmDelete(context, m),
+                          onLongPressDelete: _onLong,
                         );
-                        break;
-                      case _MsgType.image:
-                        final heroTag = 'chat_img_${m.id}';
-                        bubbleRow = ImageBubble(
-                          isMe: isMe,
-                          imageUrl: m.imageUrl,
-                          localPreviewPath: m.imageLocal,
-                          createdAt: m.createdAt,
-                          readCount: m.readCount,
-                          onLongPressDelete: () => _confirmDelete(context, m),
-                          onTap: () => _openImageFullscreen(m),
-                          heroTag: heroTag,
-                        );
-                        break;
-                      case _MsgType.file:
-                        bubbleRow = FileBubble(
-                          isMe: isMe,
-                          fileName: m.fileName ?? '파일',
-                          fileBytes: m.fileBytes ?? 0,
-                          localPath: m.fileLocal,
-                          fileUrl: m.fileUrl,
-                          createdAt: m.createdAt,
-                          readCount: m.readCount,
-                          onTapOpen: () {},
-                          onLongPressDelete: () => _confirmDelete(context, m),
-                        );
-                        break;
-                    }
-                  }
+                      } else {
+                        switch (m.type!) {
+                          case _MsgType.text:
+                            bubbleRow = MessageBubble(
+                              isMe: isMe,
+                              text: m.text ?? '',
+                              createdAt: m.createdAt,
+                              readCount: m.readCount,
+                              onLongPressDelete: _onLong,
+                            );
+                            break;
+                          case _MsgType.image:
+                            final heroTag = 'chat_img_${m.id}';
+                            bubbleRow = ImageBubble(
+                              isMe: isMe,
+                              imageUrl: m.imageUrl,
+                              localPreviewPath: m.imageLocal,
+                              createdAt: m.createdAt,
+                              readCount: m.readCount,
+                              onLongPressDelete: _onLong,
+                              onTap: () => _openImageFullscreen(m),
+                              heroTag: heroTag,
+                            );
+                            break;
+                          case _MsgType.file:
+                            bubbleRow = FileBubble(
+                              isMe: isMe,
+                              fileName: m.fileName ?? '파일',
+                              fileBytes: m.fileBytes ?? 0,
+                              localPath: m.fileLocal,
+                              fileUrl: m.fileUrl,
+                              createdAt: m.createdAt,
+                              readCount: m.readCount,
+                              onTapOpen: () {},
+                              onLongPressDelete: _onLong,
+                            );
+                            break;
+                        }
+                      }
 
-                  if (!isMe) {
-                    return IncomingMessageTile(
-                      nickname: m.nickname ?? '사용자',
-                      photoUrl: m.photoUrl,
-                      childRow: bubbleRow,
-                      onTapAvatar: () => _openMemberSheetFromMsg(m, user),
-                    );
-                  }
-                  return bubbleRow;
-                },
+                      if (!isMe) {
+                        return IncomingMessageTile(
+                          nickname: m.nickname ?? '사용자',
+                          photoUrl: m.photoUrl,
+                          childRow: bubbleRow,
+                          onTapAvatar: () => _openMemberSheetFromMsg(m, user),
+                        );
+                      }
+                      return bubbleRow;
+                    },
+                  ),
+                ),
+                // 입력바 (SafeArea 내부)
+                MessageInputBar(
+                  key: _inputKey,
+                  onSendText: _appendMockText,
+                  onSendImageLocalPath: _appendMockImage,
+                  onSendFileLocalPath: _appendMockFile,
+                ),
+              ],
+            ),
+
+            // 상단 공지 오버레이 (레이아웃에 영향 없음, 가려지더라도 단순성 유지)
+            if (_pinned != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: _NoticeBanner(
+                    data: _pinned!,
+                    expanded: _noticeExpanded,
+                    collapsedHeight: _kNoticeCollapsed,
+                    expandedHeight: _kNoticeExpanded,
+                    onToggle: () => setState(() => _noticeExpanded = !_noticeExpanded),
+                    onOpenDetail: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => _NoticeDetailPage(data: _pinned!)),
+                      );
+                    },
+                  ),
+                ),
               ),
-            ),
-
-            // ✅ SafeArea 내부에서 높이 변화(패널/키보드)를 Column이 그대로 흡수
-            MessageInputBar(
-              key: _inputKey,
-              onSendText: _appendMockText,
-              onSendImageLocalPath: _appendMockImage,
-              onSendFileLocalPath: _appendMockFile,
-            ),
           ],
         ),
       ),
@@ -434,16 +549,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       }
     }
     return out;
-  }
-
-  Future<void> _confirmDelete(BuildContext context, _Msg m) async {
-    final ok = await confirmDeleteMessage(context);
-    if (ok) {
-      setState(() {
-        final idx = _messages.indexWhere((x) => x.id == m.id);
-        if (idx >= 0) _messages[idx] = _messages[idx].copyAsDeleted();
-      });
-    }
   }
 }
 
@@ -567,6 +672,146 @@ class _RowItem {
   factory _RowItem.separator(DateTime day) => _RowItem._(_RowKind.separator, day: day);
   factory _RowItem.system(_Msg m) => _RowItem._(_RowKind.system, msg: m);
   factory _RowItem.message(_Msg m) => _RowItem._(_RowKind.message, msg: m);
+}
+
+// ===== 공지 모델 & 위젯 =====
+class _PinnedNotice {
+  final int msgId;
+  final String title;
+  final String body;
+  final DateTime createdAt;
+  final String author;
+  _PinnedNotice({
+    required this.msgId,
+    required this.title,
+    required this.body,
+    required this.createdAt,
+    required this.author,
+  });
+}
+
+class _NoticeBanner extends StatelessWidget {
+  final _PinnedNotice data;
+  final bool expanded;
+  final double collapsedHeight;
+  final double expandedHeight;
+  final VoidCallback onToggle;
+  final VoidCallback onOpenDetail;
+
+  const _NoticeBanner({
+    Key? key,
+    required this.data,
+    required this.expanded,
+    required this.collapsedHeight,
+    required this.expandedHeight,
+    required this.onToggle,
+    required this.onOpenDetail,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final date = DateFormat('yyyy-MM-dd').format(data.createdAt);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        height: expanded ? expandedHeight : collapsedHeight,
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 2))],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onOpenDetail,
+            child: Column(
+              children: [
+                // 헤더
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.campaign_outlined, color: UiTokens.title),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(date, style: const TextStyle(fontWeight: FontWeight.w800, color: UiTokens.title)),
+                            const SizedBox(height: 2),
+                            Text(
+                              data.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: UiTokens.title),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
+                        onPressed: onToggle,
+                      ),
+                    ],
+                  ),
+                ),
+                // 본문(펼침 시)
+                if (expanded)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        child: Align(
+                          alignment: Alignment.topLeft,
+                          child: Text(
+                            data.body.isEmpty ? '(내용 없음)' : data.body,
+                            style: const TextStyle(color: Colors.black87),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _NoticeDetailPage extends StatelessWidget {
+  final _PinnedNotice data;
+  const _NoticeDetailPage({Key? key, required this.data}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final date = DateFormat('yyyy년 M월 d일 (E)', 'ko').format(data.createdAt);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('공지 상세', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: UiTokens.title),
+      ),
+      backgroundColor: Colors.white,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        children: [
+          Text(data.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: UiTokens.title)),
+          const SizedBox(height: 6),
+          Text('$date · ${data.author}', style: const TextStyle(color: Colors.black54)),
+          const SizedBox(height: 16),
+          Text(data.body.isEmpty ? '(내용 없음)' : data.body, style: const TextStyle(fontSize: 16)),
+        ],
+      ),
+    );
+  }
 }
 
 // ===== 헬퍼 위젯 =====
