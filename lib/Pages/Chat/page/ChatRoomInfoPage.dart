@@ -173,6 +173,7 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
   }
 
   void _openProfileSheet(RoomMemberBrief m) {
+    final isSelf = m.userId == 'me'; // 본인 체크 규칙에 맞게 수정
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -184,6 +185,22 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         nickname: m.nickname,
         photoUrl: m.photoUrl,
         role: m.role,
+        isAdmin: widget.isAdmin,   // ✅ 관리자만 액션 보이기
+        isSelf: isSelf,            // ✅ 본인이면 추방 숨김
+        onViewProfile: () {
+          // TODO: 프로필 페이지로 이동
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('프로필 보기 (구현 예정)')));
+        },
+        onOpenDM: () {
+          // TODO: 1:1 대화방 열기
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1:1 대화 (구현 예정)')));
+        },
+        onKick: () async {
+          // TODO: 실제 추방 API 연결
+          await Future.delayed(const Duration(milliseconds: 300));
+          // 성공/실패 반환
+          return true;
+        },
       ),
     );
   }

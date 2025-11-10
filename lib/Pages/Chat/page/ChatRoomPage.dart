@@ -1,6 +1,7 @@
 // lib/Pages/Chat/ChatRoomPage.dart
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart'; // ✅ 추가
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomInfoPage.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
@@ -11,14 +12,16 @@ import 'package:nail/Pages/Chat/widgets/IncomingMessageTile.dart';
 import 'package:nail/Pages/Chat/widgets/MessageBubble.dart';
 import 'package:nail/Pages/Chat/widgets/MessageInputBar.dart';
 import 'package:nail/Pages/Chat/widgets/SystemEventChip.dart';
+import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart'; // ✅ 추가
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Providers/UserProvider.dart'; // ✅ 추가
 
 class ChatRoomPage extends StatefulWidget {
   final String roomId;
   final String roomName;
 
   const ChatRoomPage({Key? key, required this.roomId, required this.roomName})
-    : super(key: key);
+      : super(key: key);
 
   @override
   State<ChatRoomPage> createState() => _ChatRoomPageState();
@@ -27,12 +30,11 @@ class ChatRoomPage extends StatefulWidget {
 class _ChatRoomPageState extends State<ChatRoomPage> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey<MessageInputBarState> _inputKey =
-      GlobalKey<MessageInputBarState>();
+  GlobalKey<MessageInputBarState>();
 
   static const double _kInputBarHeight = 68;
 
   final List<_Msg> _messages = [
-    // 그제: 방 생성
     _Msg.system(
       id: 900,
       createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 4)),
@@ -47,8 +49,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       readCount: 3,
       nickname: '노브살롱외주',
     ),
-
-    // 어제: 여러 명 초대
     _Msg.system(
       id: 901,
       createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 5)),
@@ -71,14 +71,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       me: false,
       type: _MsgType.image,
       imageLocal: null,
-      imageUrl: null, // 로컬 미리보기만 있는 케이스 등 테스트용
+      imageUrl: null,
       createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 4, minutes: 35)),
       readCount: 1,
       nickname: '디자이너A',
       photoUrl: 'https://example.com/avatar.png',
     ),
-
-    // 오늘: 단건 초대 + 실패/재전송 시나리오
     _Msg.system(
       id: 902,
       createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 32)),
@@ -104,7 +102,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
       readCount: 0,
       nickname: '나',
-      sendStatus: _SendStatus.sending, // ⬅️ 전송 중 케이스
+      sendStatus: _SendStatus.sending,
     ),
     _Msg(
       id: 7,
@@ -118,12 +116,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     ),
   ];
 
-
-
   @override
   void initState() {
     super.initState();
-    // 첫 프레임 이후 최신으로 점프
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
   }
 
@@ -143,29 +138,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     super.dispose();
   }
 
-  List<String> _collectImageSources() {
-    final list = <String>[];
-    for (final m in _messages) {
-      if (m.type == _MsgType.image && !m.deleted) {
-        final src = m.imageUrl ?? m.imageLocal;
-        if (src != null && src.isNotEmpty) list.add(src);
-      }
-    }
-    return list;
-  }
-
-  int _indexOfImageMsg(_Msg target) {
-    int idx = 0;
-    for (final m in _messages) {
-      if (m.type == _MsgType.image && !m.deleted) {
-        final same = m.id == target.id;
-        if (same) return idx;
-        idx++;
-      }
-    }
-    return 0;
-  }
-
   void _openImageFullscreen(_Msg imageMsg) {
     final src = imageMsg.imageUrl ?? imageMsg.imageLocal;
     if (src == null || src.isEmpty) return;
@@ -174,16 +146,52 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         barrierColor: Colors.black,
         opaque: false,
         pageBuilder: (_, __, ___) => ChatImageViewer(
-          images: [src],     // ✅ 단건만 전달
+          images: [src],  // ✅ 단건만
           initialIndex: 0,
-          heroTagPrefix: 'chat_img_', // 버블과 맞춤
+          heroTagPrefix: 'chat_img_',
         ),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
       ),
     );
   }
 
+  // ✅ 현재 세션 역할 라벨
+  String _currentRoleLabel(UserProvider up) {
+    if (up.isAdmin) return '관리자';
+    if (up.isMentor) return '멘토';
+    return '멘티';
+  }
+
+  // ✅ 아바타 탭 시 프로필 시트
+  void _openMemberSheetFromMsg(_Msg m, UserProvider up) {
+    final isAdmin = up.isAdmin;
+    final isSelf = m.me; // 목업 기준: me 플래그로 본인 판단 (실서비스면 senderId 비교)
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => MemberProfileSheet(
+        nickname: m.nickname ?? (m.me ? up.nickname : '사용자'),
+        photoUrl: m.photoUrl,
+        role: m.me ? _currentRoleLabel(up) : '멘티', // 상대역할은 서버 연결 후 매핑
+        isAdmin: isAdmin,
+        isSelf: isSelf,
+        onViewProfile: () {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('프로필 보기 (구현 예정)')));
+        },
+        onOpenDM: () {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1:1 대화 (구현 예정)')));
+        },
+        onKick: () async {
+          await Future.delayed(const Duration(milliseconds: 250));
+          return true; // 서버 연결 시 실제 결과 반환
+        },
+      ),
+    );
+  }
 
   void _appendMockText(String text) {
     setState(() {
@@ -200,7 +208,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         ),
       );
     });
-    // 새 메시지 → 살짝 늦춰 최신으로
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
   }
 
@@ -219,7 +226,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         ),
       );
     });
-    // 새 메시지 → 살짝 늦춰 최신으로
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
   }
 
@@ -240,15 +246,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         ),
       );
     });
-    // 새 메시지 → 살짝 늦춰 최신으로
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
   }
 
   @override
   Widget build(BuildContext context) {
-    // 메시지를 일자 기준으로 그룹화하며 DaySeparator 삽입
-    final items = _buildItemsWithSeparators(_messages);
+    // ✅ 세션/권한 가져오기
+    final user = context.watch<UserProvider>();
+    final isAdmin = user.isAdmin;
 
+    final items = _buildItemsWithSeparators(_messages);
     final double bottomSafe = MediaQuery.of(context).padding.bottom;
     final double listBottomPadding = _kInputBarHeight + bottomSafe + 24;
 
@@ -256,10 +263,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       appBar: AppBar(
         title: Text(
           widget.roomName,
-          style: const TextStyle(
-            color: UiTokens.title,
-            fontWeight: FontWeight.w800,
-          ),
+          style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
         ),
         backgroundColor: Colors.white,
         elevation: 0,
@@ -268,29 +272,27 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           IconButton(
             icon: const Icon(Icons.menu),
             onPressed: () {
-              final members =
-                  _messages
-                      .where((m) => !m.isSystem)
-                      .map(
-                        (m) => RoomMemberBrief(
-                          userId: m.me ? 'me' : 'u${m.id}',
-                          nickname: m.nickname ?? (m.me ? '나' : '사용자'),
-                          role: m.me ? '관리자' : '멘티',
-                          photoUrl: m.photoUrl,
-                        ),
-                      )
-                      .toSet()
-                      .toList();
+              // ✅ 멤버 빌드 시 현재 사용자의 역할 라벨 반영
+              final myRole = _currentRoleLabel(user);
+              final members = _messages
+                  .where((m) => !m.isSystem)
+                  .map((m) => RoomMemberBrief(
+                userId: m.me ? (user.current?.userId ?? 'me') : 'u${m.id}',
+                nickname: m.nickname ?? (m.me ? user.nickname : '사용자'),
+                role: m.me ? myRole : '멘티', // 상대 역할은 서버 연결 시 갱신
+                photoUrl: m.photoUrl,
+              ))
+                  .toSet()
+                  .toList();
 
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder:
-                      (_) => ChatRoomInfoPage(
-                        roomId: widget.roomId,
-                        roomName: widget.roomName,
-                        isAdmin: true,
-                        members: members,
-                      ),
+                  builder: (_) => ChatRoomInfoPage(
+                    roomId: widget.roomId,
+                    roomName: widget.roomName,
+                    isAdmin: isAdmin, // ✅ 실제 권한 전달
+                    members: members,
+                  ),
                 ),
               );
             },
@@ -313,17 +315,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               itemBuilder: (context, index) {
                 final it = items[index];
 
-                // DaySeparator
                 if (it.kind == _RowKind.separator && it.day != null) {
                   return ChatDaySeparator(day: it.day!);
                 }
-
-                // 시스템 이벤트 칩
                 if (it.kind == _RowKind.system && it.msg != null) {
                   return SystemEventChip(text: it.msg!.systemText ?? '');
                 }
 
-                // 일반 메시지
                 final m = it.msg!;
                 final isMe = m.me;
 
@@ -348,7 +346,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       );
                       break;
                     case _MsgType.image:
-                      final heroTag = 'chat_img_${m.id}'; // ✅ 메시지 id 기반
+                      final heroTag = 'chat_img_${m.id}';
                       bubbleRow = ImageBubble(
                         isMe: isMe,
                         imageUrl: m.imageUrl,
@@ -381,6 +379,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     nickname: m.nickname ?? '사용자',
                     photoUrl: m.photoUrl,
                     childRow: bubbleRow,
+                    onTapAvatar: () => _openMemberSheetFromMsg(m, user), // ✅ 아바타 탭 → 시트
                   );
                 }
                 return bubbleRow;
@@ -401,17 +400,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     );
   }
 
-  // 날짜 구분 삽입 로직
   List<_RowItem> _buildItemsWithSeparators(List<_Msg> src) {
     final List<_RowItem> out = [];
     DateTime? lastDay;
     for (final m in src) {
-      final day = DateTime(
-        m.createdAt.year,
-        m.createdAt.month,
-        m.createdAt.day,
-      );
-      if (lastDay == null || day.difference(lastDay!).inDays != 0) {
+      final day = DateTime(m.createdAt.year, m.createdAt.month, m.createdAt.day);
+      if (lastDay == null || day.difference(lastDay).inDays != 0) {
         out.add(_RowItem.separator(day));
         lastDay = day;
       }
@@ -433,40 +427,30 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       });
     }
   }
-
 }
 
+// ===== 아래는 내부 모델들 (동일) =====
 enum _MsgType { text, image, file }
-
 enum _SendStatus { sending, sent }
 
 class _Msg {
   final int id;
   final bool me;
-  final _MsgType? type; // 시스템 이벤트면 null
+  final _MsgType? type;
   final String? text;
-
   final String? imageUrl;
   final String? imageLocal;
-
   final String? fileUrl;
   final String? fileLocal;
   final String? fileName;
   final int? fileBytes;
-
   final DateTime createdAt;
   final bool deleted;
   final int? readCount;
-
-  // 서버 컬럼
-  final String? nickname; // DB: nickname
-  final String? photoUrl; // DB: photo_url
-
-  // 시스템 이벤트
+  final String? nickname;
+  final String? photoUrl;
   final bool isSystem;
   final String? systemText;
-
-  // 전송 상태
   final _SendStatus sendStatus;
 
   _Msg({
@@ -494,21 +478,21 @@ class _Msg {
     required this.id,
     required this.createdAt,
     required this.systemText,
-  }) : me = false,
-       type = null,
-       text = null,
-       imageUrl = null,
-       imageLocal = null,
-       fileUrl = null,
-       fileLocal = null,
-       fileName = null,
-       fileBytes = null,
-       deleted = false,
-       readCount = null,
-       nickname = null,
-       photoUrl = null,
-       isSystem = true,
-       sendStatus = _SendStatus.sent;
+  })  : me = false,
+        type = null,
+        text = null,
+        imageUrl = null,
+        imageLocal = null,
+        fileUrl = null,
+        fileLocal = null,
+        fileName = null,
+        fileBytes = null,
+        deleted = false,
+        readCount = null,
+        nickname = null,
+        photoUrl = null,
+        isSystem = true,
+        sendStatus = _SendStatus.sent;
 
   _Msg copyAsDeleted() => _Msg(
     id: id,
@@ -582,26 +566,23 @@ String formatInvitedMany({
   required String inviter,
   required List<String> invitees,
 }) {
-  // 예: A, B, C, D, E님을 초대했습니다.
   final list = invitees.map((e) => '$e님').join(', ');
   return '$inviter님이 $list을 초대했습니다.';
 }
 
 class ChatDaySeparator extends StatelessWidget {
   final DateTime day;
-  final Color background; // 살짝 투명한 배경
+  final Color background;
   final EdgeInsets padding;
 
   const ChatDaySeparator({
     Key? key,
-
     required this.day,
     this.background = const Color.fromRGBO(230, 230, 230, 1),
     this.padding = const EdgeInsets.symmetric(vertical: 10),
   }) : super(key: key);
 
   String _labelKo(DateTime d) {
-    // 예: 2025년 11월 7일 금요일
     return DateFormat('yyyy년 M월 d일 EEEE', 'ko').format(d);
   }
 
@@ -621,11 +602,7 @@ class ChatDaySeparator extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.calendar_today_rounded,
-                  size: 14,
-                  color: UiTokens.title.withOpacity(0.85),
-                ),
+                Icon(Icons.calendar_today_rounded, size: 14, color: UiTokens.title.withOpacity(0.85)),
                 const SizedBox(width: 6),
                 Text(
                   _labelKo(day),

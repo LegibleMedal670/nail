@@ -1,24 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 
-/// 상대방 메시지 전용 래퍼
-/// Row(
-///   [아바타],
-///   8,
-///   Expanded(
-///     child: Column(mainAxisSize: min, crossAxisAlignment: start, children: [닉네임, 4, 버블Row])
-///   )
-/// )
 class IncomingMessageTile extends StatelessWidget {
   final String nickname;   // DB: nickname
   final String? photoUrl;  // DB: photo_url
   final Widget childRow;   // MessageBubble/ImageBubble/FileBubble 등 (Row 반환 위젯)
+  final VoidCallback? onTapAvatar; // ✅ 추가
 
   const IncomingMessageTile({
     Key? key,
     required this.nickname,
     required this.childRow,
     this.photoUrl,
+    this.onTapAvatar,
   }) : super(key: key);
 
   static const double _avatarRadius = 16; // 지름 32
@@ -32,16 +26,19 @@ class IncomingMessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = CircleAvatar(
-      radius: _avatarRadius,
-      backgroundColor: Colors.grey[400],
-      foregroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
-      child: (photoUrl == null || photoUrl!.isEmpty)
-          ? Text(
-        _initials(nickname),
-        style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700),
-      )
-          : null,
+    final avatar = GestureDetector(
+      onTap: onTapAvatar,
+      child: CircleAvatar(
+        radius: _avatarRadius,
+        backgroundColor: Colors.grey[400],
+        foregroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
+        child: (photoUrl == null || photoUrl!.isEmpty)
+            ? Text(
+          _initials(nickname),
+          style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700),
+        )
+            : null,
+      ),
     );
 
     return Padding(
