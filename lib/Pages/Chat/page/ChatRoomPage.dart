@@ -449,7 +449,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                           text: '관리자에 의해 삭제됨',
                           createdAt: m.createdAt,
                           readCount: m.readCount,
-                          onLongPressDelete: _onLong,
+                          onLongPressDelete: isAdmin ? _onLong : null,
                         );
                       } else {
                         switch (m.type!) {
@@ -459,7 +459,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               text: m.text ?? '',
                               createdAt: m.createdAt,
                               readCount: m.readCount,
-                              onLongPressDelete: _onLong,
+                              onLongPressDelete: isAdmin ? _onLong : null,
                             );
                             break;
                           case _MsgType.image:
@@ -470,7 +470,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               localPreviewPath: m.imageLocal,
                               createdAt: m.createdAt,
                               readCount: m.readCount,
-                              onLongPressDelete: _onLong,
+                              onLongPressDelete: isAdmin ? _onLong : null,
                               onTap: () => _openImageFullscreen(m),
                               heroTag: heroTag,
                             );
@@ -485,7 +485,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               createdAt: m.createdAt,
                               readCount: m.readCount,
                               onTapOpen: () {},
-                              onLongPressDelete: _onLong,
+                              onLongPressDelete: isAdmin ? _onLong : null,
                             );
                             break;
                         }
