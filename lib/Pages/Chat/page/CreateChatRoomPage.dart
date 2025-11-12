@@ -1,5 +1,6 @@
 // lib/Pages/Chat/page/CreateChatRoomPage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Services/ChatService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
@@ -18,14 +19,16 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
   final _roomNameCtrl = TextEditingController();
   final _searchCtrl = TextEditingController();
 
-  // ---- 로드 상태 ----
+  // ---- 로드/제출 상태 ----
   bool _loading = true;
+  bool _submitting = false;
   String? _loadError;
 
   // ---- 현재 로그인 사용자(본인) ----
   String? _myId;
   String _myName = '관리자';
   String? _myPhoto;
+  bool _isAdmin = false;
 
   // ---- 선택 상태 (본인은 절대 포함/표시하지 않음) ----
   final Set<String> _selectedAdminIds = {};  // 다른 관리자 (본인 제외)
@@ -33,7 +36,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
   final Set<String> _selectedMenteeIds = {};
 
   // ---- 데이터 목록 ----
-  List<_UserVm> _admins = const [];   // API 붙으면 채움(본인 제외 필터 적용)
+  List<_UserVm> _admins = const [];   // 이번 스펙상 비워둠(필요시 API 연결)
   List<_UserVm> _mentors = const [];
   List<_UserVm> _mentees = const [];
 
@@ -43,7 +46,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
       _selectedAdminIds.length + _selectedMentorIds.length + _selectedMenteeIds.length;
 
   bool get _canSubmit =>
-      _roomNameCtrl.text.trim().isNotEmpty && _selectedCount > 0;
+      _roomNameCtrl.text.trim().isNotEmpty && _selectedCount > 0 && _isAdmin && !_submitting;
 
   @override
   void initState() {
@@ -53,6 +56,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
     _myId   = me?.userId;
     _myName = (me?.nickname.isNotEmpty == true) ? me!.nickname : '관리자';
     _myPhoto = me?.photoUrl;
+    _isAdmin = context.read<UserProvider>().isAdmin;
 
     _searchCtrl.addListener(() => setState(() {}));
     _loadLists();
@@ -72,11 +76,12 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
     });
 
     try {
-      final loginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
+      final adminLoginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
 
-      // 멘티 목록
+      // 멘티 목록 (공용 RPC)
       final menteeMaps = await TodoService.instance.listMenteesForSelect();
-      final mentees = menteeMaps.map((m) => _UserVm(
+      final mentees = menteeMaps
+          .map((m) => _UserVm(
         id: (m['id'] ?? '').toString(),
         name: (m['name'] ?? '').toString(),
         role: 'mentee',
@@ -91,11 +96,12 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
 
       // 멘토 목록 (관리자 권한 필요)
       List<_UserVm> mentors = const [];
-      if (loginKey.isNotEmpty) {
+      if (adminLoginKey.isNotEmpty && _isAdmin) {
         try {
           final mentorMaps =
-          await TodoService.instance.listMentorsForSelect(adminLoginKey: loginKey);
-          mentors = mentorMaps.map((m) => _UserVm(
+          await TodoService.instance.listMentorsForSelect(adminLoginKey: adminLoginKey);
+          mentors = mentorMaps
+              .map((m) => _UserVm(
             id: (m['id'] ?? '').toString(),
             name: (m['name'] ?? '').toString(),
             role: 'mentor',
@@ -106,17 +112,15 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
               .where((u) => u.id != _myId)
               .toList(growable: false);
         } catch (_) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('멘토 목록을 불러오지 못했습니다 (권한 확인).')),
-          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('멘토 목록을 불러오지 못했습니다 (권한 확인).')),
+            );
+          }
         }
       }
 
-      // (선택) 관리자 목록 API가 있다면 여기서 불러와 본인 제외 필터를 적용하세요.
-      // 예시:
-      // final adminsRaw = await ChatService.instance.listAdminsForSelect(...);
-      // final admins = adminsRaw.map(_mapToVm).where((u) => u.id != _myId).toList(growable:false);
-      // 이번 스펙에서는 관리자 목록 API가 없어 비워둡니다. → 섹션 자체가 숨김 처리됨.
+      // (선택) 관리자 목록 API가 있다면 여기서 불러와 본인 제외 필터를 적용
       final admins = <_UserVm>[];
 
       setState(() {
@@ -140,6 +144,21 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
   Future<void> _onSubmit() async {
     if (!_canSubmit) return;
 
+    if (!_isAdmin) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('관리자만 채팅방을 생성할 수 있습니다.')),
+      );
+      return;
+    }
+
+    final adminKey = context.read<UserProvider>().adminKey?.trim() ?? '';
+    if (adminKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('관리자 인증 정보가 없습니다. 다시 로그인해주세요.')),
+      );
+      return;
+    }
+
     final roomName = _roomNameCtrl.text.trim();
 
     // 초대된 사용자 닉네임 목록(본인 제외)
@@ -149,31 +168,46 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
       ..._mentees.where((u) => _selectedMenteeIds.contains(u.id)).map((e) => e.name),
     ];
 
-    // 멤버 id: 선택 대상 + 본인 자동 포함
+    // 멤버 id: 선택 대상들만 전달(본인은 서버에서 자동 admin 등록됨)
     final memberIds = <String>{
       ..._selectedAdminIds,
       ..._selectedMentorIds,
       ..._selectedMenteeIds,
-      if (_myId != null && _myId!.isNotEmpty) _myId!,
-    };
+    }.toList();
 
-    // TODO: 서버에 room 생성 API 연동(createRoom(loginKey, roomName, memberIds))
-    if (!mounted) return;
-    await Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => ChatRoomPage(
-          roomId: 'mock_${DateTime.now().millisecondsSinceEpoch}',
-          roomName: roomName,
-          invitedNamesOnCreate: invited, // ChatRoomPage에서 who=UserProvider.nickname으로 표기
+    setState(() => _submitting = true);
+    try {
+      // ✅ 서버에 방 생성
+      final roomId = await ChatService.instance.createRoom(
+        adminLoginKey: adminKey,
+        name: roomName,
+        memberIds: memberIds,
+      );
+
+      if (!mounted) return;
+
+      // 생성 직후 해당 방으로 이동
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ChatRoomPage(
+            roomId: roomId,
+            roomName: roomName,
+            invitedNamesOnCreate: invited, // ChatRoomPage에서 who=UserProvider.nickname으로 표기
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('방 생성 실패: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = Theme.of(context).colorScheme;
-
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusScope.of(context).unfocus(),
@@ -197,9 +231,20 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
               padding: const EdgeInsets.only(right: 5.0),
               child: TextButton(
                 onPressed: _canSubmit ? _onSubmit : null,
-                child: Text(
-                  '${_selectedCount.toString()}  확인',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
+                child: Row(
+                  children: [
+                    if (_submitting) ...[
+                      const SizedBox(
+                        width: 14, height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    Text(
+                      '${_selectedCount.toString()}  확인',
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -241,7 +286,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
             ),
             const SizedBox(height: 16),
 
-            // ===== 관리자 섹션 (본인 제외 후 0명이면 헤더/리스트 모두 숨김) =====
+            // ===== 관리자 섹션 (본인 제외 후 0명이면 헤더/리스트 숨김) =====
             if (_admins.isNotEmpty) ...[
               _sectionHeader(
                 '관리자',
@@ -272,13 +317,15 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
                   ),
                 ),
               ),
-              ..._filter(_admins).map((u) => _UserRow(
-                vm: u,
-                checked: _selectedAdminIds.contains(u.id),
-                onChanged: (v) => setState(() {
-                  v ? _selectedAdminIds.add(u.id) : _selectedAdminIds.remove(u.id);
-                }),
-              )),
+              ..._filter(_admins).map(
+                    (u) => _UserRow(
+                  vm: u,
+                  checked: _selectedAdminIds.contains(u.id),
+                  onChanged: (v) => setState(() {
+                    v ? _selectedAdminIds.add(u.id) : _selectedAdminIds.remove(u.id);
+                  }),
+                ),
+              ),
               const SizedBox(height: 16),
             ],
 
@@ -315,13 +362,15 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
             if (_mentors.isEmpty)
               _emptyHint('멘토 목록이 없어요')
             else
-              ..._filter(_mentors).map((u) => _UserRow(
-                vm: u,
-                checked: _selectedMentorIds.contains(u.id),
-                onChanged: (v) => setState(() {
-                  v ? _selectedMentorIds.add(u.id) : _selectedMentorIds.remove(u.id);
-                }),
-              )),
+              ..._filter(_mentors).map(
+                    (u) => _UserRow(
+                  vm: u,
+                  checked: _selectedMentorIds.contains(u.id),
+                  onChanged: (v) => setState(() {
+                    v ? _selectedMentorIds.add(u.id) : _selectedMentorIds.remove(u.id);
+                  }),
+                ),
+              ),
             const SizedBox(height: 16),
 
             // ===== 멘티 섹션 =====
@@ -357,13 +406,15 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
             if (_mentees.isEmpty)
               _emptyHint('멘티 목록이 없어요')
             else
-              ..._filter(_mentees).map((u) => _UserRow(
-                vm: u,
-                checked: _selectedMenteeIds.contains(u.id),
-                onChanged: (v) => setState(() {
-                  v ? _selectedMenteeIds.add(u.id) : _selectedMenteeIds.remove(u.id);
-                }),
-              )),
+              ..._filter(_mentees).map(
+                    (u) => _UserRow(
+                  vm: u,
+                  checked: _selectedMenteeIds.contains(u.id),
+                  onChanged: (v) => setState(() {
+                    v ? _selectedMenteeIds.add(u.id) : _selectedMenteeIds.remove(u.id);
+                  }),
+                ),
+              ),
           ],
         ),
       ),

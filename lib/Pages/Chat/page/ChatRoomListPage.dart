@@ -46,7 +46,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
 
   Future<void> _load() async {
     final user = context.read<UserProvider>();
-    final loginKey = user.current!.loginKey; // UserProvider에 맞춰 사용
+    final loginKey = user.isAdmin ? user.adminKey! : user.current!.loginKey ; // UserProvider에 맞춰 사용
 
     setState(() {
       _loading = true;

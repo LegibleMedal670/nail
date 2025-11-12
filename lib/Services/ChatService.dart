@@ -23,6 +23,34 @@ class ChatService {
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
+  /// 방 생성(관리자 전용). memberIds는 선택(없어도 됨).
+  Future<String> createRoom({
+    required String adminLoginKey,
+    required String name,
+    List<String> memberIds = const [],
+  }) async {
+    final res = await _sb.rpc('rpc_create_room', params: {
+      'p_login_key': adminLoginKey,
+      'p_name': name,
+      'p_member_ids': memberIds,
+    });
+    return (res as String);
+  }
+
+  /// 멤버 초대(방 관리자 전용). 새로 추가된 수 반환.
+  Future<int> inviteMembers({
+    required String adminLoginKey,
+    required String roomId,
+    required List<String> memberIds,
+  }) async {
+    final res = await _sb.rpc('rpc_invite_members', params: {
+      'p_login_key': adminLoginKey,
+      'p_room_id': roomId,
+      'p_member_ids': memberIds,
+    });
+    return (res as int);
+  }
+
   // ============== 메시지 ==============
   /// 페이징: chat_messages rows 반환 (최신부터 역순)
   Future<List<Map<String, dynamic>>> fetchMessages({
