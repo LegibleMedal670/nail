@@ -52,7 +52,8 @@ class ChatService {
   }
 
   // ============== 메시지 ==============
-  /// 페이징: chat_messages rows 반환 (최신부터 역순)
+  /// 페이징: rpc_fetch_messages (서버에서 read_count/작성자 정보까지 계산해 내려옴)
+  /// 반환은 최신부터 역순으로 내려오지만 화면에선 정렬해 쓰는 걸 권장.
   Future<List<Map<String, dynamic>>> fetchMessages({
     required String loginKey,
     required String roomId,
@@ -82,9 +83,12 @@ class ChatService {
       'p_login_key': loginKey,
       'p_room_id': roomId,
       'p_text': text,
-      'p_meta': meta ?? <String, dynamic>{},
+      'p_meta': meta ?? <String, dynamic>{
+        'client_ts': DateTime.now().toIso8601String(),
+        'kind': 'text',
+      },
     });
-    return (res as int);
+    return (res as num).toInt();
   }
 
   /// 파일/이미지 전송(스토리지 업로드 후) → message_id
@@ -109,7 +113,7 @@ class ChatService {
       'p_kind': kind,
       'p_meta': meta ?? <String, dynamic>{},
     });
-    return (res as int);
+    return (res as num).toInt();
   }
 
   /// 삭제(관리자만) – soft delete
@@ -166,6 +170,7 @@ class ChatService {
       'p_login_key': loginKey,
       'p_room_id': roomId,
     });
+    if (res == null) return <String, dynamic>{};
     if (res is List && res.isNotEmpty) return Map<String, dynamic>.from(res.first as Map);
     if (res is Map) return Map<String, dynamic>.from(res);
     return <String, dynamic>{};
@@ -188,7 +193,20 @@ class ChatService {
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
-  // ============== 미디어/검색 ==============
+  // ============== 멤버/미디어/검색 ==============
+  /// 방 멤버 상세 (역할/라스트리드 포함)
+  Future<List<Map<String, dynamic>>> listRoomMembers({
+    required String loginKey,
+    required String roomId,
+  }) async {
+    final res = await _sb.rpc('rpc_list_room_members', params: {
+      'p_login_key': loginKey,
+      'p_room_id': roomId,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
   /// 갤러리/파일 탭
   /// returns: [{message_id,storage_path,mime,created_at,sender_id}, ...]
   Future<List<Map<String, dynamic>>> listMedia({
@@ -261,12 +279,14 @@ class ChatService {
     return ch;
   }
 
-  /// 방 내부용: 특정 roomId에 대한 메시지/핀 변경만 구독 (★ PostgresChangeFilter 최신 시그니처)
+  /// 방 내부용: 특정 roomId에 대한 메시지/핀/읽음변경 구독
+  /// onMemberUpdate는 chat_room_members(last_read_at 등) 업데이트에 반응.
   RealtimeChannel subscribeRoomChanges({
     required String roomId,
     void Function(PostgresChangePayload payload)? onInsert,
     void Function(PostgresChangePayload payload)? onUpdate,
     void Function(PostgresChangePayload payload)? onPinUpdate,
+    void Function(PostgresChangePayload payload)? onMemberUpdate,
   }) {
     final ch = _sb.channel('room_changes_$roomId');
 
@@ -309,6 +329,20 @@ class ChatService {
           value: roomId,
         ),
         callback: onPinUpdate,
+      );
+    }
+
+    if (onMemberUpdate != null) {
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'chat_room_members',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'room_id',
+          value: roomId,
+        ),
+        callback: onMemberUpdate,
       );
     }
 

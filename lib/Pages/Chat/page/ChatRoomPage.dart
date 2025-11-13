@@ -1,7 +1,11 @@
 // lib/Pages/Chat/ChatRoomPage.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:nail/Services/ChatService.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomInfoPage.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
@@ -36,139 +40,308 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   final ScrollController _scroll = ScrollController();
   final GlobalKey<MessageInputBarState> _inputKey = GlobalKey<MessageInputBarState>();
 
-  // ------- 공지 상태(간단 버전: 오버레이만) -------
+  final _svc = ChatService.instance;
+  RealtimeChannel? _roomRt;
+
+  bool _loading = false;
+  bool _paging = false;
+  bool _hasMore = true;
+  int? _latestId;
+  int? _oldestId;
+
+  // 공지
   static const double _kNoticeCollapsed = 76.0;
   static const double _kNoticeExpanded  = 140.0;
   _PinnedNotice? _pinned;
   bool _noticeExpanded = false;
 
-  // ✅ 로컬 전용: 사용자가 "다시 보지 않기"한 공지 message_id 저장
-  final Set<int> _dismissedNoticeIds = <int>{};
-
-  bool get _hideCurrentNotice {
-    final p = _pinned;
-    if (p == null) return true;              // 공지 자체가 없으면 숨김과 동일
-    return _dismissedNoticeIds.contains(p.msgId);
-  }
-
-  // 목업 데이터
-  final List<_Msg> _messages = [
-    _Msg.system(
-      id: 900,
-      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 4)),
-      systemText: formatRoomCreated(creator: '홍원준'),
-    ),
-    _Msg(
-      id: 1,
-      me: false,
-      type: _MsgType.text,
-      text: '안녕하세요! 방 생성 확인합니다.',
-      createdAt: DateTime.now().subtract(const Duration(days: 2, hours: 3, minutes: 50)),
-      readCount: 3,
-      nickname: '노브살롱외주',
-    ),
-    _Msg.system(
-      id: 901,
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 5)),
-      systemText: formatInvitedMany(
-        inviter: '홍원준',
-        invitees: ['호소', '탁경', '이지원', '이병준', '안지원', '김안호', '김서영', '정우혁'],
-      ),
-    ),
-    _Msg(
-      id: 2,
-      me: true,
-      type: _MsgType.text,
-      text: '회의는 내일 10시에 시작할게요.',
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 4, minutes: 40)),
-      readCount: 2,
-      nickname: '나',
-    ),
-    _Msg(
-      id: 3,
-      me: false,
-      type: _MsgType.image,
-      imageLocal: null,
-      imageUrl: null,
-      createdAt: DateTime.now().subtract(const Duration(days: 1, hours: 4, minutes: 35)),
-      readCount: 1,
-      nickname: '디자이너A',
-      photoUrl: 'https://example.com/avatar.png',
-    ),
-    _Msg.system(
-      id: 902,
-      createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 32)),
-      systemText: formatInvitedSingle(inviter: '홍원준', invitee: '안지원'),
-    ),
-    _Msg(
-      id: 4,
-      me: false,
-      type: _MsgType.text,
-      text: '디자인 시안 올렸습니다.',
-      createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 30)),
-      readCount: 1,
-      nickname: '디자이너A',
-      photoUrl: 'https://example.com/avatar.png',
-    ),
-    _Msg(
-      id: 6,
-      me: true,
-      type: _MsgType.file,
-      fileLocal: '/tmp/mock.pdf',
-      fileName: '요구사항정의서.pdf',
-      fileBytes: 1_024_000,
-      createdAt: DateTime.now().subtract(const Duration(minutes: 8)),
-      readCount: 0,
-      nickname: '나',
-      sendStatus: _SendStatus.sending,
-    ),
-    _Msg(
-      id: 7,
-      me: true,
-      type: _MsgType.image,
-      imageLocal: '/tmp/preview.png',
-      createdAt: DateTime.now().subtract(const Duration(minutes: 5)),
-      readCount: 0,
-      nickname: '나',
-      sendStatus: _SendStatus.sent,
-    ),
-  ];
+  // 메시지
+  final List<_Msg> _messages = <_Msg>[];
 
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
+    _bindRealtime();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadFirst();
+      // 방 생성 직후 “초대했습니다” 시스템 메시지 (선택)
+      if (widget.invitedNamesOnCreate != null && widget.invitedNamesOnCreate!.isNotEmpty) {
+        final up = context.read<UserProvider>();
+        final who = up.nickname.isNotEmpty ? up.nickname : '관리자';
+        final list = widget.invitedNamesOnCreate!.join(', ');
+        setState(() {
+          _messages.insert(
+            0,
+            _Msg.system(
+              id: -DateTime.now().millisecondsSinceEpoch, // 클라 가상 ID
+              createdAt: DateTime.now(),
+              systemText: '$who님이 $list님을 초대했습니다.',
+            ),
+          );
+        });
+      }
 
-    // 방 생성 직후 “초대했습니다” 시스템 메시지(목업)
-    if (widget.invitedNamesOnCreate != null && widget.invitedNamesOnCreate!.isNotEmpty) {
-      final up = context.read<UserProvider>();
-      final who = up.nickname.isNotEmpty ? up.nickname : '관리자';
-      final list = widget.invitedNamesOnCreate!.join(', ');
-      _messages.insert(
-        0,
-        _Msg.system(
-          id: 8000 + DateTime.now().millisecondsSinceEpoch % 1000,
-          createdAt: DateTime.now(),
-          systemText: '$who님이 $list님을 초대했습니다.',
-        ),
-      );
-    }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
+    });
   }
 
   @override
   void dispose() {
+    _scroll.removeListener(_onScroll);
     _scroll.dispose();
+    _roomRt?.unsubscribe();
     super.dispose();
+  }
+
+  // ---------- utils ----------
+  String _loginKey() {
+    final up = context.read<UserProvider>();
+    return up.isAdmin ? (up.adminKey ?? '') : (up.current?.loginKey ?? '');
+  }
+
+  String _myUid() {
+    final up = context.read<UserProvider>();
+    return up.current?.userId ?? '';
   }
 
   void _jumpToBottom({bool animate = false}) {
     if (!_scroll.hasClients) return;
-    final dest = _scroll.position.minScrollExtent; // reverse:true일 때 min이 바닥
+    final dest = _scroll.position.minScrollExtent; // reverse:true
     if (animate) {
-      _scroll.animateTo(dest, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      _scroll.animateTo(dest, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
     } else {
       _scroll.jumpTo(dest);
+    }
+  }
+
+  bool get _nearBottom {
+    if (!_scroll.hasClients) return true;
+    final pos = _scroll.position;
+    return (pos.pixels - pos.minScrollExtent).abs() < 120;
+  }
+
+  void _autoScrollIfNearBottom() {
+    if (_nearBottom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
+    }
+  }
+
+  // ---------- realtime ----------
+  void _bindRealtime() {
+    _roomRt?.unsubscribe();
+    _roomRt = _svc.subscribeRoomChanges(
+      roomId: widget.roomId,
+      onInsert: (_) async {
+        await _reloadLatestWindow();
+        await _markRead();
+        _autoScrollIfNearBottom();
+      },
+      onUpdate: (_) async {
+        await _reloadLatestWindow();
+      },
+      onPinUpdate: (_) async {
+        await _loadNotice();
+      },
+    );
+  }
+
+  // ---------- load ----------
+  Future<void> _loadFirst() async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+
+    setState(() => _loading = true);
+    try {
+      final rows = await _svc.fetchMessages(loginKey: key, roomId: widget.roomId, limit: 50);
+      rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
+      final my = _myUid();
+      final list = rows.map(_mapRowToMsg(my)).toList();
+
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(list);
+        _oldestId = list.isNotEmpty ? list.first.id : null;
+        _latestId = list.isNotEmpty ? list.last.id : null;
+        _hasMore = list.length >= 50;
+      });
+
+      await _loadNotice();
+      await _markRead();
+      _jumpToBottom();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _reloadLatestWindow() async {
+    if (_latestId == null) {
+      await _loadFirst();
+      return;
+    }
+    final key = _loginKey();
+    if (key.isEmpty) return;
+
+    final rows = await _svc.fetchMessages(
+      loginKey: key,
+      roomId: widget.roomId,
+      afterId: (_latestId! - 200),
+      limit: 200,
+    );
+    rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
+    final my = _myUid();
+    final patch = { for (final r in rows) (r['id'] as num).toInt(): _mapRowToMsg(my)(r) };
+
+    setState(() {
+      for (int i = 0; i < _messages.length; i++) {
+        final id = _messages[i].id;
+        if (patch.containsKey(id)) _messages[i] = patch[id]!;
+      }
+      for (final e in patch.entries) {
+        if (!_messages.any((m) => m.id == e.key)) _messages.add(e.value);
+      }
+      _messages.sort((a, b) => a.id.compareTo(b.id));
+      _latestId = _messages.isNotEmpty ? _messages.last.id : _latestId;
+    });
+  }
+
+  Future<void> _loadOlder() async {
+    if (_paging || !_hasMore) return;
+    final key = _loginKey();
+    if (key.isEmpty || _oldestId == null) return;
+
+    setState(() => _paging = true);
+    try {
+      final rows = await _svc.fetchMessages(
+        loginKey: key,
+        roomId: widget.roomId,
+        beforeId: _oldestId,
+        limit: 50,
+      );
+      rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
+      final my = _myUid();
+      final list = rows.map(_mapRowToMsg(my)).toList();
+      if (list.isEmpty) {
+        setState(() => _hasMore = false);
+        return;
+      }
+      setState(() {
+        _messages.insertAll(0, list);
+        _oldestId = _messages.first.id;
+        _hasMore = list.length >= 50;
+      });
+    } finally {
+      if (mounted) setState(() => _paging = false);
+    }
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    final pos = _scroll.position;
+    if (pos.atEdge && pos.pixels != pos.minScrollExtent) {
+      _loadOlder();
+    }
+  }
+
+  Future<void> _loadNotice() async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    final m = await _svc.getNotice(loginKey: key, roomId: widget.roomId);
+    if (!mounted) return;
+    if (m.isEmpty) {
+      setState(() => _pinned = null);
+      return;
+    }
+    final createdAt = DateTime.tryParse(m['created_at']?.toString() ?? '') ?? DateTime.now();
+    setState(() {
+      _pinned = _PinnedNotice(
+        msgId: (m['message_id'] as num).toInt(),
+        title: (m['title'] ?? '공지').toString(),
+        body: (m['body'] ?? '').toString(),
+        createdAt: createdAt,
+        author: (m['author_id'] ?? '').toString(),
+      );
+    });
+  }
+
+  Future<void> _markRead() async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    await _svc.markRead(loginKey: key, roomId: widget.roomId);
+  }
+
+  // ---------- send ----------
+  Future<void> _sendText(String text) async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    try {
+      await _svc.sendText(
+        loginKey: key,
+        roomId: widget.roomId,
+        text: text,
+        meta: {'client_ts': DateTime.now().toIso8601String()},
+      );
+      await _markRead();
+      // 실시간 INSERT로 자연 갱신
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('전송 실패: $e')));
+    }
+  }
+
+  // ---------- long-press 액션시트 ----------
+  Future<void> _showMessageActionSheet(_Msg m, {required bool isAdmin}) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              if (isAdmin)
+                ListTile(
+                  leading: const Icon(Icons.campaign_outlined),
+                  title: const Text('공지로 등록'),
+                  onTap: () => Navigator.of(sheetCtx).pop('notice'),
+                ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('삭제'),
+                onTap: () => Navigator.of(sheetCtx).pop('delete'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) return;
+
+    final key = _loginKey();
+    if (key.isEmpty) return;
+
+    if (action == 'delete') {
+      final ok = await confirmDeleteMessage(context);
+      if (!ok) return;
+      await _svc.deleteMessage(adminLoginKey: key, messageId: m.id);
+      await _reloadLatestWindow();
+      if (_pinned?.msgId == m.id) await _loadNotice();
+      return;
+    }
+
+    if (action == 'notice' && isAdmin) {
+      await _svc.pinNotice(adminLoginKey: key, roomId: widget.roomId, messageId: m.id);
+      await _loadNotice(); // 실시간 갱신과 중복되어도 무해
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('공지로 등록했습니다.')));
     }
   }
 
@@ -195,183 +368,18 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     return '멘티';
   }
 
-  void _openMemberSheetFromMsg(_Msg m, UserProvider up) {
-    final isAdmin = up.isAdmin;
-    final isSelf = m.me;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => MemberProfileSheet(
-        nickname: m.nickname ?? (m.me ? up.nickname : '사용자'),
-        photoUrl: m.photoUrl,
-        role: m.me ? _currentRoleLabel(up) : '멘티',
-        isAdmin: isAdmin,
-        isSelf: isSelf,
-        onViewProfile: () {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('프로필 보기 (구현 예정)')));
-        },
-        onOpenDM: () {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1:1 대화 (구현 예정)')));
-        },
-        onKick: () async {
-          await Future.delayed(const Duration(milliseconds: 250));
-          return true;
-        },
-      ),
-    );
-  }
-
-  void _appendMockText(String text) {
-    setState(() {
-      _messages.add(
-        _Msg(
-          id: _messages.last.id + 1,
-          me: true,
-          type: _MsgType.text,
-          text: text,
-          createdAt: DateTime.now(),
-          readCount: 0,
-          nickname: '나',
-          sendStatus: _SendStatus.sending,
-        ),
-      );
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
-  }
-
-  void _appendMockImage(String localPath) {
-    setState(() {
-      _messages.add(
-        _Msg(
-          id: _messages.last.id + 1,
-          me: true,
-          type: _MsgType.image,
-          imageLocal: localPath,
-          createdAt: DateTime.now(),
-          readCount: 0,
-          nickname: '나',
-          sendStatus: _SendStatus.sending,
-        ),
-      );
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
-  }
-
-  void _appendMockFile(String localPath, String name, int bytes) {
-    setState(() {
-      _messages.add(
-        _Msg(
-          id: _messages.last.id + 1,
-          me: true,
-          type: _MsgType.file,
-          fileLocal: localPath,
-          fileName: name,
-          fileBytes: bytes,
-          createdAt: DateTime.now(),
-          readCount: 0,
-          nickname: '나',
-          sendStatus: _SendStatus.sending,
-        ),
-      );
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
-  }
-
-  // ===== 공지 등록/삭제(간단 시트) =====
-  Future<void> _onLongPressMessage(BuildContext ctx, _Msg m, {required bool isAdmin}) async {
-    final action = await showModalBottomSheet<String>(
-      context: ctx,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) {
-        return SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              if (isAdmin)
-                ListTile(
-                  leading: const Icon(Icons.campaign_outlined),
-                  title: const Text('공지로 등록'),
-                  onTap: () => Navigator.pop(ctx, 'notice'),
-                ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('삭제'),
-                onTap: () => Navigator.pop(ctx, 'delete'),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-
-    if (action == 'delete') {
-      _confirmDelete(ctx, m);
-      return;
-    }
-    if (action == 'notice' && isAdmin) {
-      setState(() {
-        _pinned = _PinnedNotice(
-          msgId: m.id,
-          title: _buildNoticeTitleFromMessage(m),
-          body:  _buildNoticeBodyFromMessage(m),
-          createdAt: m.createdAt,
-          author: m.nickname ?? '사용자',
-        );                               // ✅ 항상 교체
-        _noticeExpanded = false;
-      });
-    }
-  }
-
-  Future<void> _confirmDelete(BuildContext context, _Msg m) async {
-    final ok = await confirmDeleteMessage(context);
-    if (!ok) return;
-    setState(() {
-      final idx = _messages.indexWhere((x) => x.id == m.id);
-      if (idx >= 0) _messages[idx] = _messages[idx].copyAsDeleted();
-      if (_pinned?.msgId == m.id) _pinned = null;
-    });
-  }
-
-  String _buildNoticeTitleFromMessage(_Msg m) {
-    if (m.type == _MsgType.text && (m.text ?? '').trim().isNotEmpty) {
-      final firstLine = m.text!.split('\n').first.trim();
-      return firstLine.length > 30 ? '${firstLine.substring(0, 30)}…' : firstLine;
-    }
-    if (m.type == _MsgType.file) return m.fileName ?? '파일 공지';
-    if (m.type == _MsgType.image) return '이미지 공지';
-    return '공지';
-  }
-
-  String _buildNoticeBodyFromMessage(_Msg m) {
-    if (m.type == _MsgType.text) return m.text ?? '';
-    if (m.type == _MsgType.file) return '${m.fileName ?? '파일'} • ${(m.fileBytes ?? 0) ~/ 1024}KB';
-    if (m.type == _MsgType.image) return '이미지 1장';
-    return '';
-  }
-
+  // ---------- build ----------
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<UserProvider>();
-    final isAdmin = user.isAdmin;
+    final up = context.watch<UserProvider>();
+    final isAdmin = up.isAdmin;
+
     final items = _buildItemsWithSeparators(_messages);
 
     return Scaffold(
-      resizeToAvoidBottomInset: true, // 키보드 뜨면 body(=Column) 높이 자동 조절
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: Text(
-          widget.roomName,
-          style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
-        ),
+        title: Text(widget.roomName, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: UiTokens.title),
@@ -379,25 +387,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           IconButton(
             icon: const Icon(Icons.menu),
             onPressed: () {
-              final myRole = _currentRoleLabel(user);
-              final members = _messages
-                  .where((m) => !m.isSystem)
-                  .map((m) => RoomMemberBrief(
-                userId: m.me ? (user.current?.userId ?? 'me') : 'u${m.id}',
-                nickname: m.nickname ?? (m.me ? user.nickname : '사용자'),
-                role: m.me ? myRole : '멘티',
-                photoUrl: m.photoUrl,
-              ))
-                  .toSet()
-                  .toList();
-
+              // 기존 InfoPage는 외부에서 멤버 목록을 받게 되어 있었음(목업 기반).
+              // 우선 현재 대화 참여자 UI는 보류하고 방 정보 페이지로만 이동.
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => ChatRoomInfoPage(
                     roomId: widget.roomId,
                     roomName: widget.roomName,
                     isAdmin: isAdmin,
-                    members: members,
+                    members: const <RoomMemberBrief>[],
                   ),
                 ),
               );
@@ -407,7 +405,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       ),
       backgroundColor: Colors.white,
 
-      // ===== 핵심: Column(리스트+입력바) 위에 공지 오버레이를 Stack으로 얹기 =====
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onTap: () {
@@ -416,17 +413,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         },
         child: Stack(
           children: [
-            // 본체: 리스트 + 입력바
             Column(
               children: [
                 Expanded(
                   child: ListView.builder(
                     controller: _scroll,
-                    reverse: true, // 바닥 앵커
+                    reverse: true,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     itemCount: items.length,
                     itemBuilder: (context, index) {
-                      // reverse:true 구조에 맞춰 역인덱싱
                       final it = items[items.length - 1 - index];
 
                       if (it.kind == _RowKind.separator && it.day != null) {
@@ -439,17 +434,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       final m = it.msg!;
                       final isMe = m.me;
 
-                      // 롱프레스: 관리자일 때 공지/삭제, 일반은 삭제만(모달에서 분기)
-                      void _onLong() => _onLongPressMessage(context, m, isAdmin: isAdmin);
-
+                      // 버블 생성
                       Widget bubbleRow;
                       if (m.deleted) {
                         bubbleRow = MessageBubble(
                           isMe: isMe,
                           text: '관리자에 의해 삭제됨',
                           createdAt: m.createdAt,
-                          readCount: m.readCount,
-                          onLongPressDelete: isAdmin ? _onLong : null,
+                          readCount: null, // 삭제 메시지는 숨김
                         );
                       } else {
                         switch (m.type!) {
@@ -458,8 +450,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               isMe: isMe,
                               text: m.text ?? '',
                               createdAt: m.createdAt,
-                              readCount: m.readCount,
-                              onLongPressDelete: isAdmin ? _onLong : null,
+                              readCount: m.isSystem ? null : m.readCount, // system 표시 숨김
                             );
                             break;
                           case _MsgType.image:
@@ -470,7 +461,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               localPreviewPath: m.imageLocal,
                               createdAt: m.createdAt,
                               readCount: m.readCount,
-                              onLongPressDelete: isAdmin ? _onLong : null,
                               onTap: () => _openImageFullscreen(m),
                               heroTag: heroTag,
                             );
@@ -484,31 +474,75 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               fileUrl: m.fileUrl,
                               createdAt: m.createdAt,
                               readCount: m.readCount,
-                              onTapOpen: () {},
-                              onLongPressDelete: isAdmin ? _onLong : null,
+                              onTapOpen: () {}, // TODO: 파일 열기 연동
                             );
                             break;
                         }
                       }
 
+                      // ✅ 액션시트: 버블 외곽 래퍼에서 onLongPress로 처리 (버블에 삭제 핸들러 전달 X)
+                      final wrapped = GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onLongPress: () => _showMessageActionSheet(m, isAdmin: isAdmin),
+                        child: bubbleRow,
+                      );
+
                       if (!isMe) {
                         return IncomingMessageTile(
                           nickname: m.nickname ?? '사용자',
                           photoUrl: m.photoUrl,
-                          childRow: bubbleRow,
-                          onTapAvatar: () => _openMemberSheetFromMsg(m, user),
+                          childRow: wrapped,
+                          onTapAvatar: () {
+                            final role = _currentRoleLabel(up);
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: Colors.white,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                              builder: (_) => MemberProfileSheet(
+                                nickname: m.nickname ?? '사용자',
+                                photoUrl: m.photoUrl,
+                                role: role,
+                                isAdmin: isAdmin,
+                                isSelf: false,
+                                onViewProfile: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('프로필 보기 (구현 예정)')),
+                                  );
+                                },
+                                onOpenDM: () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('1:1 대화 (구현 예정)')),
+                                  );
+                                },
+                                onKick: () async {
+                                  await Future.delayed(const Duration(milliseconds: 250));
+                                  return true;
+                                },
+                              ),
+                            );
+                          },
                         );
                       }
-                      return bubbleRow;
+                      return wrapped;
                     },
                   ),
                 ),
-                // 입력바 (SafeArea 내부)
                 MessageInputBar(
                   key: _inputKey,
-                  onSendText: _appendMockText,
-                  onSendImageLocalPath: _appendMockImage,
-                  onSendFileLocalPath: _appendMockFile,
+                  onSendText: _sendText,
+                  onSendImageLocalPath: (p) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('이미지 업로드는 다음 단계에서 연결합니다.')),
+                    );
+                  },
+                  onSendFileLocalPath: (p, n, b) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('파일 업로드는 다음 단계에서 연결합니다.')),
+                    );
+                  },
                 ),
               ],
             ),
@@ -530,7 +564,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       );
                     },
                     onDismiss: () => setState(() {
-                      _pinned = null;          // ✅ 현재 공지 배너만 숨김
+                      _pinned = null;
                       _noticeExpanded = false;
                     }),
                   ),
@@ -561,7 +595,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 }
 
-// ===== 내부 모델 =====
+// ===== 내부 모델/뷰 =====
 enum _MsgType { text, image, file }
 enum _SendStatus { sending, sent }
 
@@ -625,65 +659,20 @@ class _Msg {
         photoUrl = null,
         isSystem = true,
         sendStatus = _SendStatus.sent;
-
-  _Msg copyAsDeleted() => _Msg(
-    id: id,
-    me: me,
-    type: type,
-    text: '관리자에 의해 삭제됨',
-    createdAt: createdAt,
-    deleted: true,
-    readCount: readCount,
-    nickname: nickname,
-    photoUrl: photoUrl,
-    imageUrl: imageUrl,
-    imageLocal: imageLocal,
-    fileUrl: fileUrl,
-    fileLocal: fileLocal,
-    fileName: fileName,
-    fileBytes: fileBytes,
-    isSystem: isSystem,
-    systemText: systemText,
-    sendStatus: sendStatus,
-  );
-
-  _Msg copyWith({_SendStatus? sendStatus}) => _Msg(
-    id: id,
-    me: me,
-    type: type,
-    text: text,
-    imageUrl: imageUrl,
-    imageLocal: imageLocal,
-    fileUrl: fileUrl,
-    fileLocal: fileLocal,
-    fileName: fileName,
-    fileBytes: fileBytes,
-    createdAt: createdAt,
-    deleted: deleted,
-    readCount: readCount,
-    nickname: nickname,
-    photoUrl: photoUrl,
-    isSystem: isSystem,
-    systemText: systemText,
-    sendStatus: sendStatus ?? this.sendStatus,
-  );
 }
 
 enum _RowKind { separator, system, message }
-
 class _RowItem {
   final _RowKind kind;
   final DateTime? day;
   final _Msg? msg;
-
   _RowItem._(this.kind, {this.day, this.msg});
-
   factory _RowItem.separator(DateTime day) => _RowItem._(_RowKind.separator, day: day);
   factory _RowItem.system(_Msg m) => _RowItem._(_RowKind.system, msg: m);
   factory _RowItem.message(_Msg m) => _RowItem._(_RowKind.message, msg: m);
 }
 
-// ===== 공지 모델 & 위젯 =====
+// ===== 공지 =====
 class _PinnedNotice {
   final int msgId;
   final String title;
@@ -732,9 +721,7 @@ class _NoticeBanner extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: const [BoxShadow(
-              color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 2)
-          )],
+          boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 10, offset: Offset(0, 2))],
         ),
         clipBehavior: Clip.hardEdge,
         child: Material(
@@ -756,8 +743,7 @@ class _NoticeBanner extends StatelessWidget {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Center(
-                          child: Icon(Icons.campaign_outlined,
-                              color: UiTokens.title, size: 18),
+                          child: Icon(Icons.campaign_outlined, color: UiTokens.title, size: 18),
                         ),
                       ),
                     ),
@@ -771,20 +757,14 @@ class _NoticeBanner extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(date, style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: UiTokens.title,
-                              fontSize: 12.5,
-                            )),
+                                fontWeight: FontWeight.w800, color: UiTokens.title, fontSize: 12.5)),
                             const SizedBox(height: 2),
                             Text(
                               data.title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                color: UiTokens.title,
-                                fontSize: 14.5,
-                                fontWeight: FontWeight.w600,
-                              ),
+                                  color: UiTokens.title, fontSize: 14.5, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
@@ -792,16 +772,14 @@ class _NoticeBanner extends StatelessWidget {
                     ),
                     IconButton(
                       visualDensity: VisualDensity.compact,
-                      icon: Icon(expanded
-                          ? Icons.keyboard_arrow_up
-                          : Icons.keyboard_arrow_down),
+                      icon: Icon(expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
                       onPressed: onToggle,
                     ),
                   ],
                 ),
               ),
 
-              // 본문 + '다시 보지 않기'
+              // 본문
               if (expanded)
                 Flexible(
                   fit: FlexFit.loose,
@@ -814,11 +792,7 @@ class _NoticeBanner extends StatelessWidget {
                         children: [
                           Text(
                             data.body.isEmpty ? '(내용 없음)' : data.body,
-                            style: const TextStyle(
-                              color: Colors.black87,
-                              height: 1.34,
-                              fontSize: 14.5,
-                            ),
+                            style: const TextStyle(color: Colors.black87, height: 1.34, fontSize: 14.5),
                           ),
                           const SizedBox(height: 12),
                           Align(
@@ -828,8 +802,7 @@ class _NoticeBanner extends StatelessWidget {
                               icon: const Icon(Icons.visibility_off_outlined, size: 18),
                               label: const Text('다시 보지 않기'),
                               style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 foregroundColor: const Color(0xFF555555),
                               ),
                             ),
@@ -876,14 +849,58 @@ class _NoticeDetailPage extends StatelessWidget {
   }
 }
 
-// ===== 헬퍼 위젯 =====
-String formatRoomCreated({required String creator}) => '$creator님이 대화방을 생성했습니다.';
-String formatInvitedSingle({required String inviter, required String invitee}) =>
-    '$inviter님이 $invitee님을 초대했습니다.';
-String formatInvitedMany({required String inviter, required List<String> invitees}) {
-  final list = invitees.map((e) => '$e님').join(', ');
-  return '$inviter님이 $list을 초대했습니다.';
-}
+// ---------- mapping ----------
+typedef MsgMapper = _Msg Function(Map<String, dynamic>);
+MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
+  final id = (r['id'] as num).toInt();
+  final t  = (r['type'] ?? 'text').toString();
+  final createdRaw = r['created_at'];
+  final created = createdRaw is DateTime
+      ? createdRaw
+      : DateTime.tryParse((createdRaw ?? '').toString()) ?? DateTime.now();
+
+  final senderId = (r['sender_id'] ?? '').toString();
+  final me = senderId.isNotEmpty && senderId == myUid;
+
+  final isSystem = t == 'system';
+  final deleted = r['is_deleted'] == true;
+
+  // meta 추출 (파일/이미지 보조 정보)
+  Map<String, dynamic> meta = {};
+  final m = r['meta'];
+  if (m is Map) {
+    meta = Map<String, dynamic>.from(m);
+  } else if (m is String && m.isNotEmpty) {
+    try { meta = jsonDecode(m) as Map<String, dynamic>; } catch (_) {}
+  }
+
+  final fileName  = (r['file_name'] ?? meta['file_name'])?.toString();
+  final fileBytes = (r['size_bytes'] ?? meta['size_bytes']);
+  final storagePath = (r['storage_path'] ?? meta['storage_path'])?.toString();
+
+  return _Msg(
+    id: id,
+    me: me,
+    type: switch (t) {
+      'image' => _MsgType.image,
+      'file'  => _MsgType.file,
+      'system'=> _MsgType.text, // 시스템은 칩으로 렌더
+      _       => _MsgType.text,
+    },
+    text: (r['text'] ?? '').toString(),
+    imageUrl: (t == 'image') ? storagePath : null, // 공개 URL 변환 로직은 스토리지 정책 확정 후
+    fileUrl:  (t == 'file')  ? storagePath : null,
+    fileName: fileName,
+    fileBytes: (fileBytes is num) ? fileBytes.toInt() : null,
+    createdAt: created,
+    deleted: deleted,
+    readCount: (r['read_count'] as num?)?.toInt(),
+    nickname: (r['sender_nick'] ?? '') as String?,
+    photoUrl: (r['sender_photo'] ?? '') as String?,
+    isSystem: isSystem,
+    systemText: isSystem ? (r['text'] ?? '').toString() : null,
+  );
+};
 
 class ChatDaySeparator extends StatelessWidget {
   final DateTime day;

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:characters/characters.dart'; // ← 첫 글자 안전 추출용
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/FilesListPage.dart';
 import 'package:nail/Pages/Chat/page/MediaGridPage.dart';
 import 'package:nail/Pages/Chat/page/NoticeListPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
+import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/ChatService.dart';
+import 'package:provider/provider.dart';
 
 class ChatRoomInfoPage extends StatefulWidget {
   final String roomId;
@@ -30,9 +32,42 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
   static const _green = Color(0xFF10B981);
   static const _amber = Color(0xFFF59E0B);
 
+  final _svc = ChatService.instance;
+  List<RoomMemberBrief> _liveMembers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _liveMembers = [...widget.members];
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMembers());
+  }
+
+  Future<void> _loadMembers() async {
+    final up = context.read<UserProvider>();
+    final key = up.isAdmin ? (up.adminKey ?? '') : (up.current?.loginKey ?? '');
+    if (key.isEmpty) return;
+    final rows = await _svc.listRoomMembers(loginKey: key, roomId: widget.roomId);
+    setState(() {
+      _liveMembers = rows.map((r) => RoomMemberBrief(
+        userId: (r['user_id'] ?? '').toString(),
+        nickname: (r['nickname'] ?? '사용자').toString(),
+        role: _roleKo((r['role'] ?? '').toString()),
+        photoUrl: (r['photo_url'] ?? '').toString().isEmpty ? null : (r['photo_url'] as String),
+      )).toList();
+    });
+  }
+
+  String _roleKo(String role) {
+    switch (role) {
+      case 'admin': return '관리자';
+      case 'mentor': return '멘토';
+      default: return '멘티';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final members = [...widget.members]..sort((a, b) => a.nickname.compareTo(b.nickname));
+    final members = [..._liveMembers]..sort((a,b)=>a.nickname.compareTo(b.nickname));
     final memberCount = members.length;
 
     return Scaffold(
