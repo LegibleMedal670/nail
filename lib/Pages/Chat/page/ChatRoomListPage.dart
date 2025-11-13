@@ -164,7 +164,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
 
     return ListView.separated(
       itemCount: _rooms.length,
-      separatorBuilder: (_, __) => const Divider(height: 1, color: UiTokens.cardBorder),
+      separatorBuilder: (_, __) => const Divider(height: 2, thickness: 0.5, color: UiTokens.cardBorder),
       itemBuilder: (context, index) {
         final r = _rooms[index];
         return InkWell(
