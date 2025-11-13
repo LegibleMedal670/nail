@@ -260,7 +260,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         title: (m['title'] ?? '공지').toString(),
         body: (m['body'] ?? '').toString(),
         createdAt: createdAt,
-        author: (m['author_id'] ?? '').toString(),
+        author: (m['author'] ?? '').toString(),
       );
     });
   }
@@ -341,7 +341,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       await _svc.pinNotice(adminLoginKey: key, roomId: widget.roomId, messageId: m.id);
       await _loadNotice(); // 실시간 갱신과 중복되어도 무해
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('공지로 등록했습니다.')));
     }
   }
 
