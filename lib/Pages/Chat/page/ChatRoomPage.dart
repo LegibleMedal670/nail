@@ -532,7 +532,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 
   // ---------- long-press 액션시트 ----------
-  Future<void> _showMessageActionSheet(_Msg m, {required bool isAdmin}) async {
+  Future<void> _showMessageActionSheet(_Msg m, {required bool isAdmin, required bool allowNotice}) async {
     final action = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: Colors.white,
@@ -546,7 +546,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               const SizedBox(height: 8),
-              if (isAdmin)
+              if (isAdmin && allowNotice)
                 ListTile(
                   leading: const Icon(Icons.campaign_outlined),
                   title: const Text('공지로 등록'),
@@ -843,7 +843,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       // ✅ 액션시트: 버블 외곽 래퍼에서 onLongPress로 처리 (버블에 삭제 핸들러 전달 X)
                       final wrapped = GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onLongPress: () => _showMessageActionSheet(m, isAdmin: isAdmin),
+                        onLongPress: m.deleted
+                            ? null
+                            : () => _showMessageActionSheet(
+                                  m,
+                                  isAdmin: isAdmin,
+                                  allowNotice: m.type == _MsgType.text,
+                                ),
                         child: bubbleRow,
                       );
 

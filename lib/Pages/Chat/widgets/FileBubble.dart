@@ -82,7 +82,7 @@ class FileBubble extends StatelessWidget {
                       child: Icon(
                         downloaded ? Icons.open_in_new_rounded : Icons.download_rounded,
                         size: 22,
-                        color: Colors.grey,
+                        color: Colors.black54,
                       ),
                     )
                   else
