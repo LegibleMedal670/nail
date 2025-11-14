@@ -51,6 +51,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   final _svc = ChatService.instance;
   final _storage = StorageService();
   RealtimeChannel? _roomRt;
+  int? _memberCount; // 방 인원수
 
   bool _loading = false;
   bool _paging = false;
@@ -76,6 +77,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     _loadFileCache();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadFirst();
+      await _loadMemberCount(); // 멤버 수 로드
       // 방 생성 직후 “초대했습니다” 시스템 메시지 (선택)
       if (widget.invitedNamesOnCreate != null && widget.invitedNamesOnCreate!.isNotEmpty) {
         final up = context.read<UserProvider>();
@@ -103,6 +105,21 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     _scroll.dispose();
     _roomRt?.unsubscribe();
     super.dispose();
+  }
+
+  Future<void> _loadMemberCount() async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    try {
+      final rows = await _svc.listRoomMembers(loginKey: key, roomId: widget.roomId);
+      if (mounted) {
+        setState(() {
+          _memberCount = rows.length;
+        });
+      } else {
+        _memberCount = rows.length;
+      }
+    } catch (_) {}
   }
 
   // ---------- utils ----------
@@ -153,6 +170,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       },
       onPinUpdate: (_) async {
         await _loadNotice();
+      },
+      onMemberUpdate: (_) async {
+        await _loadMemberCount();
       },
     );
   }
@@ -626,20 +646,20 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       return await _signedUrlForPath(storagePath);
     }
     resolve().then((src) {
-      if (src == null || src.isEmpty) return;
+    if (src == null || src.isEmpty) return;
       if (!mounted) return;
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          barrierColor: Colors.black,
-          opaque: false,
-          pageBuilder: (_, __, ___) => ChatImageViewer(
-            images: [src],
-            initialIndex: 0,
-            heroTagPrefix: 'chat_img_',
-          ),
-          transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        barrierColor: Colors.black,
+        opaque: false,
+        pageBuilder: (_, __, ___) => ChatImageViewer(
+          images: [src],
+          initialIndex: 0,
+          heroTagPrefix: 'chat_img_',
         ),
-      );
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+      ),
+    );
     });
   }
 
@@ -746,7 +766,29 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     return Scaffold(
       resizeToAvoidBottomInset: true,
       appBar: AppBar(
-        title: Text(widget.roomName, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+        title: Row(
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            Text(
+              widget.roomName,
+              style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(width: 6),
+            if (_memberCount != null && _memberCount! > 2)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '$_memberCount',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: UiTokens.title),
+                ),
+              ),
+          ],
+        ),
         backgroundColor: Colors.white,
         elevation: 0,
         iconTheme: const IconThemeData(color: UiTokens.title),
@@ -827,14 +869,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               builder: (context, snap) {
                                 final url = snap.data;
                                 final img = ImageBubble(
-                                  isMe: isMe,
+                              isMe: isMe,
                                   imageUrl: url,
-                                  localPreviewPath: m.imageLocal,
-                                  createdAt: m.createdAt,
-                                  readCount: m.readCount,
+                              localPreviewPath: m.imageLocal,
+                              createdAt: m.createdAt,
+                              readCount: m.readCount,
                                   loading: m.sendStatus == _SendStatus.sending,
-                                  onTap: () => _openImageFullscreen(m),
-                                  heroTag: heroTag,
+                              onTap: () => _openImageFullscreen(m),
+                              heroTag: heroTag,
                                 );
                                 return img;
                               },
@@ -848,13 +890,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                 final bool isDownloading = _downloadingFileMsgIds.contains(m.id);
                                 final bool isDownloaded = (m.fileLocal != null && m.fileLocal!.isNotEmpty);
                                 final file = FileBubble(
-                                  isMe: isMe,
-                                  fileName: m.fileName ?? '파일',
-                                  fileBytes: m.fileBytes ?? 0,
-                                  localPath: m.fileLocal,
+                              isMe: isMe,
+                              fileName: m.fileName ?? '파일',
+                              fileBytes: m.fileBytes ?? 0,
+                              localPath: m.fileLocal,
                                   fileUrl: url,
-                                  createdAt: m.createdAt,
-                                  readCount: m.readCount,
+                              createdAt: m.createdAt,
+                              readCount: m.readCount,
                                   loading: m.sendStatus == _SendStatus.sending || isDownloading,
                                   downloaded: isDownloaded,
                                   onTapOpen: () {

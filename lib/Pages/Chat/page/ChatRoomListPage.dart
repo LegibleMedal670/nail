@@ -21,6 +21,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
   List<_RoomItem> _rooms = [];
   bool _loading = false;
   String? _error;
+  final Map<String, int> _memberCounts = {}; // roomId -> count
 
   RealtimeChannel? _rt; // 실시간 채널
 
@@ -87,6 +88,10 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
       setState(() {
         _rooms = mapped;
       });
+      // 사후 비동기: 각 방 멤버 수 로드(캐시)
+      for (final r in mapped) {
+        _ensureMemberCount(loginKey, r.id);
+      }
     } catch (e) {
       setState(() {
         _error = e.toString();
@@ -97,6 +102,24 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  Future<int?> _ensureMemberCount(String loginKey, String roomId) async {
+    if (_memberCounts.containsKey(roomId)) return _memberCounts[roomId];
+    try {
+      final rows = await _svc.listRoomMembers(loginKey: loginKey, roomId: roomId);
+      final cnt = rows.length;
+      if (mounted) {
+        setState(() {
+          _memberCounts[roomId] = cnt;
+        });
+      } else {
+        _memberCounts[roomId] = cnt;
+      }
+      return cnt;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -135,6 +158,12 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
   }
 
   Widget _buildBody() {
+    // 멤버 수 조회용 로그인 키(하위 빌더들에서 캡처해 사용)
+    final upForCounts = context.read<UserProvider>();
+    final String loginKeyForCounts = upForCounts.isAdmin
+        ? (upForCounts.adminKey ?? '')
+        : (upForCounts.current?.loginKey ?? '');
+
     if (_loading && _rooms.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -187,14 +216,44 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              r.name,
-                              style: const TextStyle(
-                                color: UiTokens.title,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Text(
+                                  r.name,
+                                  style: const TextStyle(
+                                    color: UiTokens.title,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(width: 6),
+                                // 멤버 수 배지 (1:1 = 2명인 경우는 표시 안 함)
+                                Builder(
+                                  builder: (_) {
+                                    final cnt = _memberCounts[r.id];
+                                    if (cnt == null) {
+                                      // 로딩 트리거 (최초 1회)
+                                      if (loginKeyForCounts.isNotEmpty) {
+                                        _ensureMemberCount(loginKeyForCounts, r.id);
+                                      }
+                                      return const SizedBox.shrink();
+                                    }
+                                    if (cnt <= 2) return const SizedBox.shrink();
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '$cnt',
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: UiTokens.title),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: 8),
