@@ -458,6 +458,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   Future<void> _sendText(String text) async {
     final key = _loginKey();
     if (key.isEmpty) return;
+    _insertTempTextBubble(text);
     try {
       await _svc.sendText(
         loginKey: key,
@@ -465,8 +466,11 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         text: text,
         meta: {'client_ts': DateTime.now().toIso8601String()},
       );
+      await _reloadLatestWindow();
+      setState(() {
+        _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.text);
+      });
       await _markRead();
-      // 실시간 INSERT로 자연 갱신
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('전송 실패: $e')));
@@ -482,6 +486,35 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       text: null,
       imageUrl: null,
       imageLocal: localPath,
+      fileUrl: null,
+      fileLocal: null,
+      fileName: null,
+      fileBytes: null,
+      createdAt: DateTime.now(),
+      deleted: false,
+      readCount: null,
+      nickname: null,
+      photoUrl: null,
+      isSystem: false,
+      systemText: null,
+      sendStatus: _SendStatus.sending,
+    );
+    setState(() {
+      _messages.add(temp);
+      _messages.sort((a, b) => a.id.compareTo(b.id));
+    });
+    _autoScrollIfNearBottom();
+  }
+
+  void _insertTempTextBubble(String text) {
+    final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    final temp = _Msg(
+      id: nextId,
+      me: true,
+      type: _MsgType.text,
+      text: text,
+      imageUrl: null,
+      imageLocal: null,
       fileUrl: null,
       fileLocal: null,
       fileName: null,
