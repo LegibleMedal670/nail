@@ -12,6 +12,7 @@ class FileBubble extends StatelessWidget {
   final int? readCount;
   final VoidCallback? onTapOpen;
   final VoidCallback? onLongPressDelete;
+  final bool loading;
 
   const FileBubble({
     Key? key,
@@ -24,6 +25,7 @@ class FileBubble extends StatelessWidget {
     this.readCount,
     this.onTapOpen,
     this.onLongPressDelete,
+    this.loading = false,
   }) : super(key: key);
 
   @override
@@ -36,45 +38,68 @@ class FileBubble extends StatelessWidget {
       onLongPress: onLongPressDelete,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isMe ? UiTokens.primaryBlue.withOpacity(0.08) : Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: UiTokens.cardBorder),
-            boxShadow: const [UiTokens.cardShadow],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: UiTokens.cardBorder),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, color: UiTokens.title),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isMe ? UiTokens.primaryBlue.withOpacity(0.08) : Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: UiTokens.cardBorder),
+                boxShadow: const [UiTokens.cardShadow],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 14)),
-                    const SizedBox(height: 2),
-                    Text(_formatSize(fileBytes), style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                  ],
-                ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: UiTokens.cardBorder),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(icon, color: UiTokens.title),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 14)),
+                        const SizedBox(height: 2),
+                        Text(_formatSize(fileBytes), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4.0),
+                    child: const Icon(Icons.download_rounded, size: 22, color: Colors.grey),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(right: 4.0),
-                child: const Icon(Icons.download_rounded, size: 22, color: Colors.grey),
+            ),
+            if (loading) ...[
+              // 중앙 전체 오버레이 대신, 다운로드 아이콘 영역 옆에만 스피너 표시
+              Positioned(
+                right: 8,
+                child: Container(
+                  width: 20, height: 20,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  padding: const EdgeInsets.all(3),
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );
@@ -124,8 +149,9 @@ class FileBubble extends StatelessWidget {
   }
 
   String _friendlyTime(DateTime t) {
-    final h = t.hour.toString().padLeft(2, '0');
-    final m = t.minute.toString().padLeft(2, '0');
+    final lt = t.toLocal();
+    final h = lt.hour.toString().padLeft(2, '0');
+    final m = lt.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 }

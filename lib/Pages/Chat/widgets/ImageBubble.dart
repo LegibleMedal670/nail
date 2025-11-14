@@ -14,6 +14,7 @@ class ImageBubble extends StatelessWidget {
   // ✅ 풀스크린 전환용(선택): ChatRoomPage에서 heroTag, onTap을 넘겨 사용
   final String? heroTag;
   final VoidCallback? onTap;
+  final bool loading;
 
   const ImageBubble({
     Key? key,
@@ -25,10 +26,12 @@ class ImageBubble extends StatelessWidget {
     this.onLongPressDelete,
     this.heroTag,
     this.onTap,
+    this.loading = false,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+
     // 버블(이미지 카드)
     final imgWidget = _buildImage();
     final wrapped = ClipRRect(
@@ -44,13 +47,33 @@ class ImageBubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.65, // ▶ FileBubble과 통일
           maxHeight: 320,
         ),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: UiTokens.cardBorder),
-            boxShadow: const [UiTokens.cardShadow],
-          ),
-          child: wrapped,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: UiTokens.cardBorder),
+                boxShadow: const [UiTokens.cardShadow],
+              ),
+              child: wrapped,
+            ),
+            if (loading) ...[
+              Positioned.fill(child: Container(color: Colors.black26)),
+              Container(
+                width: 32, height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                padding: const EdgeInsets.all(6),
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -101,8 +124,9 @@ class ImageBubble extends StatelessWidget {
   }
 
   String _friendlyTime(DateTime t) {
-    final h = t.hour.toString().padLeft(2, '0');
-    final m = t.minute.toString().padLeft(2, '0');
+    final lt = t.toLocal();
+    final h = lt.hour.toString().padLeft(2, '0');
+    final m = lt.minute.toString().padLeft(2, '0');
     return '$h:$m';
   }
 }

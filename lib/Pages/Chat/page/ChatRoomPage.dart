@@ -1,5 +1,6 @@
 // lib/Pages/Chat/ChatRoomPage.dart
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nail/Services/ChatService.dart';
@@ -19,6 +20,7 @@ import 'package:nail/Pages/Chat/widgets/SystemEventChip.dart';
 import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/StorageService.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String roomId;
@@ -41,6 +43,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   final GlobalKey<MessageInputBarState> _inputKey = GlobalKey<MessageInputBarState>();
 
   final _svc = ChatService.instance;
+  final _storage = StorageService();
   RealtimeChannel? _roomRt;
 
   bool _loading = false;
@@ -48,6 +51,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   bool _hasMore = true;
   int? _latestId;
   int? _oldestId;
+  bool _sendingAttach = false;
 
   // 공지
   static const double _kNoticeCollapsed = 76.0;
@@ -144,6 +148,120 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         await _loadNotice();
       },
     );
+  }
+
+  // ---------- signed url cache ----------
+  final Map<String, String> _signedUrlCache = {};
+  Future<String?> _signedUrlForPath(String? storagePath) async {
+    if (storagePath == null || storagePath.isEmpty) return null;
+    final cached = _signedUrlCache[storagePath];
+    if (cached != null) return cached;
+    try {
+      final url = await _storage.getOrCreateSignedUrlChat(storagePath);
+      _signedUrlCache[storagePath] = url;
+      return url;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _sendImageLocalPath(String localPath) async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    final file = File(localPath);
+    if (!await file.exists()) return;
+    final int size = await file.length();
+    final String name = _basename(localPath);
+    final String mime = _guessImageMime(localPath);
+    // optimistic bubble
+    _insertTempImageBubble(localPath);
+    try {
+      final storagePath = await _storage.uploadChatFile(
+        file: file,
+        roomId: widget.roomId,
+        kind: 'images',
+        contentType: mime,
+      );
+      await _svc.sendFile(
+        loginKey: key,
+        roomId: widget.roomId,
+        fileName: name,
+        sizeBytes: size,
+        mime: mime,
+        storagePath: storagePath,
+        kind: 'image',
+        meta: {'client_ts': DateTime.now().toIso8601String()},
+      );
+      await _reloadLatestWindow();
+      setState(() {
+        _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.image);
+      });
+      await _markRead();
+    } finally {
+      // no-op
+    }
+  }
+
+  Future<void> _sendFileLocalPath(String localPath, String fileName, int fileBytes) async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    final file = File(localPath);
+    if (!await file.exists()) return;
+    final int size = fileBytes > 0 ? fileBytes : await file.length();
+    final String name = (fileName.isNotEmpty) ? fileName : _basename(localPath);
+    final String mime = _guessFileMime(name);
+    _insertTempFileBubble(localPath, name, size);
+    try {
+      final storagePath = await _storage.uploadChatFile(
+        file: file,
+        roomId: widget.roomId,
+        kind: 'files',
+        contentType: mime,
+      );
+      await _svc.sendFile(
+        loginKey: key,
+        roomId: widget.roomId,
+        fileName: name,
+        sizeBytes: size,
+        mime: mime,
+        storagePath: storagePath,
+        kind: 'file',
+        meta: {'client_ts': DateTime.now().toIso8601String()},
+      );
+      await _reloadLatestWindow();
+      setState(() {
+        _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.file);
+      });
+      await _markRead();
+    } finally {
+      // no-op
+    }
+  }
+
+  String _basename(String path) {
+    final norm = path.replaceAll('\\', '/');
+    final last = norm.split('/').last;
+    return last;
+  }
+
+  String _guessImageMime(String path) {
+    final n = _basename(path).toLowerCase();
+    if (n.endsWith('.png')) return 'image/png';
+    if (n.endsWith('.webp')) return 'image/webp';
+    if (n.endsWith('.heic')) return 'image/heic';
+    return 'image/jpeg';
+  }
+
+  String _guessFileMime(String name) {
+    final n = name.toLowerCase();
+    if (n.endsWith('.png')) return 'image/png';
+    if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg';
+    if (n.endsWith('.webp')) return 'image/webp';
+    if (n.endsWith('.pdf')) return 'application/pdf';
+    if (n.endsWith('.txt')) return 'text/plain';
+    if (n.endsWith('.zip')) return 'application/zip';
+    if (n.endsWith('.mp4')) return 'video/mp4';
+    return 'application/octet-stream';
   }
 
   // ---------- load ----------
@@ -290,6 +408,64 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     }
   }
 
+  void _insertTempImageBubble(String localPath) {
+    final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    final temp = _Msg(
+      id: nextId,
+      me: true,
+      type: _MsgType.image,
+      text: null,
+      imageUrl: null,
+      imageLocal: localPath,
+      fileUrl: null,
+      fileLocal: null,
+      fileName: null,
+      fileBytes: null,
+      createdAt: DateTime.now(),
+      deleted: false,
+      readCount: null,
+      nickname: null,
+      photoUrl: null,
+      isSystem: false,
+      systemText: null,
+      sendStatus: _SendStatus.sending,
+    );
+    setState(() {
+      _messages.add(temp);
+      _messages.sort((a, b) => a.id.compareTo(b.id));
+    });
+    _autoScrollIfNearBottom();
+  }
+
+  void _insertTempFileBubble(String localPath, String fileName, int fileBytes) {
+    final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    final temp = _Msg(
+      id: nextId,
+      me: true,
+      type: _MsgType.file,
+      text: null,
+      imageUrl: null,
+      imageLocal: null,
+      fileUrl: null,
+      fileLocal: localPath,
+      fileName: fileName,
+      fileBytes: fileBytes,
+      createdAt: DateTime.now(),
+      deleted: false,
+      readCount: null,
+      nickname: null,
+      photoUrl: null,
+      isSystem: false,
+      systemText: null,
+      sendStatus: _SendStatus.sending,
+    );
+    setState(() {
+      _messages.add(temp);
+      _messages.sort((a, b) => a.id.compareTo(b.id));
+    });
+    _autoScrollIfNearBottom();
+  }
+
   // ---------- long-press 액션시트 ----------
   Future<void> _showMessageActionSheet(_Msg m, {required bool isAdmin}) async {
     final action = await showModalBottomSheet<String>(
@@ -345,20 +521,28 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 
   void _openImageFullscreen(_Msg imageMsg) {
-    final src = imageMsg.imageUrl ?? imageMsg.imageLocal;
-    if (src == null || src.isEmpty) return;
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        barrierColor: Colors.black,
-        opaque: false,
-        pageBuilder: (_, __, ___) => ChatImageViewer(
-          images: [src],
-          initialIndex: 0,
-          heroTagPrefix: 'chat_img_',
+    final storagePath = imageMsg.imageUrl;
+    final local = imageMsg.imageLocal;
+    Future<String?> resolve() async {
+      if (local != null && local.isNotEmpty) return local;
+      return await _signedUrlForPath(storagePath);
+    }
+    resolve().then((src) {
+      if (src == null || src.isEmpty) return;
+      if (!mounted) return;
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          barrierColor: Colors.black,
+          opaque: false,
+          pageBuilder: (_, __, ___) => ChatImageViewer(
+            images: [src],
+            initialIndex: 0,
+            heroTagPrefix: 'chat_img_',
+          ),
+          transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
         ),
-        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
-      ),
-    );
+      );
+    });
   }
 
   String _currentRoleLabel(UserProvider up) {
@@ -449,31 +633,47 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               isMe: isMe,
                               text: m.text ?? '',
                               createdAt: m.createdAt,
-                              readCount: m.isSystem ? null : m.readCount, // system 표시 숨김
+                              readCount: m.isSystem ? null : m.readCount,
                             );
                             break;
                           case _MsgType.image:
                             final heroTag = 'chat_img_${m.id}';
-                            bubbleRow = ImageBubble(
-                              isMe: isMe,
-                              imageUrl: m.imageUrl,
-                              localPreviewPath: m.imageLocal,
-                              createdAt: m.createdAt,
-                              readCount: m.readCount,
-                              onTap: () => _openImageFullscreen(m),
-                              heroTag: heroTag,
+                            bubbleRow = FutureBuilder<String?>(
+                              future: _signedUrlForPath(m.imageUrl),
+                              builder: (context, snap) {
+                                final url = snap.data;
+                                final img = ImageBubble(
+                                  isMe: isMe,
+                                  imageUrl: url,
+                                  localPreviewPath: m.imageLocal,
+                                  createdAt: m.createdAt,
+                                  readCount: m.readCount,
+                                  loading: m.sendStatus == _SendStatus.sending,
+                                  onTap: () => _openImageFullscreen(m),
+                                  heroTag: heroTag,
+                                );
+                                return img;
+                              },
                             );
                             break;
                           case _MsgType.file:
-                            bubbleRow = FileBubble(
-                              isMe: isMe,
-                              fileName: m.fileName ?? '파일',
-                              fileBytes: m.fileBytes ?? 0,
-                              localPath: m.fileLocal,
-                              fileUrl: m.fileUrl,
-                              createdAt: m.createdAt,
-                              readCount: m.readCount,
-                              onTapOpen: () {}, // TODO: 파일 열기 연동
+                            bubbleRow = FutureBuilder<String?>(
+                              future: _signedUrlForPath(m.fileUrl),
+                              builder: (context, snap) {
+                                final url = snap.data;
+                                final file = FileBubble(
+                                  isMe: isMe,
+                                  fileName: m.fileName ?? '파일',
+                                  fileBytes: m.fileBytes ?? 0,
+                                  localPath: m.fileLocal,
+                                  fileUrl: url,
+                                  createdAt: m.createdAt,
+                                  readCount: m.readCount,
+                                  loading: m.sendStatus == _SendStatus.sending,
+                                  onTapOpen: () {}, // TODO
+                                );
+                                return file;
+                              },
                             );
                             break;
                         }
@@ -532,16 +732,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                 MessageInputBar(
                   key: _inputKey,
                   onSendText: _sendText,
-                  onSendImageLocalPath: (p) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('이미지 업로드는 다음 단계에서 연결합니다.')),
-                    );
-                  },
-                  onSendFileLocalPath: (p, n, b) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('파일 업로드는 다음 단계에서 연결합니다.')),
-                    );
-                  },
+                  onSendImageLocalPath: _sendImageLocalPath,
+                  onSendFileLocalPath: _sendFileLocalPath,
                 ),
               ],
             ),

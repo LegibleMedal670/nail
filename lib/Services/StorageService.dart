@@ -18,6 +18,7 @@ class StorageService {
   // === 버킷 명 ===
   static const String _videosBucket = 'videos';
   static const String _practiceBucket = 'practice';
+  static const String _chatBucket = 'chat';
 
   // === 경로 표준화 ===
   String normalizeObjectPath(String raw) {
@@ -124,6 +125,97 @@ class StorageService {
   }
 
   void clearAllCaches() => _signedCache.clear();
+
+  // ---------------------------------------------------------------------------
+  //                               채팅(첨부) 섹션
+  // ---------------------------------------------------------------------------
+
+  /// rooms/{roomId}/{kind}/{filename}  kind: "images" | "files"
+  String chatObjectPath({
+    required String roomId,
+    required String filename,
+    required String kind,
+  }) {
+    final safe = filename.replaceAll(' ', '_');
+    return 'rooms/$roomId/$kind/$safe';
+  }
+
+  /// 채팅 파일 업로드 → storage path 반환
+  Future<String> uploadChatFile({
+    required File file,
+    required String roomId,
+    required String kind, // "images" | "files"
+    bool upsert = false,
+    String? contentType,
+  }) async {
+    final rawName = _fileNameFromPath(file.path);
+    final name = _sanitizeForStorage(rawName);
+    final key = chatObjectPath(roomId: roomId, filename: name, kind: kind);
+    await _sb.storage.from(_chatBucket).upload(
+      key,
+      file,
+      fileOptions: FileOptions(
+        cacheControl: '3600',
+        upsert: upsert,
+        contentType: contentType,
+      ),
+    );
+    evictSignedUrl(key);
+    return key;
+  }
+
+  Future<String> getOrCreateSignedUrlChat(
+    String objectPath, {
+    int expiresInSec = 21600,
+    int minTtlBufferSec = 300,
+  }) async {
+    final key = normalizeObjectPath(objectPath);
+    final now = DateTime.now();
+    final cached = _signedCache[key];
+    if (cached != null &&
+        now.isBefore(cached.expiresAt.subtract(Duration(seconds: minTtlBufferSec)))) {
+      return cached.url;
+    }
+    final url = await _sb.storage.from(_chatBucket).createSignedUrl(key, expiresInSec);
+    final exp = now.add(Duration(seconds: expiresInSec));
+    _signedCache[key] = SignedUrlCacheEntry(url: url, expiresAt: exp);
+    return url;
+  }
+
+  String _fileNameFromPath(String path) {
+    final idx = path.replaceAll('\\', '/').split('/').last;
+    return idx;
+  }
+
+  /// Supabase Storage object key 제약을 고려해 파일명을 정규화
+  /// - 공백/제어문자 제거
+  /// - 허용: a-zA-Z0-9 . _ - (확장자는 유지)
+  /// - 그 외 문자는 '_'로 치환
+  /// - 모두 제거되면 timestamp 기반 기본 이름 생성
+  String _sanitizeForStorage(String filename) {
+    String base = filename.trim();
+    if (base.isEmpty) {
+      return 'file_${DateTime.now().millisecondsSinceEpoch}';
+    }
+    // 분리: 이름/확장자
+    final dot = base.lastIndexOf('.');
+    String namePart = dot > 0 ? base.substring(0, dot) : base;
+    String extPart = dot > 0 ? base.substring(dot) : '';
+    // 허용 문자만 남기기
+    final reg = RegExp(r'[^a-zA-Z0-9._-]');
+    namePart = namePart.replaceAll(reg, '_');
+    // 연속 '_' 축약
+    namePart = namePart.replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
+    if (namePart.isEmpty) {
+      namePart = 'file_${DateTime.now().millisecondsSinceEpoch}';
+    }
+    // 확장자도 허용 문자만
+    extPart = extPart.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '');
+    if (extPart.length > 20) {
+      extPart = extPart.substring(0, 20);
+    }
+    return '$namePart$extPart';
+  }
 
   // ---------------------------------------------------------------------------
   //                      Practice(실습) - 세트 참고 이미지(관리자)
