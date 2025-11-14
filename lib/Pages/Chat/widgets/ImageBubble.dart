@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ImageBubble extends StatelessWidget {
   final bool isMe;
@@ -109,7 +110,7 @@ class ImageBubble extends StatelessWidget {
         if (f.existsSync()) return Image.file(f, fit: BoxFit.cover);
       }
       if (imageUrl != null && imageUrl!.isNotEmpty) {
-        final img = Image.network(imageUrl!, fit: BoxFit.cover);
+        final img = CachedNetworkImage(imageUrl: imageUrl!, fit: BoxFit.cover);
         return heroTag == null ? img : Hero(tag: heroTag!, child: img);
       }
       return Container(color: Colors.grey[200]);

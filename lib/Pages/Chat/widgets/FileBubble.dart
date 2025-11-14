@@ -13,6 +13,7 @@ class FileBubble extends StatelessWidget {
   final VoidCallback? onTapOpen;
   final VoidCallback? onLongPressDelete;
   final bool loading;
+  final bool downloaded;
 
   const FileBubble({
     Key? key,
@@ -26,6 +27,7 @@ class FileBubble extends StatelessWidget {
     this.onTapOpen,
     this.onLongPressDelete,
     this.loading = false,
+    this.downloaded = false,
   }) : super(key: key);
 
   @override
@@ -77,31 +79,28 @@ class FileBubble extends StatelessWidget {
                   if (!loading)
                     Padding(
                       padding: const EdgeInsets.only(right: 4.0),
-                      child: const Icon(Icons.download_rounded, size: 22, color: Colors.grey),
+                      child: Icon(
+                        downloaded ? Icons.open_in_new_rounded : Icons.download_rounded,
+                        size: 22,
+                        color: Colors.grey,
+                      ),
                     )
                   else
-                    const SizedBox(width: 26),
+                    Container(
+                      width: 26, height: 26,
+                      alignment: Alignment.center,
+                      child: const SizedBox(
+                        width: 18, height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
-            if (loading) ...[
-              // 중앙 전체 오버레이 대신, 다운로드 아이콘 영역 옆에만 스피너 표시
-              Positioned(
-                right: 8,
-                child: Container(
-                  width: 20, height: 20,
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  padding: const EdgeInsets.all(3),
-                  child: const CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                ),
-              ),
-            ],
+            // 스피너는 trailing 영역에서만 표시하므로 별도 오버레이는 사용하지 않음
           ],
         ),
       ),

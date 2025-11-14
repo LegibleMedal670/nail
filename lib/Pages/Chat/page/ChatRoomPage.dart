@@ -21,6 +21,12 @@ import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/StorageService.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:dio/dio.dart' as dio;
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
+import 'package:open_filex/open_filex.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ChatRoomPage extends StatefulWidget {
   final String roomId;
@@ -67,6 +73,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     super.initState();
     _scroll.addListener(_onScroll);
     _bindRealtime();
+    _loadFileCache();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadFirst();
       // 방 생성 직후 “초대했습니다” 시스템 메시지 (선택)
@@ -152,6 +159,61 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   // ---------- signed url cache ----------
   final Map<String, String> _signedUrlCache = {};
+  final Map<int, String> _downloadedFileCache = {};
+  SharedPreferences? _prefs;
+  String get _fileCacheKey => 'chat_file_cache_${widget.roomId}';
+  Future<void> _loadFileCache() async {
+    _prefs = await SharedPreferences.getInstance();
+    final jsonStr = _prefs!.getString(_fileCacheKey);
+    if (jsonStr == null || jsonStr.isEmpty) return;
+    try {
+      final map = json.decode(jsonStr) as Map<String, dynamic>;
+      _downloadedFileCache
+        ..clear()
+        ..addAll(map.map((k, v) => MapEntry(int.parse(k), v.toString())));
+      // 기존 메시지에도 로컬 경로 반영
+      setState(() {
+        for (int i = 0; i < _messages.length; i++) {
+          final m = _messages[i];
+          final cached = _downloadedFileCache[m.id];
+          if (cached != null && (m.fileLocal == null || m.fileLocal!.isEmpty)) {
+            _messages[i] = _Msg(
+              id: m.id, me: m.me, type: m.type, text: m.text,
+              imageUrl: m.imageUrl, imageLocal: m.imageLocal,
+              fileUrl: m.fileUrl, fileLocal: cached,
+              fileName: m.fileName, fileBytes: m.fileBytes,
+              createdAt: m.createdAt, deleted: m.deleted,
+              readCount: m.readCount, nickname: m.nickname,
+              photoUrl: m.photoUrl, isSystem: m.isSystem,
+              systemText: m.systemText, sendStatus: m.sendStatus,
+            );
+          }
+        }
+      });
+    } catch (_) {}
+  }
+  Future<void> _persistFileCache() async {
+    if (_prefs == null) return;
+    final map = _downloadedFileCache.map((k, v) => MapEntry(k.toString(), v));
+    await _prefs!.setString(_fileCacheKey, json.encode(map));
+  }
+  List<_Msg> _applyFileCache(List<_Msg> src) {
+    if (_downloadedFileCache.isEmpty) return src;
+    return src.map((m) {
+      final cached = _downloadedFileCache[m.id];
+      if (cached == null || (m.fileLocal != null && m.fileLocal!.isNotEmpty)) return m;
+      return _Msg(
+        id: m.id, me: m.me, type: m.type, text: m.text,
+        imageUrl: m.imageUrl, imageLocal: m.imageLocal,
+        fileUrl: m.fileUrl, fileLocal: cached,
+        fileName: m.fileName, fileBytes: m.fileBytes,
+        createdAt: m.createdAt, deleted: m.deleted,
+        readCount: m.readCount, nickname: m.nickname,
+        photoUrl: m.photoUrl, isSystem: m.isSystem,
+        systemText: m.systemText, sendStatus: m.sendStatus,
+      );
+    }).toList();
+  }
   Future<String?> _signedUrlForPath(String? storagePath) async {
     if (storagePath == null || storagePath.isEmpty) return null;
     final cached = _signedUrlCache[storagePath];
@@ -274,7 +336,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       final rows = await _svc.fetchMessages(loginKey: key, roomId: widget.roomId, limit: 50);
       rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
       final my = _myUid();
-      final list = rows.map(_mapRowToMsg(my)).toList();
+      final list = _applyFileCache(rows.map(_mapRowToMsg(my)).toList());
 
       setState(() {
         _messages
@@ -309,7 +371,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     );
     rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
     final my = _myUid();
-    final patch = { for (final r in rows) (r['id'] as num).toInt(): _mapRowToMsg(my)(r) };
+    final patch = {
+      for (final r in rows)
+        (r['id'] as num).toInt(): _applyFileCache([_mapRowToMsg(my)(r)]).first
+    };
 
     setState(() {
       for (int i = 0; i < _messages.length; i++) {
@@ -545,6 +610,92 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     });
   }
 
+  Future<void> _openFile(String? localPath, String? signedUrl) async {
+    Uri? uri;
+    if (localPath != null && localPath.isNotEmpty) {
+      // 인앱: 기기에 저장된 파일을 시스템 뷰어로 열기
+      try {
+        await OpenFilex.open(localPath);
+        return;
+      } catch (_) {}
+      uri = Uri.file(localPath); // fallback
+    } else if (signedUrl != null && signedUrl.isNotEmpty) {
+      uri = Uri.parse(signedUrl); // 외부 앱(브라우저) 열기 fallback
+    }
+    if (uri == null) return;
+    try { await launchUrl(uri, mode: LaunchMode.externalApplication); } catch (_) {}
+  }
+
+  // 다운로드 상태 관리 (messageId 집합)
+  final Set<int> _downloadingFileMsgIds = <int>{};
+
+  Future<void> _downloadFileToAppStorage(_Msg msg, String signedUrl) async {
+    if (_downloadingFileMsgIds.contains(msg.id)) return;
+    setState(() => _downloadingFileMsgIds.add(msg.id));
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final chatDir = p.join(dir.path, 'chat', widget.roomId);
+      await Directory(chatDir).create(recursive: true);
+      final rawName = msg.fileName ?? 'file';
+      final safeName = _sanitizeForStorage(rawName);
+      final savePath = p.join(chatDir, safeName);
+      final client = dio.Dio();
+      await client.download(signedUrl, savePath);
+      // 메시지에 로컬 경로 반영 → 아이콘이 open으로 전환
+      setState(() {
+        for (int i = 0; i < _messages.length; i++) {
+          if (_messages[i].id == msg.id) {
+            _messages[i] = _messages[i] = _Msg(
+              id: _messages[i].id,
+              me: _messages[i].me,
+              type: _messages[i].type,
+              text: _messages[i].text,
+              imageUrl: _messages[i].imageUrl,
+              imageLocal: _messages[i].imageLocal,
+              fileUrl: _messages[i].fileUrl,
+              fileLocal: savePath,
+              fileName: _messages[i].fileName,
+              fileBytes: _messages[i].fileBytes,
+              createdAt: _messages[i].createdAt,
+              deleted: _messages[i].deleted,
+              readCount: _messages[i].readCount,
+              nickname: _messages[i].nickname,
+              photoUrl: _messages[i].photoUrl,
+              isSystem: _messages[i].isSystem,
+              systemText: _messages[i].systemText,
+              sendStatus: _SendStatus.sent,
+            );
+            break;
+          }
+        }
+        _downloadedFileCache[msg.id] = savePath;
+      });
+      await _persistFileCache();
+    } catch (_) {
+      // 무시(필요시 토스트)
+    } finally {
+      if (mounted) {
+        setState(() => _downloadingFileMsgIds.remove(msg.id));
+      }
+    }
+  }
+
+  String _sanitizeForStorage(String filename) {
+    String base = filename.trim();
+    if (base.isEmpty) {
+      return 'file_${DateTime.now().millisecondsSinceEpoch}';
+    }
+    final dot = base.lastIndexOf('.');
+    String namePart = dot > 0 ? base.substring(0, dot) : base;
+    String extPart = dot > 0 ? base.substring(dot) : '';
+    final reg = RegExp(r'[^a-zA-Z0-9._-]');
+    namePart = namePart.replaceAll(reg, '_').replaceAll(RegExp(r'_+'), '_').replaceAll(RegExp(r'^_+|_+$'), '');
+    if (namePart.isEmpty) namePart = 'file_${DateTime.now().millisecondsSinceEpoch}';
+    extPart = extPart.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '');
+    if (extPart.length > 20) extPart = extPart.substring(0, 20);
+    return '$namePart$extPart';
+  }
+
   String _currentRoleLabel(UserProvider up) {
     if (up.isAdmin) return '관리자';
     if (up.isMentor) return '멘토';
@@ -661,6 +812,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               future: _signedUrlForPath(m.fileUrl),
                               builder: (context, snap) {
                                 final url = snap.data;
+                                final bool isDownloading = _downloadingFileMsgIds.contains(m.id);
+                                final bool isDownloaded = (m.fileLocal != null && m.fileLocal!.isNotEmpty);
                                 final file = FileBubble(
                                   isMe: isMe,
                                   fileName: m.fileName ?? '파일',
@@ -669,8 +822,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                   fileUrl: url,
                                   createdAt: m.createdAt,
                                   readCount: m.readCount,
-                                  loading: m.sendStatus == _SendStatus.sending,
-                                  onTapOpen: () {}, // TODO
+                                  loading: m.sendStatus == _SendStatus.sending || isDownloading,
+                                  downloaded: isDownloaded,
+                                  onTapOpen: () {
+                                    final hasLocal = (m.fileLocal != null && m.fileLocal!.isNotEmpty);
+                                    if (hasLocal) {
+                                      _openFile(m.fileLocal, url);
+                                    } else if (url != null && url.isNotEmpty) {
+                                      _downloadFileToAppStorage(m, url);
+                                    }
+                                  },
                                 );
                                 return file;
                               },
