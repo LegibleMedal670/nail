@@ -74,10 +74,13 @@ class FileBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4.0),
-                    child: const Icon(Icons.download_rounded, size: 22, color: Colors.grey),
-                  ),
+                  if (!loading)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4.0),
+                      child: const Icon(Icons.download_rounded, size: 22, color: Colors.grey),
+                    )
+                  else
+                    const SizedBox(width: 26),
                 ],
               ),
             ),

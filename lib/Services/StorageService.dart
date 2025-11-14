@@ -149,7 +149,7 @@ class StorageService {
     String? contentType,
   }) async {
     final rawName = _fileNameFromPath(file.path);
-    final name = _sanitizeForStorage(rawName);
+    final name = _uniqueSanitizedName(_sanitizeForStorage(rawName));
     final key = chatObjectPath(roomId: roomId, filename: name, kind: kind);
     await _sb.storage.from(_chatBucket).upload(
       key,
@@ -215,6 +215,15 @@ class StorageService {
       extPart = extPart.substring(0, 20);
     }
     return '$namePart$extPart';
+  }
+
+  /// 같은 이름을 여러 번 업로드해도 충돌하지 않도록 타임스탬프를 덧붙여 고유화
+  String _uniqueSanitizedName(String sanitized) {
+    final dot = sanitized.lastIndexOf('.');
+    final namePart = dot > 0 ? sanitized.substring(0, dot) : sanitized;
+    final extPart = dot > 0 ? sanitized.substring(dot) : '';
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    return '${namePart}_$ts$extPart';
   }
 
   // ---------------------------------------------------------------------------
