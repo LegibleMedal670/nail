@@ -51,6 +51,22 @@ class ChatService {
     return (res as int);
   }
 
+  /// 멤버 추방(방 관리자 전용). 성공 여부 반환.
+  Future<bool> kickMember({
+    required String adminLoginKey,
+    required String roomId,
+    required String memberId,
+  }) async {
+    final res = await _sb.rpc('rpc_kick_member', params: {
+      'p_login_key': adminLoginKey,
+      'p_room_id': roomId,
+      'p_member_id': memberId,
+    });
+    if (res is bool) return res;
+    if (res is num) return res != 0;
+    return false;
+  }
+
   // ============== 메시지 ==============
   /// 페이징: rpc_fetch_messages (서버에서 read_count/작성자 정보까지 계산해 내려옴)
   /// 반환은 최신부터 역순으로 내려오지만 화면에선 정렬해 쓰는 걸 권장.
@@ -202,6 +218,23 @@ class ChatService {
     final res = await _sb.rpc('rpc_list_room_members', params: {
       'p_login_key': loginKey,
       'p_room_id': roomId,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  /// 방 비구성원(초대 가능 후보) 목록
+  Future<List<Map<String, dynamic>>> listRoomNonMembers({
+    required String adminLoginKey,
+    required String roomId,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc('rpc_list_room_non_members', params: {
+      'p_login_key': adminLoginKey,
+      'p_room_id': roomId,
+      'p_limit': limit,
+      'p_offset': offset,
     });
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);

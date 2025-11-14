@@ -54,7 +54,7 @@ Future<bool> confirmDeleteRoom(BuildContext ctx, String roomName) =>
     showConfirmDialog(
       ctx,
       title: '방을 삭제할까요?',
-      message: '‘$roomName’의 메시지는 소프트 삭제 처리됩니다.',
+      message: '‘$roomName’의 메시지는 삭제 처리됩니다.',
       confirmText: '방 삭제',
       isDanger: true, // 방 삭제는 항상 빨강 톤
       icon: Icons.delete_forever_rounded,

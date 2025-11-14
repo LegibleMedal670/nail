@@ -3,8 +3,10 @@ import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/FilesListPage.dart';
 import 'package:nail/Pages/Chat/page/MediaGridPage.dart';
 import 'package:nail/Pages/Chat/page/NoticeListPage.dart';
+import 'package:nail/Pages/Chat/page/ChatRoomPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
+import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/ChatService.dart';
 import 'package:provider/provider.dart';
@@ -182,26 +184,11 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
   }
 
   void _inviteMembers() {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('멤버 초대 (구현 예정)')));
+    _openInviteSheet();
   }
 
   void _confirmDeleteRoom() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('채팅방 삭제'),
-        content: const Text('채팅방을 삭제하시겠어요? 메시지는 소프트 삭제됩니다.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('삭제'),
-          ),
-        ],
-      ),
-    );
+    final ok = await confirmDeleteRoom(context, widget.roomName);
     if (ok == true) {
       Navigator.of(context).pop();
     }
@@ -231,12 +218,165 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1:1 대화 (구현 예정)')));
         },
         onKick: () async {
-          // TODO: 실제 추방 API 연결
-          await Future.delayed(const Duration(milliseconds: 300));
-          // 성공/실패 반환
-          return true;
+          try {
+            final ok1 = await confirmKickUser(context, m.nickname);
+            if (!ok1) return false;
+            final up = context.read<UserProvider>();
+            final adminKey = up.adminKey?.trim() ?? '';
+            if (adminKey.isEmpty) return false;
+            final ok = await _svc.kickMember(
+              adminLoginKey: adminKey,
+              roomId: widget.roomId,
+              memberId: m.userId,
+            );
+            if (ok) {
+              if (!mounted) return true;
+              // 시트는 MemberProfileSheet 내부에서 닫음. 여기서는 Info 페이지에서 빠져나가 채팅방으로 복귀
+              Navigator.of(context).pop();
+            }
+            return ok;
+          } catch (e) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('강퇴 실패: $e')));
+            }
+            return false;
+          }
         },
       ),
+    );
+  }
+
+  Future<void> _openInviteSheet() async {
+    final up = context.read<UserProvider>();
+    final adminKey = up.adminKey?.trim() ?? '';
+    if (adminKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('관리자 인증 정보가 없습니다.')));
+      return;
+    }
+    // 불러오기
+    List<_InviteVm> candidates = [];
+    try {
+      final rows = await _svc.listRoomNonMembers(adminLoginKey: adminKey, roomId: widget.roomId);
+      candidates = rows.map((r) => _InviteVm(
+        id: (r['id'] ?? '').toString(),
+        nickname: (r['nickname'] ?? '사용자').toString(),
+        photoUrl: (r['photo_url'] ?? '').toString(),
+      )).toList();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('목록 로드 실패: $e')));
+      return;
+    }
+    if (!mounted) return;
+    final selected = <String>{};
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (_, controller) {
+            return Column(
+              children: [
+                const SizedBox(height: 10),
+                const Text('멤버 초대', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: UiTokens.title)),
+                const SizedBox(height: 8),
+                if (candidates.isEmpty)
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.person_add_disabled_rounded, size: 40, color: Colors.black38),
+                          SizedBox(height: 10),
+                          Text('초대할 사용자가 없습니다.', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView.builder(
+                      controller: controller,
+                      itemCount: candidates.length,
+                      itemBuilder: (_, i) {
+                        final u = candidates[i];
+                        final checked = selected.contains(u.id);
+                        return CheckboxListTile(
+                          value: checked,
+                          onChanged: (v) {
+                            if (v == true) {
+                              selected.add(u.id);
+                            } else {
+                              selected.remove(u.id);
+                            }
+                            (ctx as Element).markNeedsBuild();
+                          },
+                          title: Text(u.nickname, style: const TextStyle(fontWeight: FontWeight.w700, color: UiTokens.title)),
+                          secondary: CircleAvatar(
+                            backgroundColor: const Color(0xFFE8EDF3),
+                            foregroundImage: (u.photoUrl.isNotEmpty) ? NetworkImage(u.photoUrl) : null,
+                            child: (u.photoUrl.isEmpty) ? const Icon(Icons.person, size: 16, color: UiTokens.actionIcon) : null,
+                          ),
+                          controlAffinity: ListTileControlAffinity.leading,
+                        );
+                      },
+                    ),
+                  ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: selected.isEmpty ? null : () async {
+                          try {
+                            final added = await _svc.inviteMembers(
+                              adminLoginKey: adminKey,
+                              roomId: widget.roomId,
+                              memberIds: selected.toList(),
+                            );
+
+                            if (!mounted) return;
+                            Navigator.of(ctx).pop(); // close sheet
+                            // InfoPage → ChatRoomPage로 이동(또는 뒤로가기)
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            } else {
+                              await Navigator.of(context).pushReplacement(
+                                MaterialPageRoute(builder: (_) => ChatRoomPage(roomId: widget.roomId, roomName: widget.roomName)),
+                              );
+                            }
+                          } catch (e) {
+                            if (!mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('초대 실패: $e')));
+                            print(e);
+                          }
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: UiTokens.primaryBlue,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        child: const Text('초대하기', style: TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -425,4 +565,16 @@ class _Avatar extends StatelessWidget {
           : null,
     );
   }
+}
+
+/// 초대 후보 표시용 간단 뷰모델
+class _InviteVm {
+  final String id;
+  final String nickname;
+  final String photoUrl;
+  const _InviteVm({
+    required this.id,
+    required this.nickname,
+    required this.photoUrl,
+  });
 }

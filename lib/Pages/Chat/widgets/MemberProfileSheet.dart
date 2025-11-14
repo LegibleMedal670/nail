@@ -88,29 +88,9 @@ class MemberProfileSheet extends StatelessWidget {
                 height: 44,
                 child: InkWell(
                   onTap: () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (_) => AlertDialog(
-                        title: const Text('추방'),
-                        content: Text('정말 "$nickname" 님을 추방하시겠어요?'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('취소')),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                            onPressed: () => Navigator.pop(context, true),
-                            child: const Text('추방'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok == true) {
-                      final success = await (onKick?.call() ?? Future.value(false));
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(success ? '추방 완료' : '추방 실패')),
-                        );
-                      }
+                    final success = await (onKick?.call() ?? Future.value(false));
+                    if (context.mounted) {
+                      Navigator.pop(context); // close sheet
                     }
                   },
                   child: Container(
