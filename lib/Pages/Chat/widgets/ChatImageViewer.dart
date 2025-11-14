@@ -9,12 +9,14 @@ class ChatImageViewer extends StatefulWidget {
   final List<String> images;      // 지금은 [단일]로 전달
   final int initialIndex;         // 보통 0
   final String heroTagPrefix;
+  final List<String>? titles;     // 보낸 사람 닉네임 등
 
   const ChatImageViewer({
     Key? key,
     required this.images,
     required this.initialIndex,
     this.heroTagPrefix = 'chat_img_',
+    this.titles,
   }) : super(key: key);
 
   @override
@@ -74,6 +76,7 @@ class _ChatImageViewerState extends State<ChatImageViewer> {
   Widget build(BuildContext context) {
     final imgs = widget.images;
     final tagPrefix = widget.heroTagPrefix;
+    final title = (widget.titles != null && _index < (widget.titles!.length)) ? (widget.titles![_index] ?? '') : '';
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -97,6 +100,15 @@ class _ChatImageViewerState extends State<ChatImageViewer> {
                   IconButton(
                     icon: const Icon(Icons.close_rounded, color: Colors.white),
                     onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  Expanded(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                    ),
                   ),
                   const Spacer(),
                   // 우상단 다운로드
