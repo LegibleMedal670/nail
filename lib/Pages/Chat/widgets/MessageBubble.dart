@@ -25,16 +25,16 @@ class MessageBubble extends StatelessWidget {
     final bubble = GestureDetector(
       onLongPress: onLongPressDelete,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(14),
             border: isMe ? null : Border.all(color: UiTokens.cardBorder),
             boxShadow: const [UiTokens.cardShadow],
           ),
-          child: Text(text, style: TextStyle(color: fg, fontSize: 15, height: 1.35, fontWeight: FontWeight.w500)),
+          child: Text(text, style: TextStyle(color: fg, fontSize: 14, height: 1.30, fontWeight: FontWeight.w500)),
         ),
       ),
     );
@@ -52,7 +52,7 @@ class MessageBubble extends StatelessWidget {
         : <Widget>[bubble, const SizedBox(width: 2), meta];
 
     return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end, // 하단 기준 정렬

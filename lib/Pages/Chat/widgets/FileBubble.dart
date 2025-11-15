@@ -39,12 +39,12 @@ class FileBubble extends StatelessWidget {
       onTap: onTapOpen,
       onLongPress: onLongPressDelete,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
         child: Stack(
           alignment: Alignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: isMe ? UiTokens.primaryBlue.withOpacity(0.08) : Colors.grey[100],
                 borderRadius: BorderRadius.circular(12),
@@ -54,7 +54,7 @@ class FileBubble extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    width: 40, height: 40,
+                    width: 36, height: 36,
                     decoration: BoxDecoration(
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
@@ -63,19 +63,19 @@ class FileBubble extends StatelessWidget {
                     alignment: Alignment.center,
                     child: Icon(icon, color: UiTokens.title),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 14)),
+                            style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 13)),
                         const SizedBox(height: 2),
-                        Text(_formatSize(fileBytes), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                        Text(_formatSize(fileBytes), style: const TextStyle(color: Colors.grey, fontSize: 11)),
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
                   if (!loading)
                     Padding(
                       padding: const EdgeInsets.only(right: 4.0),

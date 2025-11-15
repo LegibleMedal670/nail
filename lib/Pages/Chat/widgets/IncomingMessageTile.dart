@@ -15,7 +15,7 @@ class IncomingMessageTile extends StatelessWidget {
     this.onTapAvatar,
   }) : super(key: key);
 
-  static const double _avatarRadius = 16; // 지름 32
+  static const double _avatarRadius = 14; // 지름 28로 소폭 축소
   static const double _gap = 8;
 
   String _initials(String name) {
@@ -42,7 +42,7 @@ class IncomingMessageTile extends StatelessWidget {
     );
 
     return Padding(
-      padding: const EdgeInsets.only(top: 6, bottom: 2, left: 4, right: 12),
+      padding: const EdgeInsets.only(top: 4, bottom: 2, left: 4, right: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

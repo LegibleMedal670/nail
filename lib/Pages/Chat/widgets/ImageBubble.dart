@@ -45,8 +45,8 @@ class ImageBubble extends StatelessWidget {
       onLongPress: onLongPressDelete,
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.65, // ▶ FileBubble과 통일
-          maxHeight: 320,
+          maxWidth: MediaQuery.of(context).size.width * 0.60,
+          maxHeight: 260,
         ),
         child: Stack(
           alignment: Alignment.center,
@@ -92,7 +92,7 @@ class ImageBubble extends StatelessWidget {
         : <Widget>[imageCard, const SizedBox(width: 2), meta];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end, // 하단 정렬 → 메타가 항상 보임

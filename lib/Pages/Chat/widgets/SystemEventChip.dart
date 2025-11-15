@@ -9,19 +9,19 @@ class SystemEventChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final maxW = MediaQuery.of(context).size.width * 0.85; // 너무 넓지 않게
+    final maxW = MediaQuery.of(context).size.width * 0.80; // 조금 더 타이트하게
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           const Expanded(child: SizedBox()),
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxW),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color.fromRGBO(230, 230, 230, 1),
-                borderRadius: BorderRadius.circular(18),
+                color: const Color.fromRGBO(235, 235, 235, 1),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Text(
                 text,
@@ -29,9 +29,9 @@ class SystemEventChip extends StatelessWidget {
                 softWrap: true,
                 style: TextStyle(
                   color: UiTokens.title.withOpacity(0.85),
-                  fontSize: 14,
-                  height: 1.35,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  height: 1.30,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
