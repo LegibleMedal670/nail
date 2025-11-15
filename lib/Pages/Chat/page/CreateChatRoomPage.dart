@@ -206,7 +206,6 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
           builder: (_) => ChatRoomPage(
             roomId: roomId,
             roomName: roomName,
-            invitedNamesOnCreate: invited, // ChatRoomPage에서 who=UserProvider.nickname으로 표기
           ),
         ),
       );

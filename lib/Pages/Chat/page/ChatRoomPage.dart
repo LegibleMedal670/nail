@@ -31,13 +31,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ChatRoomPage extends StatefulWidget {
   final String roomId;
   final String roomName;
-  final List<String>? invitedNamesOnCreate;
 
   const ChatRoomPage({
     Key? key,
     required this.roomId,
     required this.roomName,
-    this.invitedNamesOnCreate,
   }) : super(key: key);
 
   @override
@@ -80,24 +78,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _loadFirst();
       await _loadMemberCount(); // 멤버 수 로드
-      // 방 생성 직후 “초대했습니다” 시스템 메시지 (선택)
-      if (widget.invitedNamesOnCreate != null && widget.invitedNamesOnCreate!.isNotEmpty) {
-        final up = context.read<UserProvider>();
-        final who = up.nickname.isNotEmpty ? up.nickname : '관리자';
-        final list = widget.invitedNamesOnCreate!.join(', ');
-        setState(() {
-          _messages.insert(
-            0,
-            _Msg.system(
-              id: -DateTime.now().millisecondsSinceEpoch, // 클라 가상 ID
-              createdAt: DateTime.now(),
-              systemText: '$who님이 $list님을 초대했습니다.',
-            ),
-          );
-        });
-      }
-
-
     });
   }
 

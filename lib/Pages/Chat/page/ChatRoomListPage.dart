@@ -9,7 +9,9 @@ import 'package:nail/Providers/UserProvider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ChatRoomListPage extends StatefulWidget {
-  const ChatRoomListPage({Key? key}) : super(key: key);
+  final bool embedded; // ManagerMainPage 내 탭으로 포함 시 true → AppBar 없이 body만
+  final int externalReloadToken; // 부모에서 증가시켜 강제 갱신 트리거
+  const ChatRoomListPage({Key? key, this.embedded = false, this.externalReloadToken = 0}) : super(key: key);
 
   @override
   State<ChatRoomListPage> createState() => _ChatRoomListPageState();
@@ -36,6 +38,14 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
   void dispose() {
     _rt?.unsubscribe();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatRoomListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.externalReloadToken != widget.externalReloadToken) {
+      _load();
+    }
   }
 
   Future<void> _bindRealtime() async {
@@ -128,6 +138,13 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
     final user = context.watch<UserProvider>();
     final isAdmin = user.isAdmin;
 
+    final content = RefreshIndicator(onRefresh: _load, child: _buildBody());
+
+    if (widget.embedded) {
+      // ManagerMainPage에서 AppBar를 일원화하므로 body만 반환
+      return content;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('채팅', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
@@ -143,17 +160,13 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
                 await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const CreateChatRoomPage()),
                 );
-                // 방 생성 후 목록 갱신
                 await _load();
               },
             ),
         ],
       ),
       backgroundColor: Colors.white,
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _buildBody(),
-      ),
+      body: content,
     );
   }
 
