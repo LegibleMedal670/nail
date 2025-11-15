@@ -190,7 +190,22 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
   void _confirmDeleteRoom() async {
     final ok = await confirmDeleteRoom(context, widget.roomName);
     if (ok == true) {
-      Navigator.of(context).pop();
+      try {
+        final up = context.read<UserProvider>();
+        final adminKey = up.adminKey?.trim() ?? '';
+        if (adminKey.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('관리자 인증 정보가 없습니다.')));
+          return;
+        }
+        await _svc.deleteRoom(adminLoginKey: adminKey, roomId: widget.roomId);
+        if (!mounted) return;
+        // Info → pop, ChatRoomPage → pop → 목록으로
+        Navigator.of(context).pop(); // close Info
+        Navigator.of(context).pop(); // close ChatRoomPage → back to list
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('방 삭제 실패: $e')));
+      }
     }
   }
 

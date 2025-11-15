@@ -37,6 +37,20 @@ class ChatService {
     return (res as String);
   }
 
+  /// 방 삭제(관리자 전용). 소프트 삭제 처리.
+  Future<bool> deleteRoom({
+    required String adminLoginKey,
+    required String roomId,
+  }) async {
+    final res = await _sb.rpc('rpc_delete_room', params: {
+      'p_login_key': adminLoginKey,
+      'p_room_id': roomId,
+    });
+    if (res is bool) return res;
+    if (res is num) return res != 0;
+    return true;
+  }
+
   /// 멤버 초대(방 관리자 전용). 새로 추가된 수 반환.
   Future<int> inviteMembers({
     required String adminLoginKey,
