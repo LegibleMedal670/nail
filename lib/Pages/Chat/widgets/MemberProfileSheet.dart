@@ -28,7 +28,7 @@ class MemberProfileSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showActions = isAdmin; // 관리자만 액션 보임
+    final showActions = isAdmin; // 관리자 액션(1:1, 강퇴)은 관리자만 보임
     final canKick = isAdmin && !isSelf && role != '관리자';
 
     return SafeArea(
@@ -64,23 +64,26 @@ class MemberProfileSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            if (showActions && !isSelf) Row(
+            // 프로필 보기: 관리자/멘토/멘티 모두 노출(자기 자신 제외)
+            if (!isSelf) Row(
               children: [
                 _ActionChip(
                   icon: Icons.person_pin_circle_outlined,
                   label: '프로필 보기',
                   onTap: () { Navigator.pop(context); onViewProfile?.call(); },
                 ),
-                const SizedBox(width: 8),
-                _ActionChip(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: '1:1 대화',
-                  onTap: () { Navigator.pop(context); onOpenDM?.call(); },
-                ),
+                if (showActions) ...[
+                  const SizedBox(width: 8),
+                  _ActionChip(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    label: '1:1 대화',
+                    onTap: () { Navigator.pop(context); onOpenDM?.call(); },
+                  ),
+                ],
               ],
             ),
 
-            if (showActions) const SizedBox(height: 10),
+            if (showActions && !isSelf) const SizedBox(height: 10),
 
             if (canKick)
               SizedBox(

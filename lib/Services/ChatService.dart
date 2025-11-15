@@ -357,11 +357,31 @@ class ChatService {
       callback: (_) => onChanged?.call(),
     );
 
-    // 공지 핀 변경
+    // 공지 핀 변경 및 방 정보 변경
     ch.onPostgresChanges(
       event: PostgresChangeEvent.update,
       schema: 'public',
       table: 'chat_rooms',
+      callback: (_) => onChanged?.call(),
+    );
+    // 새 방 생성 시 목록 갱신
+    ch.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'chat_rooms',
+      callback: (_) => onChanged?.call(),
+    );
+    // 내가 속한 방 멤버십 추가/변경 시 목록 갱신
+    ch.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'chat_room_members',
+      callback: (_) => onChanged?.call(),
+    );
+    ch.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'chat_room_members',
       callback: (_) => onChanged?.call(),
     );
 

@@ -7,6 +7,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteePracticePage.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Providers/UserProvider.dart';
 
 class MenteeHomeScaffold extends StatefulWidget {
@@ -57,11 +58,12 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      const MenteeMainPage(embedded: true),     // ✅ 이론 탭(임베디드 모드)
-      const MenteePracticePage(embedded: true), // ✅ 실습 탭(임베디드 모드)
+      const MenteeMainPage(embedded: true),      // 이론
+      const MenteePracticePage(embedded: true),  // 실습
+      const ChatRoomListPage(embedded: true),    // 채팅
     ];
 
-    final titles = ['이론', '실습'];
+    final titles = ['이론', '실습', '채팅'];
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -151,6 +153,10 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
           BottomNavigationBarItem(
             icon: Icon(Icons.brush_rounded),
             label: '실습',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.chat_bubble_outline),
+            label: '채팅',
           ),
         ],
       ),
