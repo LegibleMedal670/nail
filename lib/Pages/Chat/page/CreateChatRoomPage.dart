@@ -36,7 +36,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
   final Set<String> _selectedMenteeIds = {};
 
   // ---- 데이터 목록 ----
-  List<_UserVm> _admins = const [];   // 이번 스펙상 비워둠(필요시 API 연결)
+  List<_UserVm> _admins = const [];
   List<_UserVm> _mentors = const [];
   List<_UserVm> _mentees = const [];
 
@@ -94,6 +94,23 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
           .where((u) => u.id != _myId)
           .toList(growable: false);
 
+      // 관리자 목록 (본인 제외)
+      List<_UserVm> admins = const [];
+      if (adminLoginKey.isNotEmpty && _isAdmin) {
+        try {
+          final adminMaps = await ChatService.instance.listAdminsForSelect(adminLoginKey: adminLoginKey);
+          admins = adminMaps
+              .map((m) => _UserVm(
+            id: (m['id'] ?? '').toString(),
+            name: (m['nickname'] ?? '').toString(),
+            role: 'admin',
+            photoUrl: (m['photo_url'] ?? '').toString(),
+          ))
+              .where((u) => u.id != _myId)
+              .toList(growable: false);
+        } catch (_) {}
+      }
+
       // 멘토 목록 (관리자 권한 필요)
       List<_UserVm> mentors = const [];
       if (adminLoginKey.isNotEmpty && _isAdmin) {
@@ -119,9 +136,6 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
           }
         }
       }
-
-      // (선택) 관리자 목록 API가 있다면 여기서 불러와 본인 제외 필터를 적용
-      final admins = <_UserVm>[];
 
       setState(() {
         _admins = admins;
@@ -490,7 +504,7 @@ class _UserRow extends StatelessWidget {
         child: vm.photoUrl == null || vm.photoUrl!.isEmpty
             ? Icon(
           vm.role == 'admin'
-              ? Icons.verified_user_outlined
+              ? Icons.build_outlined
               : vm.role == 'mentor'
               ? Icons.support_agent_outlined
               : Icons.person_outline,

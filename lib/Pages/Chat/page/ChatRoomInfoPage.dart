@@ -36,11 +36,13 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
 
   final _svc = ChatService.instance;
   List<RoomMemberBrief> _liveMembers = [];
+  String? _roomName; // 로컬표시용
 
   @override
   void initState() {
     super.initState();
     _liveMembers = [...widget.members];
+    _roomName = widget.roomName;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadMembers());
   }
 
@@ -81,8 +83,8 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         actions: [
           if (widget.isAdmin)
             IconButton(
-              tooltip: '관리자 설정',
-              icon: const Icon(Icons.settings_outlined, color: Colors.black87),
+              tooltip: '방 이름 변경',
+              icon: const Icon(Icons.edit, color: Colors.black87),
               onPressed: _openAdminSettings,
             ),
           if (widget.isAdmin)
@@ -103,7 +105,7 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           const SizedBox(height: 16),
-          _GroupHeader(roomName: widget.roomName), // ← 변경: 이니셜 배지
+          _GroupHeader(roomName: _roomName ?? widget.roomName), // ← 변경: 이니셜 배지
           const SizedBox(height: 16),
 
           // 액션 카드
@@ -179,8 +181,94 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
   }
 
   void _openAdminSettings() {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('관리자 설정 페이지 (구현 예정)')));
+    final ctrl = TextEditingController(text: _roomName ?? widget.roomName);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16, right: 16,
+            top: 16,
+            bottom: 16 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.edit_note_rounded, color: UiTokens.title),
+                  SizedBox(width: 8),
+                  Text('방 이름 변경', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: UiTokens.title)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: '새 방 이름',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('취소', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () async {
+                        final newName = ctrl.text.trim();
+                        if (newName.isEmpty) return;
+                        try {
+                          final up = context.read<UserProvider>();
+                          final adminKey = up.adminKey?.trim() ?? '';
+                          if (adminKey.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('관리자 인증 정보가 없습니다.')));
+                            return;
+                          }
+                          await _svc.renameRoom(adminLoginKey: adminKey, roomId: widget.roomId, name: newName);
+                          if (!mounted) return;
+                          setState(() => _roomName = newName);
+                          Navigator.pop(ctx);           // close sheet
+                          Navigator.pop(context, newName); // close Info and return name
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('변경 실패: $e')));
+                        }
+                      },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: UiTokens.primaryBlue,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      child: const Text('변경', style: TextStyle(fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _inviteMembers() {
@@ -276,6 +364,7 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         id: (r['id'] ?? '').toString(),
         nickname: (r['nickname'] ?? '사용자').toString(),
         photoUrl: (r['photo_url'] ?? '').toString(),
+        role: (r['role'] ?? 'mentee').toString(),
       )).toList();
     } catch (e) {
       if (!mounted) return;
@@ -334,7 +423,13 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
                             }
                             (ctx as Element).markNeedsBuild();
                           },
-                          title: Text(u.nickname, style: const TextStyle(fontWeight: FontWeight.w700, color: UiTokens.title)),
+                        title: Row(
+                          children: [
+                            Expanded(child: Text(u.nickname, style: const TextStyle(fontWeight: FontWeight.w700, color: UiTokens.title))),
+                            const SizedBox(width: 8),
+                            _RoleBadge(role: _roleKo(u.role)),
+                          ],
+                        ),
                           secondary: CircleAvatar(
                             backgroundColor: const Color(0xFFE8EDF3),
                             foregroundImage: (u.photoUrl.isNotEmpty) ? NetworkImage(u.photoUrl) : null,
@@ -587,9 +682,11 @@ class _InviteVm {
   final String id;
   final String nickname;
   final String photoUrl;
+  final String role;
   const _InviteVm({
     required this.id,
     required this.nickname,
     required this.photoUrl,
+    this.role = 'mentee',
   });
 }

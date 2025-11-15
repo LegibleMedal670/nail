@@ -51,6 +51,22 @@ class ChatService {
     return true;
   }
 
+  /// 방 이름 변경(관리자 전용)
+  Future<bool> renameRoom({
+    required String adminLoginKey,
+    required String roomId,
+    required String name,
+  }) async {
+    final res = await _sb.rpc('rpc_rename_room', params: {
+      'p_login_key': adminLoginKey,
+      'p_room_id': roomId,
+      'p_name': name,
+    });
+    if (res is bool) return res;
+    if (res is num) return res != 0;
+    return true;
+  }
+
   /// 멤버 초대(방 관리자 전용). 새로 추가된 수 반환.
   Future<int> inviteMembers({
     required String adminLoginKey,
@@ -247,6 +263,21 @@ class ChatService {
     final res = await _sb.rpc('rpc_list_room_non_members', params: {
       'p_login_key': adminLoginKey,
       'p_room_id': roomId,
+      'p_limit': limit,
+      'p_offset': offset,
+    });
+    final rows = (res is List) ? res : [res];
+    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  /// 방 생성용: 관리자 목록(본인 제외)
+  Future<List<Map<String, dynamic>>> listAdminsForSelect({
+    required String adminLoginKey,
+    int limit = 200,
+    int offset = 0,
+  }) async {
+    final res = await _sb.rpc('rpc_list_admins_for_select', params: {
+      'p_login_key': adminLoginKey,
       'p_limit': limit,
       'p_offset': offset,
     });

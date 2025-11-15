@@ -52,6 +52,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   final _storage = StorageService();
   RealtimeChannel? _roomRt;
   int? _memberCount; // 방 인원수
+  String? _roomName;  // 제목 갱신용
 
   bool _loading = false;
   bool _paging = false;
@@ -72,6 +73,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   @override
   void initState() {
     super.initState();
+    _roomName = widget.roomName;
     _scroll.addListener(_onScroll);
     _bindRealtime();
     _loadFileCache();
@@ -770,7 +772,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           mainAxisSize: MainAxisSize.max,
           children: [
             Text(
-              widget.roomName,
+              _roomName ?? widget.roomName,
               style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
               overflow: TextOverflow.ellipsis,
             ),
@@ -795,19 +797,22 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.menu),
-            onPressed: () {
+            onPressed: () async {
               // 기존 InfoPage는 외부에서 멤버 목록을 받게 되어 있었음(목업 기반).
               // 우선 현재 대화 참여자 UI는 보류하고 방 정보 페이지로만 이동.
-              Navigator.of(context).push(
+              final newName = await Navigator.of(context).push<String>(
                 MaterialPageRoute(
                   builder: (_) => ChatRoomInfoPage(
                     roomId: widget.roomId,
-                    roomName: widget.roomName,
+                    roomName: _roomName ?? widget.roomName, // 최신 제목 전달
                     isAdmin: isAdmin,
                     members: const <RoomMemberBrief>[],
                   ),
                 ),
               );
+              if (newName != null && newName.isNotEmpty && mounted) {
+                setState(() => _roomName = newName);
+              }
             },
           ),
         ],
