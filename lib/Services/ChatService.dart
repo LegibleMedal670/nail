@@ -67,6 +67,18 @@ class ChatService {
     return true;
   }
 
+  /// 1:1 대화방 생성 혹은 기존 방 반환
+  Future<String> getOrCreateDM({
+    required String loginKey,
+    required String targetUserId,
+  }) async {
+    final res = await _sb.rpc('rpc_get_or_create_dm', params: {
+      'p_login_key': loginKey,
+      'p_target_id': targetUserId,
+    });
+    return (res as String);
+  }
+
   /// 멤버 초대(방 관리자 전용). 새로 추가된 수 반환.
   Future<int> inviteMembers({
     required String adminLoginKey,

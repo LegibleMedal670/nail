@@ -201,6 +201,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           if (cached != null && (m.fileLocal == null || m.fileLocal!.isEmpty)) {
             _messages[i] = _Msg(
               id: m.id, me: m.me, type: m.type, text: m.text,
+              senderId: m.senderId,
               imageUrl: m.imageUrl, imageLocal: m.imageLocal,
               fileUrl: m.fileUrl, fileLocal: cached,
               fileName: m.fileName, fileBytes: m.fileBytes,
@@ -226,6 +227,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       if (cached == null || (m.fileLocal != null && m.fileLocal!.isNotEmpty)) return m;
       return _Msg(
         id: m.id, me: m.me, type: m.type, text: m.text,
+        senderId: m.senderId,
         imageUrl: m.imageUrl, imageLocal: m.imageLocal,
         fileUrl: m.fileUrl, fileLocal: cached,
         fileName: m.fileName, fileBytes: m.fileBytes,
@@ -958,10 +960,29 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                     const SnackBar(content: Text('프로필 보기 (구현 예정)')),
                                   );
                                 },
-                                onOpenDM: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('1:1 대화 (구현 예정)')),
-                                  );
+                                onOpenDM: () async {
+                                  try {
+                                    final key = _loginKey();
+                                    if (key.isEmpty) return;
+                                    final targetId = m.senderId ?? '';
+                                    if (targetId.isEmpty) return;
+                                    final roomId = await _svc.getOrCreateDM(loginKey: key, targetUserId: targetId);
+                                    if (!mounted) return;
+                                    // 바텀시트 닫기 후 DM으로 이동(스택을 목록 페이지만 남김)
+                                    Navigator.of(context).pop();
+                                    await Navigator.of(context).pushAndRemoveUntil(
+                                      MaterialPageRoute(
+                                        builder: (_) => ChatRoomPage(
+                                          roomId: roomId,
+                                          roomName: m.nickname ?? '대화상대',
+                                        ),
+                                      ),
+                                      (route) => route.isFirst,
+                                    );
+                                  } catch (e) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('1:1 대화 시작 실패: $e')));
+                                  }
                                 },
                                 onKick: () async {
                                   await Future.delayed(const Duration(milliseconds: 250));
@@ -1042,6 +1063,7 @@ class _Msg {
   final bool me;
   final _MsgType? type;
   final String? text;
+  final String? senderId;
   final String? imageUrl;
   final String? imageLocal;
   final String? fileUrl;
@@ -1062,6 +1084,7 @@ class _Msg {
     required this.me,
     this.type,
     this.text,
+    this.senderId,
     this.imageUrl,
     this.imageLocal,
     this.fileUrl,
@@ -1083,6 +1106,7 @@ class _Msg {
     required this.createdAt,
     required this.systemText,
   })  : me = false,
+        senderId = null,
         type = null,
         text = null,
         imageUrl = null,
@@ -1326,6 +1350,7 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
       _       => _MsgType.text,
     },
     text: (r['text'] ?? '').toString(),
+    senderId: senderId.isNotEmpty ? senderId : null,
     imageUrl: (t == 'image') ? storagePath : null, // 공개 URL 변환 로직은 스토리지 정책 확정 후
     fileUrl:  (t == 'file')  ? storagePath : null,
     fileName: fileName,

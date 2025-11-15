@@ -297,8 +297,34 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
     }
   }
 
+  Future<void> _startDM(String userId, String nickname) async {
+    try {
+      final up = context.read<UserProvider>();
+      final key = up.isAdmin ? (up.adminKey ?? '') : (up.current?.loginKey ?? '');
+      if (key.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('로그인이 필요합니다.')));
+        return;
+      }
+      final roomId = await _svc.getOrCreateDM(loginKey: key, targetUserId: userId);
+      if (!mounted) return;
+      // 프로필 시트 닫기
+      Navigator.of(context).pop();
+      // DM으로 이동(스택을 목록 페이지만 남김)
+      await Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => ChatRoomPage(roomId: roomId, roomName: nickname),
+        ),
+        (route) => route.isFirst,
+      );
+    } catch (e) {
+      print(e);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('1:1 대화 시작 실패: $e')));
+    }
+  }
+
   void _openProfileSheet(RoomMemberBrief m) {
-    final isSelf = m.userId == 'me'; // 본인 체크 규칙에 맞게 수정
+    final isSelf = m.userId == (context.read<UserProvider>().current?.userId ?? '');
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -316,10 +342,7 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
           // TODO: 프로필 페이지로 이동
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('프로필 보기 (구현 예정)')));
         },
-        onOpenDM: () {
-          // TODO: 1:1 대화방 열기
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1:1 대화 (구현 예정)')));
-        },
+        onOpenDM: () => _startDM(m.userId, m.nickname),
         onKick: () async {
           try {
             final ok1 = await confirmKickUser(context, m.nickname);
