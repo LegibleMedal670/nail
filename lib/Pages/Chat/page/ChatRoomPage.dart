@@ -165,12 +165,37 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (key.isEmpty) return;
     try {
       final rows = await _svc.listRoomMembers(loginKey: key, roomId: widget.roomId);
+      // 멤버 수 갱신
+      final count = rows.length;
+      // 방 이름이 비어 있고(1:1 DM에서 그룹이 된 경우 등), 멤버 목록이 있으면
+      // 멤버 닉네임을 ', '로 연결해 임시 방 이름으로 표시
+      final currentName = _roomName?.trim() ?? '';
+      if (currentName.isEmpty && rows.isNotEmpty) {
+        final names = rows
+            .map((r) => (r['nickname'] ?? '').toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+        final joined = names.join(', ');
+        if (joined.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _roomName = joined;
+              _memberCount = count;
+            });
+          } else {
+            _roomName = joined;
+            _memberCount = count;
+          }
+          return;
+        }
+      }
       if (mounted) {
         setState(() {
-          _memberCount = rows.length;
+          _memberCount = count;
         });
       } else {
-        _memberCount = rows.length;
+        _memberCount = count;
       }
     } catch (_) {}
   }
@@ -852,10 +877,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         title: Row(
           mainAxisSize: MainAxisSize.max,
           children: [
-            Text(
-              _roomName ?? widget.roomName,
-              style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
-              overflow: TextOverflow.ellipsis,
+            Expanded(
+              child: Text(
+                _roomName ?? widget.roomName,
+                style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                softWrap: false,
+              ),
             ),
             const SizedBox(width: 6),
             if (_memberCount != null && _memberCount! > 2)
