@@ -25,6 +25,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
   bool _loading = false;
   String? _error;
   final Map<String, int> _memberCounts = {}; // roomId -> count
+  final Map<String, String> _displayNames = {}; // roomId -> computed joined names (when name is empty)
 
   RealtimeChannel? _rt; // 실시간 채널
 
@@ -139,6 +140,25 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
     try {
       final rows = await _svc.listRoomMembers(loginKey: loginKey, roomId: roomId);
       final cnt = rows.length;
+      // 이름 비어있는 방이면 멤버 닉네임을 조합해 표시용 이름 계산
+      final room = _rooms.firstWhere((e) => e.id == roomId, orElse: () => _RoomItem(id: roomId, name: '', lastMessage: '', unread: 0, updatedAt: DateTime.now()));
+      if ((room.name.trim().isEmpty) && rows.isNotEmpty) {
+        final names = rows
+            .map((r) => (r['nickname'] ?? '').toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+          ..sort((a, b) => a.compareTo(b));
+        final joined = names.join(', ');
+        if (joined.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _displayNames[roomId] = joined;
+            });
+          } else {
+            _displayNames[roomId] = joined;
+          }
+        }
+      }
       if (mounted) {
         setState(() {
           _memberCounts[roomId] = cnt;
@@ -228,10 +248,11 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
       separatorBuilder: (_, __) => const Divider(height: 2, thickness: 0.5, color: UiTokens.cardBorder),
       itemBuilder: (context, index) {
         final r = _rooms[index];
+        final displayName = (r.name.trim().isNotEmpty) ? r.name : (_displayNames[r.id] ?? r.name);
         return InkWell(
           onTap: () async {
             await Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => ChatRoomPage(roomId: r.id, roomName: r.name)),
+              MaterialPageRoute(builder: (_) => ChatRoomPage(roomId: r.id, roomName: displayName)),
             );
             await _load(); // 복귀 후 갱신(읽음 수 반영)
           },
@@ -239,7 +260,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                _RoomAvatar(name: r.name),
+                _RoomAvatar(name: displayName),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -251,7 +272,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
                             child: Row(
                               children: [
                                 Text(
-                                  r.name,
+                                  displayName,
                                   style: const TextStyle(
                                     color: UiTokens.title,
                                     fontSize: 16,
