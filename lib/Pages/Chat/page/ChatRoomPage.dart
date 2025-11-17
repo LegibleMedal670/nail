@@ -178,6 +178,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       },
       onMemberUpdate: (_) async {
         await _loadMemberCount();
+        // 다른 참여자의 last_read_at 갱신에 맞춰 read_count를 최신화
+        await _reloadLatestWindow();
       },
     );
   }
@@ -376,6 +378,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
       await _loadNotice();
       await _markRead();
+      // 읽음 반영 직후 스냅샷을 한 번 더 갱신해 read_count를 즉시 업데이트
+      await _reloadLatestWindow();
       _jumpToBottom();
     } finally {
       if (mounted) setState(() => _loading = false);
