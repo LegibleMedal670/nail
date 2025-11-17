@@ -177,7 +177,12 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
         ],
       ),
       body: IndexedStack(index: _currentIndex, children: pages),
-      bottomNavigationBar: BottomNavigationBar(
+      bottomNavigationBar: Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color.fromARGB(255, 240, 240, 240))),
+        ),
+        child: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (i) {
           setState(() => _currentIndex = i);
@@ -247,6 +252,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
