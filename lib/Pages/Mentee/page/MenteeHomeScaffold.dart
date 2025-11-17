@@ -122,43 +122,46 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
           ),
         ),
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                tooltip: '내 TODO',
-                icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MyTodoPage()),
-                  );
-                  if (!mounted) return;
-                  // 페이지에서 돌아오면 배지 카운트 동기화
-                  await _refreshTodoBadge();
-                },
-              ),
-              if (_todoNotDoneCount > 0)
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      borderRadius: BorderRadius.circular(999),
-                      boxShadow: [UiTokens.cardShadow],
-                    ),
-                    child: Text(
-                      _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
+          Padding(
+            padding: const EdgeInsets.only(top: 5.0),
+            child: Stack(
+              children: [
+                IconButton(
+                  tooltip: '내 TODO',
+                  icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const MyTodoPage()),
+                    );
+                    if (!mounted) return;
+                    // 페이지에서 돌아오면 배지 카운트 동기화
+                    await _refreshTodoBadge();
+                  },
+                ),
+                if (_todoNotDoneCount > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(999),
+                        boxShadow: [UiTokens.cardShadow],
+                      ),
+                      child: Text(
+                        _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(width: 2),
           IconButton(

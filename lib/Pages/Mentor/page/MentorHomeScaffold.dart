@@ -119,39 +119,42 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
         actions: [
           if (_currentIndex == 0) ...[
             // 내 TODO + 배지
-            Stack(
-              children: [
-                IconButton(
-                  tooltip: '내 TODO',
-                  icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
-                  onPressed: () async {
-                    await Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTodoPage()));
-                    if (!mounted) return;
-                    await _refreshTodoBadge();
-                  },
-                ),
-                if (_todoNotDoneCount > 0)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(999),
-                        boxShadow: [UiTokens.cardShadow],
-                      ),
-                      child: Text(
-                        _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
+            Padding(
+              padding: const EdgeInsets.only(top: 5.0),
+              child: Stack(
+                children: [
+                  IconButton(
+                    tooltip: '내 TODO',
+                    icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
+                    onPressed: () async {
+                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTodoPage()));
+                      if (!mounted) return;
+                      await _refreshTodoBadge();
+                    },
+                  ),
+                  if (_todoNotDoneCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(999),
+                          boxShadow: [UiTokens.cardShadow],
+                        ),
+                        child: Text(
+                          _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
             // TODO 현황
             IconButton(
