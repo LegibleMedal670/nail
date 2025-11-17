@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
 import 'package:nail/Pages/Common/widgets/MyTodoModal.dart';
+import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/TodoService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -9,6 +10,8 @@ import 'package:nail/Pages/Mentee/page/MenteePracticePage.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/ChatService.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MenteeHomeScaffold extends StatefulWidget {
   const MenteeHomeScaffold({super.key});
@@ -22,12 +25,19 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
 
   bool _initialized = false;      // 첫 진입 1회 처리 (모달 + 배지 로딩)
   int _todoNotDoneCount = 0;      // 미완료 TODO 카운트 배지
+  int _chatUnread = 0;            // 채팅 미읽음 배지
+  final _chatSvc = ChatService.instance;
+  RealtimeChannel? _chatRt;
 
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initTodosOnce());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _initTodosOnce();
+      await _ensureChatRealtime();
+      await _refreshChatBadge();
+    });
   }
 
   Future<void> _initTodosOnce() async {
@@ -52,6 +62,38 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
     } catch (_) {
       // 실패는 조용히 무시 (UI 영향 최소화)
     }
+  }
+
+  Future<void> _refreshChatBadge() async {
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+    try {
+      final rows = await _chatSvc.listRooms(loginKey: loginKey, limit: 200);
+      final sum = rows.fold<int>(0, (acc, r) => acc + (int.tryParse((r['unread'] ?? '0').toString()) ?? 0));
+      if (!mounted) return;
+      setState(() => _chatUnread = sum);
+    } catch (_) {
+      // 조용히 무시
+    }
+  }
+
+  Future<void> _ensureChatRealtime() async {
+    _chatRt?.unsubscribe();
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+    // 멘티/멘토 세션은 login_with_key 재호출로 매핑 보장(가벼움)
+    try {
+      await SupabaseService.instance.loginWithKey(loginKey);
+    } catch (_) {
+      // ignore
+    }
+    _chatRt = _chatSvc.subscribeListRefresh(onChanged: _refreshChatBadge);
+  }
+
+  @override
+  void dispose() {
+    _chatRt?.unsubscribe();
+    super.dispose();
   }
 
 
@@ -140,23 +182,69 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
         onTap: (i) {
           setState(() => _currentIndex = i);
           _refreshTodoBadge(); // ✅ 탭 전환 시 배지 동기화 (가벼운 호출)
+          if (i == 2) {
+            _refreshChatBadge(); // 채팅 탭 전환 시 배지도 동기화
+          }
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: UiTokens.primaryBlue,
         unselectedItemColor: const Color(0xFFB0B9C1),
         showUnselectedLabels: true,
-        items: const [
-          BottomNavigationBarItem(
+        items: [
+          const BottomNavigationBarItem(
             icon: Icon(Icons.menu_book_rounded),
             label: '이론',
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.brush_rounded),
             label: '실습',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.chat_bubble_outline),
             label: '채팅',
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.chat_bubble_outline),
+                if (_chatUnread > 0)
+                  Positioned(
+                    right: -8,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _chatUnread > 99 ? '99+' : '$_chatUnread',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            activeIcon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.chat_bubble_outline),
+                if (_chatUnread > 0)
+                  Positioned(
+                    right: -6,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _chatUnread > 99 ? '99+' : '$_chatUnread',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

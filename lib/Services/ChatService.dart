@@ -1,5 +1,6 @@
 // lib/Pages/Manager/services/ChatService.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math';
 
 class ChatService {
   ChatService._();
@@ -340,8 +341,11 @@ class ChatService {
   /// 필터 없이 테이블 단위로 구독하면 RLS로 걸러져 내가 볼 수 있는 것만 온다.
   RealtimeChannel subscribeListRefresh({
     void Function()? onChanged,
+    String? channelName,
   }) {
-    final ch = _sb.channel('chat_list_refresh');
+    // 동일 이름 채널 충돌을 방지하기 위해 기본값으로 유니크 이름을 사용
+    final uniq = channelName ?? 'chat_list_refresh_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(1 << 32)}';
+    final ch = _sb.channel(uniq);
 
     // 새 메시지 / 삭제 토글
     ch.onPostgresChanges(
@@ -398,35 +402,39 @@ class ChatService {
     void Function(PostgresChangePayload payload)? onPinUpdate,
     void Function(PostgresChangePayload payload)? onMemberUpdate,
   }) {
-    final ch = _sb.channel('room_changes_$roomId');
+    // 고정 채널명에서 발생할 수 있는 충돌을 피하기 위해 유니크 채널명 사용
+    final ch = _sb.channel('room_changes_${roomId}_${DateTime.now().microsecondsSinceEpoch}');
 
-    if (onInsert != null) {
-      ch.onPostgresChanges(
-        event: PostgresChangeEvent.insert,
-        schema: 'public',
-        table: 'chat_messages',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'room_id',
-          value: roomId,
-        ),
-        callback: onInsert,
-      );
-    }
+    // 메시지 변경: 필터 없이 받고 콜백에서 room_id 매칭 (uuid 캐스팅/필터 이슈 회피)
+    ch.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'chat_messages',
+      callback: (payload) {
+        try {
+          final rec = payload.newRecord ?? payload.oldRecord ?? <String, dynamic>{};
+          final rid = (rec['room_id'] ?? '').toString();
+          if (rid == roomId && onInsert != null) onInsert(payload);
+        } catch (_) {
+          // ignore
+        }
+      },
+    );
 
-    if (onUpdate != null) {
-      ch.onPostgresChanges(
-        event: PostgresChangeEvent.update,
-        schema: 'public',
-        table: 'chat_messages',
-        filter: PostgresChangeFilter(
-          type: PostgresChangeFilterType.eq,
-          column: 'room_id',
-          value: roomId,
-        ),
-        callback: onUpdate,
-      );
-    }
+    ch.onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'chat_messages',
+      callback: (payload) {
+        try {
+          final rec = payload.newRecord ?? payload.oldRecord ?? <String, dynamic>{};
+          final rid = (rec['room_id'] ?? '').toString();
+          if (rid == roomId && onUpdate != null) onUpdate(payload);
+        } catch (_) {
+          // ignore
+        }
+      },
+    );
 
     if (onPinUpdate != null) {
       ch.onPostgresChanges(

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:nail/Services/ChatService.dart';
+import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -73,11 +74,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     super.initState();
     _roomName = widget.roomName;
     _scroll.addListener(_onScroll);
-    _bindRealtime();
     _loadFileCache();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _loadFirst();
-      await _loadMemberCount(); // 멤버 수 로드
+      await _prepareRealtimeThenLoad();
     });
   }
 
@@ -138,6 +137,30 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 
   // ---------- realtime ----------
+  Future<void> _prepareRealtimeThenLoad() async {
+    // 관리자 세션인 경우: Realtime RLS 매핑 보장
+    final up = context.read<UserProvider>();
+    if (up.isAdmin) {
+      try {
+        await SupabaseService.instance.ensureAdminSessionLinked();
+      } catch (_) {}
+    } else {
+      // 멘티/멘토: login_with_key 재호출로 매핑 재확인(가벼움)
+      final k = up.current?.loginKey ?? '';
+      if (k.isNotEmpty) {
+        try {
+          await SupabaseService.instance.loginWithKey(k);
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
+    // 매핑 보장 후 구독 시작 및 첫 로드
+    _bindRealtime();
+    await _loadFirst();
+    await _loadMemberCount();
+  }
+
   void _bindRealtime() {
     _roomRt?.unsubscribe();
     _roomRt = _svc.subscribeRoomChanges(

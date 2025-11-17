@@ -10,6 +10,7 @@ import 'package:nail/Pages/Manager/page/tabs/CurriculumManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MostProgressedMenteeTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MenteeManageTab.dart';
 import 'package:nail/Pages/Manager/page/tabs/MentorManageTab.dart';
+import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -25,6 +26,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   final _svc = ChatService.instance;
   int _chatUnread = 0;
   RealtimeChannel? _chatRt;
+  String? _rtLoginKeyBound; // 현재 구독이 묶여 있는 loginKey
   int _chatReloadToken = 0;
 
   /// 교육 관리 탭의 이론/실습 전환 상태(앱바 토글 ↔ 하위 탭 동기화)
@@ -43,11 +45,8 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
     // 로그인 키는 화면 갱신 때마다 최신값을 사용
     final up = context.watch<UserProvider>();
     final loginKey = up.isAdmin ? (up.adminKey ?? '') : (up.current?.loginKey ?? '');
-    // 최초 진입 및 구독
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureChatRealtime(loginKey);
-    });
-    _loadChatUnread(loginKey); // 가벼운 호출, 오류 시 무시
+    // 최초 진입 및 loginKey 변경 시에만 구독 보장
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureChatRealtime(loginKey));
 
     final pages = <Widget>[
       const MostProgressedMenteeTab(),
@@ -219,9 +218,20 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   }
 
   void _ensureChatRealtime(String loginKey) {
-    _chatRt?.unsubscribe();
     if (loginKey.isEmpty) return;
-    _chatRt = _svc.subscribeListRefresh(onChanged: () => _loadChatUnread(loginKey));
+    if (_rtLoginKeyBound == loginKey && _chatRt != null) {
+      // 이미 동일 키로 구독됨
+      return;
+    }
+    // 다른 키로 바인딩되어 있거나 최초 → 재바인딩
+    _chatRt?.unsubscribe();
+    _rtLoginKeyBound = loginKey;
+    // 관리자 세션은 Realtime RLS 매핑을 먼저 보장
+    SupabaseService.instance.ensureAdminSessionLinked().catchError((_) {}).whenComplete(() {
+      _chatRt = _svc.subscribeListRefresh(onChanged: () => _loadChatUnread(loginKey));
+      // 초기 1회 배지 동기화
+      _loadChatUnread(loginKey);
+    });
   }
 }
 

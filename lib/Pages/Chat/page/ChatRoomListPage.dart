@@ -7,6 +7,7 @@ import 'package:nail/Pages/Chat/page/CreateChatRoomPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nail/Services/SupabaseService.dart';
 
 class ChatRoomListPage extends StatefulWidget {
   final bool embedded; // ManagerMainPage 내 탭으로 포함 시 true → AppBar 없이 body만
@@ -49,6 +50,24 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
   }
 
   Future<void> _bindRealtime() async {
+    // 구독 전에 매핑 보장
+    final up = context.read<UserProvider>();
+    if (up.isAdmin) {
+      try {
+        await SupabaseService.instance.ensureAdminSessionLinked();
+      } catch (_) {
+        // ignore
+      }
+    } else {
+      final k = up.current?.loginKey ?? '';
+      if (k.isNotEmpty) {
+        try {
+          await SupabaseService.instance.loginWithKey(k);
+        } catch (_) {
+          // ignore
+        }
+      }
+    }
     _rt = _svc.subscribeListRefresh(onChanged: () {
       // 실시간 변화가 있으면 목록 재조회
       _load();
