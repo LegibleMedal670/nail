@@ -30,6 +30,7 @@ class MemberProfileSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final showActions = isAdmin; // 관리자 액션(1:1, 강퇴)은 관리자만 보임
     final canKick = isAdmin && !isSelf && role != '관리자';
+    final showProfile = isAdmin && !isSelf && role != '관리자'; // 관리자 대상은 프로필 버튼 숨김
 
     return SafeArea(
       child: Padding(
@@ -64,16 +65,17 @@ class MemberProfileSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // 프로필 보기: 관리자만 노출(자기 자신 제외)
+            // 액션 칩: 프로필(관리자 아닌 대상에만), 1:1 대화(관리자이면 항상)
             if (!isSelf && isAdmin) Row(
               children: [
-                _ActionChip(
-                  icon: Icons.person_pin_circle_outlined,
-                  label: '프로필 보기',
-                  onTap: () { Navigator.pop(context); onViewProfile?.call(); },
-                ),
+                if (showProfile)
+                  _ActionChip(
+                    icon: Icons.person_pin_circle_outlined,
+                    label: '프로필 보기',
+                    onTap: () { Navigator.pop(context); onViewProfile?.call(); },
+                  ),
                 if (showActions) ...[
-                  const SizedBox(width: 8),
+                  if (showProfile) const SizedBox(width: 8),
                   _ActionChip(
                     icon: Icons.chat_bubble_outline_rounded,
                     label: '1:1 대화',
