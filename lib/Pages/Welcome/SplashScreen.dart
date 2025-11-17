@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Mentee/page/MenteeHomeScaffold.dart';
-import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
+import 'package:nail/Pages/Mentor/page/MentorHomeScaffold.dart';
 import 'package:provider/provider.dart';
 
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
@@ -66,13 +66,8 @@ class _SplashScreenState extends State<SplashScreen> {
       // 기존 정책대로 관리자 진입점은 SelectRolePage에서 선택하도록 유지
       dest = const SelectRolePage();
     } else if (u.isMentor) {
-      // ✅ 멘토 세션이면 멘토 메인으로
-      dest = MentorMainPage(
-        mentorLoginKey: u.current!.loginKey,
-        mentorName: u.nickname,
-        mentorPhotoUrl: u.photoUrl,
-        mentorHiredAt: u.joinedAt,
-      );
+      // ✅ 멘토 세션이면 멘토 홈(대시보드/채팅 탭)으로
+      dest = const MentorHomeScaffold();
     } else {
       // 멘티
       dest = const MenteeHomeScaffold();

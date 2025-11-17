@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteeHomeScaffold.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
-import 'package:nail/Pages/Mentor/page/MentorMainPage.dart'; // ✅ 멘토 라우팅
+import 'package:nail/Pages/Mentor/page/MentorHomeScaffold.dart'; // ✅ 멘토 라우팅
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:provider/provider.dart';
 
@@ -153,12 +153,7 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => MentorMainPage(
-              mentorLoginKey: code,
-              mentorName: user.nickname,        // 있으면 전달
-              mentorPhotoUrl: user.photoUrl,    // 있으면 전달
-              mentorHiredAt: user.joinedAt,      // 있으면 전달
-            ),
+            builder: (_) => const MentorHomeScaffold(),
           ),
         );
       } else {

@@ -87,8 +87,6 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
 
   @override
   Widget build(BuildContext context) {
-    final p = context.watch<MentorProvider>();
-
     return WillPopScope(
       onWillPop: () async => false,
       child: Scaffold(
@@ -178,41 +176,53 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
             const SizedBox(width: 4),
           ],
         ),
-        body: p.loading && p.error == null
-            ? const Center(child: CircularProgressIndicator())
-            : p.error != null
-            ? _Error(message: p.error!, onRetry: () async {
-          await p.ensureLoaded();
-          await _refreshTodoBadge(); // 오류 후 재시도 때도 배지 동기화
-        })
-            : RefreshIndicator(
-          color: UiTokens.primaryBlue,
-          onRefresh: () async {
-            // 기존 KPI/탭 데이터 리프레시
-            await p.refreshKpi();
-            if (p.tabIndex == 0) {
-              await p.refreshQueue(status: p.queueStatus);
-            } else if (p.tabIndex == 1) {
-              await p.refreshMentees(onlyPending: p.onlyPendingMentees);
-            } else {
-              await p.refreshHistory();
-            }
-            // ✅ 리프레시 시 배지도 동기화 1회
-            await _refreshTodoBadge();
-          },
-          child: CustomScrollView(
-            slivers: [
-              const SliverToBoxAdapter(child: _ProfileHeader()),
-              const SliverToBoxAdapter(child: _KpiHeader()),
-              const SliverToBoxAdapter(child: SizedBox(height: 4)),
-              const SliverToBoxAdapter(child: _Tabs()),
-              if (p.tabIndex == 0) const _QueueTab(),
-              if (p.tabIndex == 1) const _MenteesTab(),
-              if (p.tabIndex == 2) const _HistoryTab(),
-              const SliverToBoxAdapter(child: SizedBox(height: 24)),
-            ],
-          ),
-        ),
+        body: MentorDashboardBody(onAfterRefresh: _refreshTodoBadge),
+      ),
+    );
+  }
+}
+
+/// 멘토 대시보드 본문(임베드 가능)
+class MentorDashboardBody extends StatelessWidget {
+  final Future<void> Function()? onAfterRefresh;
+  const MentorDashboardBody({Key? key, this.onAfterRefresh}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final p = context.watch<MentorProvider>();
+    if (p.loading && p.error == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (p.error != null) {
+      return _Error(message: p.error!, onRetry: () async {
+        await p.ensureLoaded();
+        if (onAfterRefresh != null) await onAfterRefresh!();
+      });
+    }
+    return RefreshIndicator(
+      color: UiTokens.primaryBlue,
+      onRefresh: () async {
+        await p.refreshKpi();
+        if (p.tabIndex == 0) {
+          await p.refreshQueue(status: p.queueStatus);
+        } else if (p.tabIndex == 1) {
+          await p.refreshMentees(onlyPending: p.onlyPendingMentees);
+        } else {
+          await p.refreshHistory();
+        }
+        if (onAfterRefresh != null) await onAfterRefresh!();
+      },
+      child: CustomScrollView(
+        slivers: [
+          const SliverToBoxAdapter(child: _ProfileHeader()),
+          const SliverToBoxAdapter(child: _KpiHeader()),
+          const SliverToBoxAdapter(child: SizedBox(height: 4)),
+          const SliverToBoxAdapter(child: _Tabs()),
+          if (p.tabIndex == 0) const _QueueTab(),
+          if (p.tabIndex == 1) const _MenteesTab(),
+          if (p.tabIndex == 2) const _HistoryTab(),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        ],
       ),
     );
   }
