@@ -19,6 +19,12 @@ import 'package:nail/Pages/Chat/widgets/MessageBubble.dart';
 import 'package:nail/Pages/Chat/widgets/MessageInputBar.dart';
 import 'package:nail/Pages/Chat/widgets/SystemEventChip.dart';
 import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
+import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Pages/Manager/page/MentorDetailPage.dart';
+import 'package:nail/Pages/Manager/page/MenteeDetailPage.dart';
+import 'package:nail/Pages/Manager/models/mentor.dart' as legacy;
+import 'package:nail/Pages/Manager/models/Mentee.dart' as mgr;
+import 'package:nail/Services/AdminMenteeService.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/StorageService.dart';
@@ -69,6 +75,72 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   // 메시지
   final List<_Msg> _messages = <_Msg>[];
 
+  Future<void> _openAdminProfileForUser(String userId, String nickname, String? photoUrl) async {
+    if (userId.isEmpty) return;
+    try {
+      // 1) 멘토 목록에서 id 매칭 시 멘토 상세로
+      final mentors = await SupabaseService.instance.adminListMentors();
+      final mrow = mentors.firstWhere(
+        (e) => (e['id'] ?? '').toString() == userId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (mrow.isNotEmpty) {
+        final joined = mrow['joined_at'];
+        final joinedAt = joined is DateTime
+            ? joined.toLocal()
+            : DateTime.tryParse((joined ?? '').toString())?.toLocal() ?? DateTime.now();
+        final ph = (mrow['photo_url'] ?? photoUrl)?.toString();
+        final nn = (mrow['nickname'] ?? nickname).toString();
+        final loginKey = (mrow['login_key'] ?? '').toString();
+        final mentor = legacy.Mentor(
+          id: userId,
+          name: nn,
+          hiredAt: joinedAt,
+          menteeCount: 0,
+          photoUrl: (ph?.isEmpty == true) ? null : ph,
+          accessCode: loginKey,
+        );
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MentorDetailPage(mentor: mentor)));
+        return;
+      }
+
+      // 2) 멘토가 아니라면 멘티 메트릭에서 조회
+      final metrics = await AdminMenteeService.instance.listMenteesMetrics();
+      final row = metrics.firstWhere(
+        (e) => (e['id'] ?? '').toString() == userId,
+        orElse: () => <String, dynamic>{},
+      );
+      if (row.isNotEmpty) {
+        final joined = row['joined_at'];
+        final joinedAt = joined is DateTime
+            ? joined.toLocal()
+            : DateTime.tryParse((joined ?? '').toString())?.toLocal() ?? DateTime.now();
+        final ph = (row['photo_url'] ?? photoUrl)?.toString();
+        final nn = (row['nickname'] ?? nickname).toString();
+        final loginKey = (row['login_key'] ?? '').toString();
+        final mentee = mgr.Mentee(
+          id: userId,
+          name: nn,
+          startedAt: joinedAt,
+          progress: 0.0,
+          courseDone: 0,
+          courseTotal: 0,
+          examDone: 0,
+          examTotal: 0,
+          photoUrl: (ph?.isEmpty == true) ? null : ph,
+          accessCode: loginKey,
+        );
+        await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MenteeDetailPage(mentee: mentee)));
+        return;
+      }
+
+      // 3) 둘 다 없으면 실패
+      throw Exception('대상 사용자를 찾을 수 없습니다.');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('프로필 열기 실패: $e')));
+    }
+  }
   @override
   void initState() {
     super.initState();
@@ -962,11 +1034,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                 role: role,
                                 isAdmin: isAdmin,
                                 isSelf: false,
-                                onViewProfile: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('프로필 보기 (구현 예정)')),
-                                  );
-                                },
+                                onViewProfile: isAdmin ? () => _openAdminProfileForUser(m.senderId ?? '', m.nickname ?? '사용자', m.photoUrl) : null,
                                 onOpenDM: () async {
                                   try {
                                     final key = _loginKey();

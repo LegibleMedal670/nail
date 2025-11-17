@@ -64,8 +64,8 @@ class MemberProfileSheet extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // 프로필 보기: 관리자/멘토/멘티 모두 노출(자기 자신 제외)
-            if (!isSelf) Row(
+            // 프로필 보기: 관리자만 노출(자기 자신 제외)
+            if (!isSelf && isAdmin) Row(
               children: [
                 _ActionChip(
                   icon: Icons.person_pin_circle_outlined,

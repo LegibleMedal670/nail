@@ -10,6 +10,12 @@ import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/ChatService.dart';
 import 'package:provider/provider.dart';
+import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Services/AdminMenteeService.dart';
+import 'package:nail/Pages/Manager/page/MentorDetailPage.dart';
+import 'package:nail/Pages/Manager/page/MenteeDetailPage.dart';
+import 'package:nail/Pages/Manager/models/mentor.dart' as legacy;
+import 'package:nail/Pages/Manager/models/Mentee.dart' as mgr;
 
 class ChatRoomInfoPage extends StatefulWidget {
   final String roomId;
@@ -338,9 +344,66 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         role: m.role,
         isAdmin: widget.isAdmin,   // ✅ 관리자만 액션 보이기
         isSelf: isSelf,            // ✅ 본인이면 추방 숨김
-        onViewProfile: () {
-          // TODO: 프로필 페이지로 이동
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('프로필 보기 (구현 예정)')));
+        onViewProfile: () async {
+          if (!widget.isAdmin) return;
+          try {
+            // 역할 문자열로 분기: '멘토' | '멘티'
+            if (m.role == '멘토') {
+              final list = await SupabaseService.instance.adminListMentors();
+              final row = list.firstWhere(
+                (e) => (e['id'] ?? '').toString() == m.userId,
+                orElse: () => <String, dynamic>{},
+              );
+              final nickname = (row['nickname'] ?? m.nickname).toString();
+              final joined = row['joined_at'];
+              final joinedAt = joined is DateTime
+                  ? joined.toLocal()
+                  : DateTime.tryParse((joined ?? '').toString())?.toLocal() ?? DateTime.now();
+              final photoUrl = (row['photo_url'] ?? m.photoUrl)?.toString();
+              final loginKey = (row['login_key'] ?? '').toString();
+              final mentor = legacy.Mentor(
+                id: m.userId,
+                name: nickname,
+                hiredAt: joinedAt,
+                menteeCount: 0,
+                photoUrl: (photoUrl?.isEmpty == true) ? null : photoUrl,
+                accessCode: loginKey,
+              );
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MentorDetailPage(mentor: mentor)));
+              return;
+            } else {
+              // 멘티: 메트릭 목록에서 id 매칭(관리자용 RPC)
+              final metrics = await AdminMenteeService.instance.listMenteesMetrics();
+              final row = metrics.firstWhere(
+                (e) => (e['id'] ?? '').toString() == m.userId,
+                orElse: () => <String, dynamic>{},
+              );
+              final nickname = (row['nickname'] ?? m.nickname).toString();
+              final joined = row['joined_at'];
+              final joinedAt = joined is DateTime
+                  ? joined.toLocal()
+                  : DateTime.tryParse((joined ?? '').toString())?.toLocal() ?? DateTime.now();
+              final photoUrl = (row['photo_url'] ?? m.photoUrl)?.toString();
+              final loginKey = (row['login_key'] ?? '').toString();
+              final mentee = mgr.Mentee(
+                id: m.userId,
+                name: nickname,
+                startedAt: joinedAt,
+                progress: 0.0,
+                courseDone: 0,
+                courseTotal: 0,
+                examDone: 0,
+                examTotal: 0,
+                photoUrl: (photoUrl?.isEmpty == true) ? null : photoUrl,
+                accessCode: loginKey,
+              );
+              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MenteeDetailPage(mentee: mentee)));
+              return;
+            }
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('프로필 조회 실패: $e')));
+          }
         },
         onOpenDM: () => _startDM(m.userId, m.nickname),
         onKick: () async {
