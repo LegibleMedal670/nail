@@ -90,6 +90,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
         final id = (m['room_id'] ?? '').toString();
         final name = (m['name'] ?? '').toString();
         final lastText = (m['last_text'] ?? '').toString();
+        final lastKind = (m['last_kind'] ?? '').toString();
         final unread = int.tryParse((m['unread'] ?? '0').toString()) ?? 0;
 
         // last_at이 null일 수 있으므로 updatedAt은 last_at fallback now
@@ -107,6 +108,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
           id: id,
           name: name,
           lastMessage: lastText,
+          lastKind: lastKind,
           unread: unread,
           updatedAt: updatedAt,
         );
@@ -220,6 +222,9 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
       return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
+
+      print(_error);
+
       return ListView(
         children: [
           const SizedBox(height: 48),
@@ -321,7 +326,7 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
                         children: [
                           Expanded(
                             child: Text(
-                              r.lastMessage.isEmpty ? '메시지가 없습니다' : r.lastMessage,
+                              r.previewText,
                               style: const TextStyle(color: Colors.black54, fontSize: 13),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -369,6 +374,7 @@ class _RoomItem {
   final String id;
   final String name;
   final String lastMessage;
+  final String lastKind; // 'text' | 'image' | 'file' | ''
   final int unread;
   final DateTime updatedAt;
 
@@ -376,6 +382,7 @@ class _RoomItem {
     required this.id,
     required this.name,
     required this.lastMessage,
+    this.lastKind = '',
     required this.unread,
     required this.updatedAt,
   });
@@ -385,9 +392,17 @@ class _RoomItem {
       id: id,
       name: name ?? this.name,
       lastMessage: lastMessage ?? this.lastMessage,
+      lastKind: lastKind,
       unread: unread ?? this.unread,
       updatedAt: updatedAt ?? this.updatedAt,
     );
+  }
+
+  String get previewText {
+    final k = (lastKind).toLowerCase();
+    if (k == 'image') return '사진';
+    if (k == 'file') return '파일';
+    return lastMessage.isEmpty ? '메시지가 없습니다' : lastMessage;
   }
 }
 
