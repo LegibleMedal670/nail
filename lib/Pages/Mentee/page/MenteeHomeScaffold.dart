@@ -12,6 +12,7 @@ import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/ChatService.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nail/Pages/Mentee/page/MenteeEducationPage.dart';
 
 class MenteeHomeScaffold extends StatefulWidget {
   const MenteeHomeScaffold({super.key});
@@ -28,6 +29,9 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   int _chatUnread = 0;            // 채팅 미읽음 배지
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
+  // 탭 내 컨트롤을 위한 키/노티파이어
+  final GlobalKey<MyTodoViewState> _todoKey = GlobalKey<MyTodoViewState>();
+  final ValueNotifier<bool> _eduIsTheory = ValueNotifier<bool>(true);
 
 
   @override
@@ -100,12 +104,12 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      const MenteeMainPage(embedded: true),      // 이론
-      const MenteePracticePage(embedded: true),  // 실습
+      MyTodoView(key: _todoKey, embedded: true), // 투두
       const ChatRoomListPage(embedded: true),    // 채팅
+      MenteeEducationPage(embedded: true, isTheoryNotifier: _eduIsTheory), // 교육(이론/실습 토글)
     ];
 
-    final titles = ['이론', '실습', '채팅'];
+    final titles = ['투두', '채팅', '학습'];
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -122,48 +126,31 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
           ),
         ),
         actions: [
-          Padding(
-            padding: const EdgeInsets.only(top: 5.0),
-            child: Stack(
-              children: [
-                IconButton(
-                  tooltip: '내 TODO',
-                  icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const MyTodoPage()),
-                    );
-                    if (!mounted) return;
-                    // 페이지에서 돌아오면 배지 카운트 동기화
-                    await _refreshTodoBadge();
-                  },
-                ),
-                if (_todoNotDoneCount > 0)
-                  Positioned(
-                    right: 6,
-                    top: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(999),
-                        boxShadow: [UiTokens.cardShadow],
-                      ),
-                      child: Text(
-                        _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+          if (_currentIndex == 0) ...[
+            IconButton(
+              tooltip: '필터',
+              icon: const Icon(Icons.filter_list_rounded, color: UiTokens.title),
+              onPressed: () => _todoKey.currentState?.openFilterSheet(),
             ),
-          ),
-          const SizedBox(width: 2),
+            IconButton(
+              tooltip: '새로고침',
+              icon: const Icon(Icons.refresh_rounded, color: UiTokens.title),
+              onPressed: () => _todoKey.currentState?.reload(),
+            ),
+          ] else if (_currentIndex == 2) ...[
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: _eduIsTheory,
+                  builder: (_, isTheory, __) => _EduKindSegment(
+                    isTheory: isTheory,
+                    onChanged: (v) => _eduIsTheory.value = v,
+                  ),
+                ),
+              ),
+            ),
+          ],
           IconButton(
             tooltip: '로그아웃',
             icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
@@ -186,76 +173,190 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
           border: Border(top: BorderSide(color: Color.fromARGB(255, 240, 240, 240))),
         ),
         child: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (i) {
-          setState(() => _currentIndex = i);
-          _refreshTodoBadge(); // ✅ 탭 전환 시 배지 동기화 (가벼운 호출)
-          if (i == 2) {
-            _refreshChatBadge(); // 채팅 탭 전환 시 배지도 동기화
-          }
-        },
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: UiTokens.primaryBlue,
-        unselectedItemColor: const Color(0xFFB0B9C1),
-        showUnselectedLabels: true,
-        items: [
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.menu_book_rounded),
+          currentIndex: _currentIndex,
+          onTap: (i) {
+            setState(() => _currentIndex = i);
+            _refreshTodoBadge(); // ✅ 탭 전환 시 배지 동기화 (가벼운 호출)
+            if (i == 1) {
+              _refreshChatBadge(); // 채팅 탭 전환 시 배지도 동기화
+            }
+          },
+          type: BottomNavigationBarType.fixed,
+          selectedItemColor: UiTokens.primaryBlue,
+          unselectedItemColor: const Color(0xFFB0B9C1),
+          showUnselectedLabels: true,
+          items: [
+            BottomNavigationBarItem(
+              label: '투두',
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.checklist_rounded),
+                  if (_todoNotDoneCount > 0)
+                    Positioned(
+                      right: -8,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              activeIcon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.checklist_rounded),
+                  if (_todoNotDoneCount > 0)
+                    Positioned(
+                      right: -6,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            BottomNavigationBarItem(
+              label: '채팅',
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.chat_bubble_outline),
+                  if (_chatUnread > 0)
+                    Positioned(
+                      right: -8,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _chatUnread > 99 ? '99+' : '$_chatUnread',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              activeIcon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.chat_bubble_outline),
+                  if (_chatUnread > 0)
+                    Positioned(
+                      right: -6,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _chatUnread > 99 ? '99+' : '$_chatUnread',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.menu_book_rounded),
+              label: '학습',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 앱바용 이론/실습 토글(멘티)
+class _EduKindSegment extends StatelessWidget {
+  final bool isTheory;
+  final ValueChanged<bool> onChanged;
+  const _EduKindSegment({required this.isTheory, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE6EBF0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _SegmentPill(
+            selected: isTheory,
             label: '이론',
+            onTap: () => onChanged(true),
           ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.brush_rounded),
+          _SegmentPill(
+            selected: !isTheory,
             label: '실습',
-          ),
-          BottomNavigationBarItem(
-            label: '채팅',
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.chat_bubble_outline),
-                if (_chatUnread > 0)
-                  Positioned(
-                    right: -8,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        _chatUnread > 99 ? '99+' : '$_chatUnread',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            activeIcon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Icon(Icons.chat_bubble_outline),
-                if (_chatUnread > 0)
-                  Positioned(
-                    right: -6,
-                    top: -4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        _chatUnread > 99 ? '99+' : '$_chatUnread',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+            onTap: () => onChanged(false),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SegmentPill extends StatelessWidget {
+  final bool selected;
+  final String label;
+  final VoidCallback onTap;
+  const _SegmentPill({required this.selected, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? UiTokens.primaryBlue.withOpacity(0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: selected ? UiTokens.primaryBlue : Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }
