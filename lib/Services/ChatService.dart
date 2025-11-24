@@ -52,6 +52,20 @@ class ChatService {
     return true;
   }
 
+  /// 방 메시지 전체 삭제(관리자 전용). 방은 유지, 메시지는 soft-delete + hidden 플래그
+  Future<bool> clearRoomMessages({
+    required String adminLoginKey,
+    required String roomId,
+  }) async {
+    final res = await _sb.rpc('rpc_clear_room_messages', params: {
+      'p_login_key': adminLoginKey,
+      'p_room_id': roomId,
+    });
+    if (res is bool) return res;
+    if (res is num) return res != 0;
+    return true;
+  }
+
   /// 방 이름 변경(관리자 전용)
   Future<bool> renameRoom({
     required String adminLoginKey,

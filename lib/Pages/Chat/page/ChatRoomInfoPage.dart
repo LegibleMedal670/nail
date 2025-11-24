@@ -101,6 +101,12 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
             ),
           if (widget.isAdmin)
             IconButton(
+              tooltip: '메시지 전체 삭제',
+              icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+              onPressed: _confirmClearRoomMessages,
+            ),
+          if (widget.isAdmin)
+            IconButton(
               tooltip: '방 삭제',
               icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
               onPressed: _confirmDeleteRoom,
@@ -300,6 +306,33 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('방 삭제 실패: $e')));
       }
+    }
+  }
+
+  Future<void> _confirmClearRoomMessages() async {
+    final ok = await showConfirmDialog(
+      context,
+      title: '메시지를 모두 삭제할까요?',
+      message: '방은 유지되고 메시지 기록만 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.',
+      confirmText: '전체 삭제',
+      isDanger: true,
+      icon: Icons.delete_sweep_rounded,
+    );
+    if (!ok) return;
+    try {
+      final up = context.read<UserProvider>();
+      final adminKey = up.adminKey?.trim() ?? '';
+      if (adminKey.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('관리자 인증 정보가 없습니다.')));
+        return;
+      }
+      await _svc.clearRoomMessages(adminLoginKey: adminKey, roomId: widget.roomId);
+      if (!mounted) return;
+      // Info → pop 해서 ChatRoomPage로 복귀 + 결과 전달
+      Navigator.of(context).pop('__cleared__');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('메시지 전체 삭제 실패: $e')));
     }
   }
 

@@ -203,11 +203,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   // ---------- utils ----------
   String _loginKey() {
+    if (!mounted) return '';
     final up = context.read<UserProvider>();
     return up.isAdmin ? (up.adminKey ?? '') : (up.current?.loginKey ?? '');
   }
 
   String _myUid() {
+    if (!mounted) return '';
     final up = context.read<UserProvider>();
     return up.current?.userId ?? '';
   }
@@ -264,19 +266,26 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     _roomRt = _svc.subscribeRoomChanges(
       roomId: widget.roomId,
       onInsert: (_) async {
+        if (!mounted) return;
         await _reloadLatestWindow();
+        if (!mounted) return;
         await _markRead();
+        if (!mounted) return;
         _autoScrollIfNearBottom();
       },
       onUpdate: (_) async {
+        if (!mounted) return;
         await _reloadLatestWindow();
       },
       onPinUpdate: (_) async {
+        if (!mounted) return;
         await _loadNotice();
       },
       onMemberUpdate: (_) async {
+        if (!mounted) return;
         await _loadMemberCount();
         // 다른 참여자의 last_read_at 갱신에 맞춰 read_count를 최신화
+        if (!mounted) return;
         await _reloadLatestWindow();
       },
     );
@@ -471,6 +480,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     setState(() => _loading = true);
     try {
       final rows = await _svc.fetchMessages(loginKey: key, roomId: widget.roomId, limit: 50);
+      if (!mounted) return;
       rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
       final my = _myUid();
       final list = _applyFileCache(rows.map(_mapRowToMsg(my)).toList());
@@ -508,6 +518,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       afterId: (_latestId! - 200),
       limit: 200,
     );
+    if (!mounted) return;
     rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
     final my = _myUid();
     final patch = {
@@ -541,6 +552,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         beforeId: _oldestId,
         limit: 50,
       );
+      if (!mounted) return;
       rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
       final my = _myUid();
       final list = rows.map(_mapRowToMsg(my)).toList();
@@ -1037,7 +1049,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             onPressed: () async {
               // 기존 InfoPage는 외부에서 멤버 목록을 받게 되어 있었음(목업 기반).
               // 우선 현재 대화 참여자 UI는 보류하고 방 정보 페이지로만 이동.
-              final newName = await Navigator.of(context).push<String>(
+              final result = await Navigator.of(context).push<dynamic>(
                 MaterialPageRoute(
                   builder: (_) => ChatRoomInfoPage(
                     roomId: widget.roomId,
@@ -1047,8 +1059,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                   ),
                 ),
               );
-              if (newName != null && newName.isNotEmpty && mounted) {
-                setState(() => _roomName = newName);
+              if (!mounted) return;
+              if (result == '__cleared__') {
+                await _loadFirst();
+                _jumpToBottom();
+              } else if (result is String && result.isNotEmpty) {
+                setState(() => _roomName = result);
               }
             },
           ),
