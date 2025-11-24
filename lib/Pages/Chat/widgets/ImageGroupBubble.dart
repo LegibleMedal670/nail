@@ -125,12 +125,13 @@ class _ImageGrid extends StatelessWidget {
       return Container(color: Colors.grey[200]);
     }
     final cells = count.clamp(1, 10);
+    final cols = (count == 2) ? 2 : 3; // 2장일 때: 2열 1행
     return GridView.builder(
       padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
       shrinkWrap: true,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
         mainAxisSpacing: 2,
         crossAxisSpacing: 2,
         childAspectRatio: 1,
