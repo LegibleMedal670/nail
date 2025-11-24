@@ -164,6 +164,29 @@ class StorageService {
     return key;
   }
 
+  /// 채팅 파일 여러 장 배치 업로드 → storage path 배열 반환
+  Future<List<String>> uploadChatFilesBatch({
+    required List<File> files,
+    required String roomId,
+    required String kind, // "images" | "files"
+    bool upsert = false,
+    String Function(File f)? contentTypeResolver,
+  }) async {
+    final keys = <String>[];
+    for (final f in files) {
+      final ct = contentTypeResolver != null ? contentTypeResolver(f) : null;
+      final k = await uploadChatFile(
+        file: f,
+        roomId: roomId,
+        kind: kind,
+        upsert: upsert,
+        contentType: ct,
+      );
+      keys.add(k);
+    }
+    return keys;
+  }
+
   Future<String> getOrCreateSignedUrlChat(
     String objectPath, {
     int expiresInSec = 21600,

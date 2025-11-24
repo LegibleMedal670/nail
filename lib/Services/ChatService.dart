@@ -175,6 +175,23 @@ class ChatService {
     return (res as num).toInt();
   }
 
+  /// 여러 이미지(최대 10장 권장)를 하나의 메시지로 전송 → message_id
+  /// files: [{'file_name':..., 'size_bytes':..., 'mime':..., 'storage_path':...}, ...]
+  Future<int> sendImagesGroup({
+    required String loginKey,
+    required String roomId,
+    required List<Map<String, dynamic>> files,
+    Map<String, dynamic>? meta,
+  }) async {
+    final res = await _sb.rpc('rpc_send_images', params: {
+      'p_login_key': loginKey,
+      'p_room_id': roomId,
+      'p_files': files,
+      'p_meta': meta ?? <String, dynamic>{},
+    });
+    return (res as num).toInt();
+  }
+
   /// 삭제(관리자만) – soft delete
   Future<void> deleteMessage({
     required String adminLoginKey,
@@ -182,6 +199,17 @@ class ChatService {
   }) async {
     await _sb.rpc('rpc_delete_message', params: {
       'p_login_key': adminLoginKey,
+      'p_message_id': messageId,
+    });
+  }
+
+  /// 본인 메시지 삭제(일반 사용자)
+  Future<void> deleteMyMessage({
+    required String loginKey,
+    required int messageId,
+  }) async {
+    await _sb.rpc('rpc_delete_my_message', params: {
+      'p_login_key': loginKey,
       'p_message_id': messageId,
     });
   }

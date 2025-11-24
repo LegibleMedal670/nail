@@ -8,12 +8,14 @@ class MessageInputBar extends StatefulWidget {
   final void Function(String text) onSendText;
   final void Function(String localImagePath) onSendImageLocalPath;
   final void Function(String localFilePath, String fileName, int fileBytes) onSendFileLocalPath;
+  final void Function(List<String> localImagePaths)? onSendImagesLocalPaths; // 멀티 이미지
 
   const MessageInputBar({
     Key? key,
     required this.onSendText,
     required this.onSendImageLocalPath,
     required this.onSendFileLocalPath,
+    this.onSendImagesLocalPaths,
   }) : super(key: key);
 
   @override
@@ -136,7 +138,13 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
         _PanelAction(
           icon: Icons.photo_library_outlined,
           label: '갤러리',
-          onTap: () async { await _pickImage(ImageSource.gallery); },
+          onTap: () async {
+            // 갤러리: 다중 선택 우선, 실패 시 단일 선택 fallback
+            final sent = await _pickImagesGallery();
+            if (!sent) {
+              await _pickImage(ImageSource.gallery);
+            }
+          },
         ),
         _PanelAction(
           icon: Icons.photo_camera_outlined,
@@ -160,6 +168,40 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
     widget.onSendText(text);
     _ctrl.clear();
     setState(()=>_sending=false);
+  }
+
+  /// 갤러리 다중 선택 (최대 10장). 성공적으로 전송 콜백을 호출했으면 true.
+  Future<bool> _pickImagesGallery() async {
+    closeExtraPanel();
+    try {
+      final many = await _picker.pickMultiImage(imageQuality: 85);
+      if (many.isEmpty) return false;
+      final limited = many.take(10).toList(growable: false);
+      final paths = <String>[];
+      for (final x in limited) {
+        final f = File(x.path);
+        if (!await f.exists()) continue;
+        final size = await f.length();
+        if (size > 20 * 1024 * 1024) {
+          // 20MB 초과 파일은 스킵
+          continue;
+        }
+        paths.add(x.path);
+      }
+      if (paths.isEmpty) return false;
+      if (widget.onSendImagesLocalPaths != null) {
+        widget.onSendImagesLocalPaths!(paths);
+        return true;
+      }
+      // 멀티 콜백이 없으면 단일로 순차 전송
+      for (final p in paths) {
+        widget.onSendImageLocalPath(p);
+        await Future.delayed(const Duration(milliseconds: 30));
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {

@@ -14,6 +14,7 @@ import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
 import 'package:nail/Pages/Chat/widgets/FileBubble.dart';
 import 'package:nail/Pages/Chat/widgets/ImageBubble.dart';
+import 'package:nail/Pages/Chat/widgets/ImageGroupBubble.dart';
 import 'package:nail/Pages/Chat/widgets/IncomingMessageTile.dart';
 import 'package:nail/Pages/Chat/widgets/MessageBubble.dart';
 import 'package:nail/Pages/Chat/widgets/MessageInputBar.dart';
@@ -353,6 +354,16 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     }
   }
 
+  Future<List<String>> _resolveSignedUrls(List<String>? storagePaths) async {
+    if (storagePaths == null || storagePaths.isEmpty) return <String>[];
+    final out = <String>[];
+    for (final p in storagePaths) {
+      final u = await _signedUrlForPath(p);
+      if (u != null && u.isNotEmpty) out.add(u);
+    }
+    return out;
+  }
+
   Future<void> _sendImageLocalPath(String localPath) async {
     final key = _loginKey();
     if (key.isEmpty) return;
@@ -605,6 +616,53 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     }
   }
 
+  Future<void> _sendImagesLocalPaths(List<String> localPaths) async {
+    if (localPaths.isEmpty) return;
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    final paths = localPaths.take(10).toList(growable: false);
+    _insertTempImageGroupBubble(paths);
+    try {
+      final files = <File>[];
+      for (final pth in paths) {
+        final f = File(pth);
+        if (await f.exists()) files.add(f);
+      }
+      final storagePaths = await _storage.uploadChatFilesBatch(
+        files: files,
+        roomId: widget.roomId,
+        kind: 'images',
+        contentTypeResolver: (f) => _guessImageMime(f.path),
+      );
+      final filesMeta = <Map<String, dynamic>>[];
+      for (int i = 0; i < files.length; i++) {
+        final f = files[i];
+        final size = await f.length();
+        final name = _basename(f.path);
+        final mime = _guessImageMime(f.path);
+        filesMeta.add({
+          'file_name': name,
+          'size_bytes': size,
+          'mime': mime,
+          'storage_path': storagePaths[i],
+        });
+      }
+      await _svc.sendImagesGroup(
+        loginKey: key,
+        roomId: widget.roomId,
+        files: filesMeta,
+        meta: {'client_ts': DateTime.now().toIso8601String()},
+      );
+      await _reloadLatestWindow();
+      setState(() {
+        _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.imageGroup);
+      });
+      await _markRead();
+    } finally {
+      // no-op
+    }
+  }
+
   void _insertTempImageBubble(String localPath) {
     final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
     final temp = _Msg(
@@ -614,6 +672,37 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       text: null,
       imageUrl: null,
       imageLocal: localPath,
+      fileUrl: null,
+      fileLocal: null,
+      fileName: null,
+      fileBytes: null,
+      createdAt: DateTime.now(),
+      deleted: false,
+      readCount: null,
+      nickname: null,
+      photoUrl: null,
+      isSystem: false,
+      systemText: null,
+      sendStatus: _SendStatus.sending,
+    );
+    setState(() {
+      _messages.add(temp);
+      _messages.sort((a, b) => a.id.compareTo(b.id));
+    });
+    _autoScrollIfNearBottom();
+  }
+
+  void _insertTempImageGroupBubble(List<String> localPaths) {
+    final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    final temp = _Msg(
+      id: nextId,
+      me: true,
+      type: _MsgType.imageGroup,
+      text: null,
+      imageUrl: null,
+      imageLocal: null,
+      imageUrls: null,
+      imageLocals: localPaths,
       fileUrl: null,
       fileLocal: null,
       fileName: null,
@@ -701,6 +790,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (sheetCtx) {
+        final meUid = _myUid();
+        final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
         return SafeArea(
           top: false,
           child: Column(
@@ -713,11 +804,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                   title: const Text('공지로 등록'),
                   onTap: () => Navigator.of(sheetCtx).pop('notice'),
                 ),
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('삭제'),
-                onTap: () => Navigator.of(sheetCtx).pop('delete'),
-              ),
+              if (isAdmin || isMine)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('삭제'),
+                  onTap: () => Navigator.of(sheetCtx).pop('delete'),
+                ),
               const SizedBox(height: 8),
             ],
           ),
@@ -733,7 +825,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (action == 'delete') {
       final ok = await confirmDeleteMessage(context);
       if (!ok) return;
-      await _svc.deleteMessage(adminLoginKey: key, messageId: m.id);
+      // 관리자면 관리자 삭제, 아니면 본인 삭제
+      final meUid = _myUid();
+      final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
+      if (isAdmin) {
+        await _svc.deleteMessage(adminLoginKey: key, messageId: m.id);
+      } else if (isMine) {
+        await _svc.deleteMyMessage(loginKey: key, messageId: m.id);
+      }
       await _reloadLatestWindow();
       if (_pinned?.msgId == m.id) await _loadNotice();
       return;
@@ -771,6 +870,34 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     });
   }
 
+  Future<void> _openImagesFullscreen(_Msg m) async {
+    List<String> imgs = [];
+    if (m.imageLocals != null && m.imageLocals!.isNotEmpty) {
+      imgs = List<String>.from(m.imageLocals!);
+    } else if (m.imageUrls != null && m.imageUrls!.isNotEmpty) {
+      imgs = await _resolveSignedUrls(m.imageUrls!);
+    }
+    if (imgs.isEmpty) return;
+    if (!mounted) return;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        barrierColor: Colors.black,
+        opaque: false,
+        pageBuilder: (_, __, ___) => ChatImageViewer(
+          images: imgs,
+          initialIndex: 0,
+          heroTagPrefix: 'chat_imgs_${m.id}_',
+        ),
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
+  String _deletedLabel(_Msg m) {
+    if (m.deletedBy == 'admin') return '관리자에 의해 삭제됨';
+    if (m.deletedBy == 'user') return '사용자에 의해 삭제됨';
+    return '삭제됨';
+  }
   Future<void> _openFile(String? localPath, String? signedUrl) async {
     Uri? uri;
     if (localPath != null && localPath.isNotEmpty) {
@@ -963,7 +1090,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       if (m.deleted) {
                         bubbleRow = MessageBubble(
                           isMe: isMe,
-                          text: '관리자에 의해 삭제됨',
+                          text: _deletedLabel(m),
                           createdAt: m.createdAt,
                           readCount: null, // 삭제 메시지는 숨김
                         );
@@ -994,6 +1121,24 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               heroTag: heroTag,
                                 );
                                 return img;
+                              },
+                            );
+                            break;
+                          case _MsgType.imageGroup:
+                            bubbleRow = FutureBuilder<List<String>>(
+                              future: _resolveSignedUrls(m.imageUrls),
+                              builder: (context, snap) {
+                                final urls = snap.data;
+                                return ImageGroupBubble(
+                                  isMe: isMe,
+                                  createdAt: m.createdAt,
+                                  readCount: m.readCount,
+                                  loading: m.sendStatus == _SendStatus.sending,
+                                  imageUrls: (urls == null || urls.isEmpty) ? null : urls,
+                                  localPreviewPaths: m.imageLocals,
+                                  expectedCount: m.imageUrls?.length,
+                                  onTap: () => _openImagesFullscreen(m),
+                                );
                               },
                             );
                             break;
@@ -1106,6 +1251,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                   onSendText: _sendText,
                   onSendImageLocalPath: _sendImageLocalPath,
                   onSendFileLocalPath: _sendFileLocalPath,
+                  onSendImagesLocalPaths: _sendImagesLocalPaths,
                 ),
               ],
             ),
@@ -1159,7 +1305,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 }
 
 // ===== 내부 모델/뷰 =====
-enum _MsgType { text, image, file }
+enum _MsgType { text, image, imageGroup, file }
 enum _SendStatus { sending, sent }
 
 class _Msg {
@@ -1170,6 +1316,8 @@ class _Msg {
   final String? senderId;
   final String? imageUrl;
   final String? imageLocal;
+  final List<String>? imageUrls;
+  final List<String>? imageLocals;
   final String? fileUrl;
   final String? fileLocal;
   final String? fileName;
@@ -1182,6 +1330,7 @@ class _Msg {
   final bool isSystem;
   final String? systemText;
   final _SendStatus sendStatus;
+  final String? deletedBy; // 'admin' | 'user'
 
   _Msg({
     required this.id,
@@ -1191,6 +1340,8 @@ class _Msg {
     this.senderId,
     this.imageUrl,
     this.imageLocal,
+    this.imageUrls,
+    this.imageLocals,
     this.fileUrl,
     this.fileLocal,
     this.fileName,
@@ -1203,6 +1354,7 @@ class _Msg {
     this.isSystem = false,
     this.systemText,
     this.sendStatus = _SendStatus.sent,
+    this.deletedBy,
   });
 
   _Msg.system({
@@ -1215,6 +1367,8 @@ class _Msg {
         text = null,
         imageUrl = null,
         imageLocal = null,
+        imageUrls = null,
+        imageLocals = null,
         fileUrl = null,
         fileLocal = null,
         fileName = null,
@@ -1224,7 +1378,8 @@ class _Msg {
         nickname = null,
         photoUrl = null,
         isSystem = true,
-        sendStatus = _SendStatus.sent;
+        sendStatus = _SendStatus.sent,
+        deletedBy = null;
 }
 
 enum _RowKind { separator, system, message }
@@ -1439,23 +1594,36 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
   } else if (m is String && m.isNotEmpty) {
     try { meta = jsonDecode(m) as Map<String, dynamic>; } catch (_) {}
   }
+  final deletedBy = (meta['deleted_by'] ?? '').toString();
 
   final fileName  = (r['file_name'] ?? meta['file_name'])?.toString();
   final fileBytes = (r['size_bytes'] ?? meta['size_bytes']);
   final storagePath = (r['storage_path'] ?? meta['storage_path'])?.toString();
+  // attachments (그룹 이미지)
+  final attachmentsRaw = r['attachments'];
+  final attachPaths = <String>[];
+  if (attachmentsRaw is List) {
+    for (final x in attachmentsRaw) {
+      if (x is Map && (x['storage_path'] ?? '').toString().isNotEmpty) {
+        attachPaths.add((x['storage_path']).toString());
+      }
+    }
+  }
+  final isGroup = attachPaths.length > 1;
 
   return _Msg(
     id: id,
     me: me,
     type: switch (t) {
-      'image' => _MsgType.image,
+      'image' => (isGroup ? _MsgType.imageGroup : _MsgType.image),
       'file'  => _MsgType.file,
       'system'=> _MsgType.text, // 시스템은 칩으로 렌더
       _       => _MsgType.text,
     },
     text: (r['text'] ?? '').toString(),
     senderId: senderId.isNotEmpty ? senderId : null,
-    imageUrl: (t == 'image') ? storagePath : null, // 공개 URL 변환 로직은 스토리지 정책 확정 후
+    imageUrl: (t == 'image') ? storagePath : null, // 단일 이미지의 기본 미리보기
+    imageUrls: (t == 'image' && isGroup) ? attachPaths : null,
     fileUrl:  (t == 'file')  ? storagePath : null,
     fileName: fileName,
     fileBytes: (fileBytes is num) ? fileBytes.toInt() : null,
@@ -1466,6 +1634,7 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
     photoUrl: (r['sender_photo'] ?? '') as String?,
     isSystem: isSystem,
     systemText: isSystem ? (r['text'] ?? '').toString() : null,
+    deletedBy: deletedBy.isEmpty ? null : deletedBy,
   );
 };
 
