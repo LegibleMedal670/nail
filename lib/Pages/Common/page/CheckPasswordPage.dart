@@ -150,11 +150,9 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
 
     try {
       if (user.isMentor) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const MentorHomeScaffold(),
-          ),
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MentorHomeScaffold()),
+              (route) => false,
         );
       } else {
         Navigator.of(context).pushAndRemoveUntil(
