@@ -1178,13 +1178,18 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       // ✅ 액션시트: 버블 외곽 래퍼에서 onLongPress로 처리 (버블에 삭제 핸들러 전달 X)
                       final wrapped = GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onLongPress: m.deleted
-                            ? null
-                            : () => _showMessageActionSheet(
-                                  m,
-                                  isAdmin: isAdmin,
-                                  allowNotice: m.type == _MsgType.text,
-                                ),
+                        onLongPress: () {
+                          if (m.deleted) return;
+                          final meUid = _myUid();
+                          final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
+                          // 관리자가 아니고 내 메시지도 아니면 액션시트 자체를 열지 않음
+                          if (!isAdmin && !isMine) return;
+                          _showMessageActionSheet(
+                            m,
+                            isAdmin: isAdmin,
+                            allowNotice: m.type == _MsgType.text,
+                          );
+                        },
                         child: bubbleRow,
                       );
 
