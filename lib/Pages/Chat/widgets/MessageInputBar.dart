@@ -189,6 +189,11 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
         paths.add(x.path);
       }
       if (paths.isEmpty) return false;
+      // 1장만 선택된 경우: 기존 단일 이미지 전송 플로우로 처리(큰 이미지 버블)
+      if (paths.length == 1) {
+        widget.onSendImageLocalPath(paths.first);
+        return true;
+      }
       if (widget.onSendImagesLocalPaths != null) {
         widget.onSendImagesLocalPaths!(paths);
         return true;
