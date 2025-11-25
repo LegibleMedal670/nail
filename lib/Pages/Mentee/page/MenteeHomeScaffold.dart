@@ -109,7 +109,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
       MenteeEducationPage(embedded: true, isTheoryNotifier: _eduIsTheory), // 교육(이론/실습 토글)
     ];
 
-    final titles = ['투두', '채팅', '학습'];
+    final titles = ['할 일 목록', '채팅', '학습'];
 
     return Scaffold(
       backgroundColor: Colors.white,

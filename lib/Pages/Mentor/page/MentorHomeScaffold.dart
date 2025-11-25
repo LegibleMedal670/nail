@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
+import 'package:nail/Pages/Mentor/page/MentorTodoGroupsView.dart';
+import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
@@ -29,6 +31,9 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
   int _todoNotDoneCount = 0;
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
+  // 탭 컨트롤용 키
+  final GlobalKey<MyTodoViewState> _todoKey = GlobalKey<MyTodoViewState>();
+  final GlobalKey<MentorTodoGroupsViewState> _groupsKey = GlobalKey<MentorTodoGroupsViewState>();
 
   @override
   void initState() {
@@ -89,20 +94,20 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     final up = context.watch<UserProvider>();
     final loginKey = up.current?.loginKey ?? '';
 
-    // 멘토 대시보드용 Provider 1회 구성
-    final dashboard = ChangeNotifierProvider(
-      create: (_) => MentorProvider(mentorLoginKey: loginKey)..ensureLoaded(),
-      child: const MentorDashboardBody(),
-    );
-
+    // 페이지 구성: 받은TODO / TODO 현황 / 채팅 / 대시보드
     final pages = <Widget>[
-      dashboard,
+      MyTodoView(key: _todoKey, embedded: true),
+      MentorTodoGroupsView(key: _groupsKey, embedded: true),
       const ChatRoomListPage(embedded: true),
+      const MentorDashboardBody(),
     ];
 
-    final titles = ['대시보드', '채팅'];
+    final titles = ['받은TODO', 'TODO 현황', '채팅', '대시보드'];
 
-    return Scaffold(
+    // 스캐폴드 전체를 MentorProvider로 감싸 AppBar/탭/라우팅 전역에서 접근 가능하게 함
+    return ChangeNotifierProvider(
+      create: (_) => MentorProvider(mentorLoginKey: loginKey)..ensureLoaded(),
+      child: Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
@@ -118,63 +123,65 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
         ),
         actions: [
           if (_currentIndex == 0) ...[
-            // 내 TODO + 배지
-            Padding(
-              padding: const EdgeInsets.only(top: 5.0),
-              child: Stack(
-                children: [
-                  IconButton(
-                    tooltip: '내 TODO',
-                    icon: const Icon(Icons.checklist_rounded, color: UiTokens.title),
-                    onPressed: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (_) => const MyTodoPage()));
-                      if (!mounted) return;
-                      await _refreshTodoBadge();
-                    },
-                  ),
-                  if (_todoNotDoneCount > 0)
-                    Positioned(
-                      right: 6,
-                      top: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(999),
-                          boxShadow: [UiTokens.cardShadow],
-                        ),
-                        child: Text(
-                          _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            // TODO 현황
             IconButton(
-              tooltip: 'TODO 현황',
-              icon: const Icon(Icons.fact_check_outlined, color: UiTokens.title),
+              tooltip: '필터',
+              icon: const Icon(Icons.filter_list_rounded, color: UiTokens.title),
+              onPressed: () => _todoKey.currentState?.openFilterSheet(),
+            ),
+            IconButton(
+              tooltip: '새로고침',
+              icon: const Icon(Icons.refresh_rounded, color: UiTokens.title),
+              onPressed: () => _todoKey.currentState?.reload(),
+            ),
+            IconButton(
+              tooltip: '로그아웃',
+              icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
               onPressed: () async {
-                // 별도 Provider로 라우팅
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChangeNotifierProvider(
-                      create: (_) => MentorProvider(mentorLoginKey: loginKey)..ensureLoaded(),
-                      child: const MentorTodoGroupsPage(),
-                    ),
-                  ),
+                await context.read<UserProvider>().signOut();
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const SplashScreen()),
+                  (route) => false,
                 );
-                await _refreshTodoBadge();
               },
             ),
-            // 로그아웃
+            const SizedBox(width: 4),
+          ] else if (_currentIndex == 1) ...[
+            Builder(
+              builder: (ctx) => IconButton(
+                tooltip: 'TODO 생성',
+                icon: const Icon(Icons.add_task_outlined, color: UiTokens.title),
+                onPressed: () async {
+                  final mp = ctx.read<MentorProvider>();
+                  final created = await Navigator.push<bool>(
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => ChangeNotifierProvider<MentorProvider>.value(
+                        value: mp,
+                        child: const MentorTodoCreatePage(),
+                      ),
+                    ),
+                  );
+                  if (created == true) {
+                    await _groupsKey.currentState?.reload();
+                  }
+                },
+              ),
+            ),
+            IconButton(
+              tooltip: '로그아웃',
+              icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
+              onPressed: () async {
+                await context.read<UserProvider>().signOut();
+                if (!mounted) return;
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const SplashScreen()),
+                  (route) => false,
+                );
+              },
+            ),
+            const SizedBox(width: 4),
+          ] else ...[
             IconButton(
               tooltip: '로그아웃',
               icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
@@ -201,7 +208,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
         currentIndex: _currentIndex,
         onTap: (i) {
           setState(() => _currentIndex = i);
-          if (i == 1) {
+          if (i == 2) {
             _refreshChatBadge();
           }
         },
@@ -211,8 +218,12 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
         showUnselectedLabels: true,
         items: [
           const BottomNavigationBarItem(
-            icon: Icon(Icons.dashboard_outlined),
-            label: '대시보드',
+            icon: Icon(Icons.checklist_rounded),
+            label: '받은TODO',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.fact_check_outlined),
+            label: 'TODO 현황',
           ),
           BottomNavigationBarItem(
             label: '채팅',
@@ -261,11 +272,17 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
               ],
             ),
           ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            label: '대시보드',
+          ),
         ],
       ),
       ),
-    );
+    ));
   }
 }
+
+
 
 
