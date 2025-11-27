@@ -254,7 +254,16 @@ class _JournalBubble extends StatelessWidget {
   final bool showConfirm; // 상대방 버블에만 '확인' 버튼 노출
   final bool confirmed;   // 내 버블에 상대방이 확인했을 때 체크 표시
   final VoidCallback? onConfirm;
-  const _JournalBubble({required this.author, required this.selfRole, required this.text, required this.photos, required this.time, required this.showConfirm, required this.confirmed, this.onConfirm});
+  const _JournalBubble({
+    required this.author,
+    required this.selfRole,
+    required this.text,
+    required this.photos,
+    required this.time,
+    required this.showConfirm,
+    required this.confirmed,
+    this.onConfirm,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -347,48 +356,51 @@ class _JournalBubble extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(time, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.w700)),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!mine && showConfirm && !confirmed) // confirmed가 true면 버튼 숨기고 체크 표시로 전환 (원한다면)
-                        InkWell(
-                          onTap: onConfirm ?? () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 확인 처리')));
-                          },
-                          borderRadius: BorderRadius.circular(20),
-                          child: Container(
-                            padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.6),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: UiTokens.primaryBlue.withOpacity(0.3), width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.check_rounded, size: 14, color: UiTokens.primaryBlue),
-                                SizedBox(width: 4),
-                                Text(
-                                  '확인하기',
-                                  style: TextStyle(color: UiTokens.primaryBlue, fontWeight: FontWeight.w700, fontSize: 12),
-                                ),
-                              ],
+                  Padding(
+                    padding: const EdgeInsets.only(left: 10.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (!mine && showConfirm && !confirmed) // confirmed가 true면 버튼 숨기고 체크 표시로 전환 (원한다면)
+                          InkWell(
+                            onTap: onConfirm ?? () {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 확인 처리')));
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.6),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: UiTokens.primaryBlue.withOpacity(0.3), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  Icon(Icons.check_rounded, size: 14, color: UiTokens.primaryBlue),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    '확인하기',
+                                    style: TextStyle(color: UiTokens.primaryBlue, fontWeight: FontWeight.w700, fontSize: 12),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      // 내가 받은 메시지인데 이미 확인한 경우
-                      if (!mine && confirmed) ...[
-                        const Icon(Icons.check_circle, size: 14, color: UiTokens.primaryBlue),
-                        const SizedBox(width: 4),
-                        const Text('확인함', style: TextStyle(color: UiTokens.primaryBlue, fontSize: 11, fontWeight: FontWeight.w800)),
+                        // 내가 받은 최신 메시지인데 이미 확인한 경우
+                        if (!mine && confirmed && showConfirm) ...[
+                          const Icon(Icons.check_circle, size: 14, color: UiTokens.primaryBlue),
+                          const SizedBox(width: 4),
+                          const Text('확인함', style: TextStyle(color: UiTokens.primaryBlue, fontSize: 11, fontWeight: FontWeight.w800)),
+                        ],
+                        // 내가 보낸 최신 메시지를 상대가 확인한 경우
+                        if (mine && confirmed && showConfirm) ...[
+                          const Icon(Icons.check_circle, size: 14, color: Color(0xFF059669)),
+                          const SizedBox(width: 4),
+                          const Text('확인됨', style: TextStyle(color: Color(0xFF059669), fontSize: 11, fontWeight: FontWeight.w800)),
+                        ],
                       ],
-                      // 내가 보낸 메시지를 상대가 확인한 경우
-                      if (mine && confirmed) ...[
-                        const Icon(Icons.check_circle, size: 14, color: Color(0xFF059669)),
-                        const SizedBox(width: 4),
-                        const Text('확인됨', style: TextStyle(color: Color(0xFF059669), fontSize: 11, fontWeight: FontWeight.w800)),
-                      ],
-                    ],
+                    ),
                   ),
                 ],
               ),
