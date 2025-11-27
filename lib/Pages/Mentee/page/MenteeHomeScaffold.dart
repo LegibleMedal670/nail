@@ -149,6 +149,8 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
               },
             ),
           ] else if (_currentIndex == 2) ...[
+            // 채팅 탭: 별도 액션 없음 (로그아웃 공통)
+          ] else if (_currentIndex == 3) ...[
             Center(
               child: Padding(
                 padding: const EdgeInsets.only(right: 6),

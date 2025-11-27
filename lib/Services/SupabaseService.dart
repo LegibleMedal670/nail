@@ -1,5 +1,6 @@
 // SupabaseService.dart
 import 'dart:io';
+import 'dart:math';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
@@ -887,5 +888,120 @@ class SupabaseService {
     return (rows as List).cast<Map<String, dynamic>>();
   }
 
+  // ===================== Daily Journal (일일 일지) =====================
 
+  /// [멘티] 오늘의 일지 조회 (없으면 null)
+  Future<Map<String, dynamic>?> menteeGetTodayJournal() async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) throw Exception('loginKey is missing');
+
+    return _rpcSingle('mentee_get_today_journal', {
+      'p_login_key': key,
+    });
+  }
+
+  /// [멘티] 일지 제출 (생성 또는 메시지 추가)
+  Future<Map<String, dynamic>> menteeSubmitJournalEntry({
+    required String content,
+    required List<String> photos,
+  }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) throw Exception('loginKey is missing');
+
+    final res = await _rpcSingle('mentee_submit_journal_entry', {
+      'p_login_key': key,
+      'p_content': content,
+      'p_photos': photos,
+    });
+    if (res == null) throw Exception('mentee_submit_journal_entry returned null');
+    return res;
+  }
+
+  /// [멘토] 일지 목록 조회 (대시보드용)
+  Future<List<Map<String, dynamic>>> mentorListDailyJournals({
+    DateTime? date,
+    String? statusFilter, // 'pending' | 'replied' | etc
+  }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) throw Exception('loginKey is missing');
+
+    return _rpcList('mentor_list_daily_journals', {
+      'p_login_key': key,
+      'p_date': date?.toIso8601String().substring(0, 10),
+      'p_status_filter': statusFilter,
+    });
+  }
+
+  /// [멘토] 답장하기
+  Future<void> mentorReplyJournal({
+    required String journalId,
+    required String content,
+    required List<String> photos,
+  }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) throw Exception('loginKey is missing');
+
+    await _rpcSingle('mentor_reply_journal', {
+      'p_login_key': key,
+      'p_journal_id': journalId,
+      'p_content': content,
+      'p_photos': photos,
+    });
+  }
+
+  /// [공통] 메시지 확인(Ack) 처리
+  Future<void> commonConfirmMessage({required int messageId}) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) throw Exception('loginKey is missing');
+
+    await _rpcSingle('common_confirm_message', {
+      'p_login_key': key,
+      'p_message_id': messageId,
+    });
+  }
+
+  /// [공통] 일지 상세(메시지 스레드) 조회
+  Future<Map<String, dynamic>?> getJournalDetail({required String journalId}) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) throw Exception('loginKey is missing');
+
+    return _rpcSingle('get_journal_detail', {
+      'p_login_key': key,
+      'p_journal_id': journalId,
+    });
+  }
+
+  /// [멘티] 오늘 제출 여부 확인 (배지용)
+
+  /// [공통] 일지 사진 업로드 (단건) -> Storage Path 반환
+  Future<String> uploadJournalPhoto(File file) async {
+    final now = DateTime.now();
+    final dateStr = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
+    final timestamp = now.millisecondsSinceEpoch;
+    final ext = file.path.split('.').last;
+    final name = "${timestamp}_${_randomString(6)}.$ext";
+    // loginKey로 user_id를 알 수 있지만, 여기선 단순하게 날짜별 폴더링만 함 (RPC에서 검증)
+    final path = "$dateStr/$name";
+
+    await _sb.storage.from('daily_journals').upload(
+      path,
+      file,
+      fileOptions: const FileOptions(cacheControl: '3600', upsert: false),
+    );
+
+    return path;
+  }
+
+  /// [공통] 일지 사진 URL 조회
+  String getJournalPhotoUrl(String path) {
+    if (path.startsWith('http')) return path;
+    return _sb.storage.from('daily_journals').getPublicUrl(path);
+  }
+
+  String _randomString(int length) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rnd = Random();
+    return String.fromCharCodes(Iterable.generate(
+        length, (_) => chars.codeUnitAt(rnd.nextInt(chars.length))));
+  }
 }

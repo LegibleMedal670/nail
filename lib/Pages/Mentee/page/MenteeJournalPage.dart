@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
+
+import 'package:nail/Pages/Mentee/page/MenteeJournalSubmitPage.dart';
 
 class MenteeJournalPage extends StatefulWidget {
   final bool embedded;
@@ -10,56 +14,150 @@ class MenteeJournalPage extends StatefulWidget {
 }
 
 class _MenteeJournalPageState extends State<MenteeJournalPage> {
-  final bool _hasMentor = true; // 데모용: 멘토 배정 여부
-  final bool _isSubmittedToday = true; // 데모용: 오늘 일지 제출 여부 (스레드 노출용)
-  bool _isLatestConfirmed = false; // 데모용: 최신 메시지 확인 상태
+  bool _loading = true;
+  Map<String, dynamic>? _journalData; // null이면 오늘 제출 안 함
+  List<dynamic> _messages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() => _loading = true);
+    try {
+      // 1. 오늘의 일지 조회
+      final data = await SupabaseService.instance.menteeGetTodayJournal();
+      _journalData = data;
+      
+      if (data != null) {
+        final rawMsgs = (data['messages'] as List?) ?? [];
+        _messages = List.from(rawMsgs.reversed); // 최신이 0번 인덱스로 오게 뒤집음
+      } else {
+        _messages = [];
+      }
+    } catch (e) {
+      debugPrint('MenteeJournalPage load error: $e');
+      // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _goToSubmitPage() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const MenteeJournalSubmitPage()),
+    );
+    if (result == true) {
+      _load(); // 제출 성공 시 새로고침
+    }
+  }
+
+  Future<void> _confirmMessage(int msgId) async {
+    try {
+      await SupabaseService.instance.commonConfirmMessage(messageId: msgId);
+      _load(); // 상태 갱신
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('확인 처리 실패: $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // ... (KST 기준 계산 로직은 실제 구현 시 적용)
-    
-    final content = ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-      children: [
-        // 멘토가 없거나, 오늘 제출 안 했으면 카드 노출 (멘토 없으면 배너가 대신 뜸)
-        if (_hasMentor && !_isSubmittedToday) ...[
-           const _TodayCardDemo(),
-           const SizedBox(height: 12),
-        ],
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-        const _SectionTitle('오늘 스레드(데모)'),
-        const SizedBox(height: 8),
-        if (!_hasMentor)
-          const _EmptyBanner(message: '아직 멘토가 배정되지 않았어요.'),
-        if (_hasMentor && !_isSubmittedToday)
-          const _EmptyBanner(message: '아직 일지를 제출하지 않았어요!'),
-        if (_hasMentor && _isSubmittedToday) ...[
-          // 최신(멘토) → 오래된(멘티) 순으로 위→아래
-          _JournalBubble(
-            author: 'mentor', 
-            selfRole: 'mentee', 
-            text: '좋아요! 파일링 각도만 조금 더 세워보세요.', 
-            photos: 1, 
-            time: '오전 11:10', 
-            showConfirm: true, // 최신 메시지이므로 확인 버튼 노출 대상
-            confirmed: _isLatestConfirmed, // 로컬 상태 바인딩
-            onConfirm: () {
-              setState(() => _isLatestConfirmed = true);
-            },
+    final bool hasJournal = _journalData != null;
+
+    // 아직 오늘 일지를 한 번도 작성하지 않았고, 메시지도 전혀 없을 때:
+    // 화면 하단 쪽에 안내 카드만 단독으로 배치
+    if (!hasJournal && _messages.isEmpty) {
+      final content = Align(
+        alignment: Alignment.bottomCenter,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 32),
+          child: _TodayCardDemo(onTap: _goToSubmitPage),
+        ),
+      );
+
+      if (widget.embedded) return content;
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          title: const Text('일일 일지',
+              style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+          actions: [
+            IconButton(
+              tooltip: '히스토리(달력) - 데모',
+              icon: const Icon(Icons.calendar_month_rounded, color: UiTokens.title),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('데모: 히스토리는 후속 단계에서 구현됩니다.')),
+                );
+              },
+            ),
+          ],
+        ),
+        body: content,
+      );
+    }
+
+    final content = Stack(
+      children: [
+        ListView.separated(
+          reverse: true, // 최신이 아래(시각적) -> 실제론 리스트의 0번이 맨 아래 렌더링
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 110), // 하단 여백 확보 (답장 버튼용)
+          itemCount: _messages.length + (hasJournal ? 0 : 1), // 일지 없으면 카드 하나 추가
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            // 일지 미제출 상태면 '오늘의 일지 제출' 카드 표시 (리스트의 유일한 아이템)
+            if (!hasJournal) {
+              return _TodayCardDemo(onTap: _goToSubmitPage);
+            }
+
+            // 메시지 렌더링
+            final msg = _messages[index];
+            final bool isMine = msg['is_mine'] == true;
+            final String contentText = msg['content'] ?? '';
+            final List photos = (msg['photos'] as List?) ?? [];
+            final String timeStr = (msg['created_at'] as String?)?.substring(11, 16) ?? ''; // YYYY-MM-DDTHH:mm:ss... -> HH:mm
+            final bool confirmed = msg['confirmed_at'] != null;
+            final int msgId = (msg['id'] is int) ? msg['id'] : int.parse(msg['id'].toString());
+
+            // 최신 메시지(0번)만 확인 UI 노출
+            final bool isLatest = (index == 0);
+
+            return _JournalBubble(
+              author: isMine ? 'mentee' : 'mentor',
+              selfRole: 'mentee',
+              text: contentText,
+              photos: photos,
+              time: timeStr,
+              showConfirm: isLatest && !isMine, // 최신이면서 상대방 메시지면 버튼 노출
+              confirmed: confirmed,
+              onConfirm: () => _confirmMessage(msgId),
+            );
+          },
+        ),
+        // 일지가 있을 때만 답장하기 버튼 노출
+        if (hasJournal)
+          Positioned(
+            bottom: 24,
+            left: 12,
+            right: 12,
+            child: _TodayCardDemo(
+              onTap: _goToSubmitPage, // 답장도 동일한 제출 페이지 사용
+            ),
           ),
-          const SizedBox(height: 8),
-          const _JournalBubble(
-            author: 'mentee', 
-            selfRole: 'mentee', 
-            text: '오늘은 큐티클 정리를 복습했고 사진도 첨부합니다.', 
-            photos: 3, 
-            time: '오전 10:32', 
-            showConfirm: false, // 최신 아님
-            confirmed: false, // 최신이 아니므로 확인 상태 표시 안 함
-          ),
-        ],
       ],
     );
+
     if (widget.embedded) return content;
     // ... Scaffold ...
     return Scaffold(
@@ -84,7 +182,8 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
 }
 
 class _TodayCardDemo extends StatelessWidget {
-  const _TodayCardDemo();
+  final VoidCallback? onTap;
+  const _TodayCardDemo({this.onTap});
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -99,22 +198,13 @@ class _TodayCardDemo extends StatelessWidget {
         children: [
           const Icon(Icons.today_rounded, color: UiTokens.actionIcon),
           const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('오늘의 일지 제출', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
-                SizedBox(height: 4),
-                Text('한국시간 24시까지 제출 가능', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w700, fontSize: 12)),
-              ],
-            ),
-          ),
+          Expanded(child: Text('오늘의 일지 제출', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900))),
           FilledButton(
-            onPressed: () {
+            onPressed: onTap ?? () {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 제출 화면은 후속 단계에서 구현됩니다.')));
             },
             style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text('제출하기', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+            child: const Text('작성하기', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
           ),
         ],
       ),
@@ -159,7 +249,7 @@ class _JournalBubble extends StatelessWidget {
   final String author; // 'mentee'|'mentor'
   final String selfRole; // 현재 화면의 사용자 역할: 'mentee'|'mentor'
   final String text;
-  final int photos; // demo count
+  final List photos; // 실제 사진 경로 리스트
   final String time;
   final bool showConfirm; // 상대방 버블에만 '확인' 버튼 노출
   final bool confirmed;   // 내 버블에 상대방이 확인했을 때 체크 표시
@@ -174,7 +264,27 @@ class _JournalBubble extends StatelessWidget {
     final Color border = isMenteeMsg ? const Color(0xFFDBEAFE) : const Color(0xFFB7F3DB);
     final Color fg = isMenteeMsg ? const Color(0xFF2563EB) : const Color(0xFF059669);
 
-    const bool canEdit = true; // 데모용
+    // 스토리지 경로(List)를 실제 표시/뷰어용 URL 리스트로 변환
+    final List<String> photoUrls = photos
+        .map((e) => SupabaseService.instance.getJournalPhotoUrl(e.toString()))
+        .toList(growable: false);
+
+    void openGallery(int initialIndex) {
+      if (photoUrls.isEmpty) return;
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          barrierColor: Colors.black,
+          opaque: false,
+          pageBuilder: (_, __, ___) => ChatImageViewer(
+            images: photoUrls,
+            initialIndex: initialIndex.clamp(0, photoUrls.length - 1),
+            titles: null,
+          ),
+          transitionsBuilder: (_, anim, __, child) =>
+              FadeTransition(opacity: anim, child: child),
+        ),
+      );
+    }
 
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -187,33 +297,47 @@ class _JournalBubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(isMenteeMsg ? '멘티' : '멘토', style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
-              if (photos > 0) ...[
+              if (photoUrls.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                photos == 1
-                    ? Container(
-                        width: 200,
-                        height: 140,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                photoUrls.length == 1
+                    ? GestureDetector(
+                        onTap: () => openGallery(0),
+                        child: Container(
+                          width: 200,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            image: DecorationImage(
+                              image: NetworkImage(photoUrls.first),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                         ),
-                        child: const Icon(Icons.photo, size: 40, color: UiTokens.actionIcon),
                       )
                     : Wrap(
                         spacing: 6,
                         runSpacing: 6,
                         children: List.generate(
-                            photos,
-                            (i) => Container(
-                                  width: 70,
-                                  height: 70,
-                                  decoration: BoxDecoration(
-                                      color: const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFFE2E8F0))),
-                                  child: const Icon(Icons.photo, color: UiTokens.actionIcon),
-                                )),
+                          photoUrls.length,
+                          (i) => GestureDetector(
+                            onTap: () => openGallery(i),
+                            child: Container(
+                              width: 70,
+                              height: 70,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                image: DecorationImage(
+                                  image: NetworkImage(photoUrls[i]),
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
               ],
               const SizedBox(height: 6),
