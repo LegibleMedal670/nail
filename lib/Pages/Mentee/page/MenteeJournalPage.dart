@@ -3,6 +3,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 import 'package:nail/Pages/Mentee/page/MenteeJournalHistoryPage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:nail/Pages/Mentee/page/MenteeJournalSubmitPage.dart';
 
@@ -23,6 +24,8 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
   bool _loading = true;
   Map<String, dynamic>? _journalData; // null이면 오늘 제출 안 함
   List<dynamic> _messages = [];
+  String? _journalId;
+  RealtimeChannel? _journalRt;
 
   @override
   void initState() {
@@ -39,10 +42,26 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
       _journalData = data;
       
       if (data != null) {
+        final journal = data['journal'];
+        if (journal is Map) {
+          final idVal = (journal['id'] ?? journal['journal_id'] ?? '').toString();
+          _journalId = idVal.isNotEmpty ? idVal : null;
+        }
         final rawMsgs = (data['messages'] as List?) ?? [];
+        // journalId를 못 받은 경우, 메시지에서 fallback으로 추출
+        if ((_journalId == null || _journalId!.isEmpty) && rawMsgs.isNotEmpty) {
+          final last = rawMsgs.last;
+          if (last is Map) {
+            final idFromMsg = (last['journal_id'] ?? '').toString();
+            if (idFromMsg.isNotEmpty) {
+              _journalId = idFromMsg;
+            }
+          }
+        }
         _messages = List.from(rawMsgs.reversed); // 최신이 0번 인덱스로 오게 뒤집음
       } else {
         _messages = [];
+        _journalId = null;
       }
 
       // 배지 상태 동기화: 오늘 일지/최신 멘토 피드백 기준
@@ -56,7 +75,10 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
       debugPrint('MenteeJournalPage load error: $e');
       // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류: $e')));
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _ensureJournalRealtime();
+      }
     }
   }
 
@@ -77,6 +99,46 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('확인 처리 실패: $e')));
     }
+  }
+
+  void _ensureJournalRealtime() {
+    _journalRt?.unsubscribe();
+    final sb = Supabase.instance.client;
+    final channelName = 'mentee_journal_today_${DateTime.now().microsecondsSinceEpoch}';
+    final ch = sb.channel(channelName);
+
+    void handler(PostgresChangePayload payload) {
+      try {
+        final rec = payload.newRecord ?? payload.oldRecord ?? <String, dynamic>{};
+        // RLS로 이미 내 일지에 대한 변경만 오므로, 저널 ID 비교 없이 바로 리로드
+        _load();
+      } catch (e) {
+        debugPrint('MenteeJournalPage realtime handler error: $e');
+      }
+    }
+
+    ch
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..subscribe();
+
+    _journalRt = ch;
+  }
+
+  @override
+  void dispose() {
+    _journalRt?.unsubscribe();
+    super.dispose();
   }
 
   @override

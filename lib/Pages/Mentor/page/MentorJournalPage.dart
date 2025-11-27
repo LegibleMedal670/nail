@@ -6,6 +6,7 @@ import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Pages/Mentor/page/MentorJournalHistoryPage.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MentorJournalPage extends StatefulWidget {
   final bool embedded;
@@ -41,18 +42,17 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
       _error = null;
     });
     try {
-      // 기본은 "오늘 일지"만 표시하도록 오늘 날짜로 한정
+      // 오늘 날짜 기준으로만 리스트 표시
       final today = DateTime.now();
       final rows = await SupabaseService.instance.mentorListDailyJournals(
         date: today,
-        statusFilter: _statusFilter,
+        statusFilter: _statusFilter, // 'pending'이면 미응답만
       );
       setState(() {
         _items = rows;
       });
       // 목록이 갱신되었으므로, 상위(홈 스캐폴드)의 미응답 카운트도 다시 계산하도록 요청
       if (widget.onPendingChanged != null) {
-        // fire-and-forget
         widget.onPendingChanged!();
       }
     } catch (e) {
@@ -360,11 +360,13 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
   Map<String, dynamic>? _journal;
   List<dynamic> _messages = [];
   bool _dirty = false; // 목록 새로고침 필요 여부
+  RealtimeChannel? _journalRt;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _ensureJournalRealtime();
   }
 
   Future<void> _load() async {
@@ -398,6 +400,46 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
         });
       }
     }
+  }
+
+  void _ensureJournalRealtime() {
+    _journalRt?.unsubscribe();
+    final jId = widget.journalId;
+    if (jId.isEmpty) return;
+
+    final sb = Supabase.instance.client;
+    final channelName = 'mentor_journal_${jId}_${DateTime.now().microsecondsSinceEpoch}';
+    final ch = sb.channel(channelName);
+
+    void handler(PostgresChangePayload payload) {
+      try {
+        final rec = payload.newRecord ?? payload.oldRecord ?? <String, dynamic>{};
+        final id = (rec['journal_id'] ?? '').toString();
+        if (id == jId) {
+          _dirty = true; // 목록/뱃지 새로고침 필요
+          _load();
+        }
+      } catch (e) {
+        debugPrint('MentorJournalDetail realtime handler error: $e');
+      }
+    }
+
+    ch
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..subscribe();
+
+    _journalRt = ch;
   }
 
   Future<void> _confirmMessage(int msgId) async {
@@ -540,6 +582,12 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _journalRt?.unsubscribe();
+    super.dispose();
   }
 }
 

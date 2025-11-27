@@ -33,6 +33,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
   int _journalPendingCount = 0; // 일일 일지(멘토) 미응답 배지
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
+  RealtimeChannel? _journalRt;
   // 탭 컨트롤용 키
   final GlobalKey<MyTodoViewState> _todoKey = GlobalKey<MyTodoViewState>();
   final GlobalKey<MentorTodoGroupsViewState> _groupsKey = GlobalKey<MentorTodoGroupsViewState>();
@@ -45,6 +46,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
       await _refreshChatBadge();
       await _refreshTodoBadge();
       await _refreshJournalBadge();
+      await _ensureJournalRealtime();
     });
   }
 
@@ -100,9 +102,46 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     _chatRt = _chatSvc.subscribeListRefresh(onChanged: _refreshChatBadge);
   }
 
+  Future<void> _ensureJournalRealtime() async {
+    _journalRt?.unsubscribe();
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+    try {
+      await SupabaseService.instance.loginWithKey(loginKey);
+    } catch (_) {
+      // ignore
+    }
+
+    final sb = Supabase.instance.client;
+    final channelName = 'mentor_journals_${DateTime.now().microsecondsSinceEpoch}';
+    final ch = sb.channel(channelName);
+
+    void handler(PostgresChangePayload payload) {
+      _refreshJournalBadge();
+    }
+
+    ch
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..subscribe();
+
+    _journalRt = ch;
+  }
+
   @override
   void dispose() {
     _chatRt?.unsubscribe();
+    _journalRt?.unsubscribe();
     super.dispose();
   }
 

@@ -900,6 +900,36 @@ class SupabaseService {
     });
   }
 
+  /// [멘티] 일일 일지 배지 필요 여부
+  /// - true: 하단 탭에 빨간 점 표시
+  ///   - 오늘 일지를 아직 한 번도 제출하지 않았거나
+  ///   - 오늘 일지의 최신 메시지가 멘토(from mentor)이고, 아직 확인/답장(멘티 메시지)으로 처리되지 않은 경우
+  /// - false: 점 숨김
+  Future<bool> menteeJournalNeedDot() async {
+    final data = await menteeGetTodayJournal();
+    // 오늘 일지가 아예 없으면 → 제출 유도용 점
+    if (data == null) return true;
+
+    final rawMsgs = (data['messages'] as List?) ?? const [];
+    if (rawMsgs.isEmpty) {
+      // 일지는 있지만 메시지가 없다면(이상 케이스) 점은 숨김
+      return false;
+    }
+
+    // mentee_get_today_journal은 오래된 순으로 내려오므로 마지막이 최신
+    final Map<String, dynamic> latest =
+        Map<String, dynamic>.from(rawMsgs.last as Map);
+
+    final bool isMine = latest['is_mine'] == true;
+    final bool confirmed = latest['confirmed_at'] != null;
+
+    // 최신 메시지가 멘티(나)의 메시지이거나, 이미 확인 처리된 경우 → 새 피드백 없음
+    if (isMine || confirmed) return false;
+
+    // 최신 메시지가 멘토 메시지이고 아직 미확인이라면 → 새 피드백 알림 점
+    return true;
+  }
+
   /// [멘티] 일지 제출 (생성 또는 메시지 추가)
   Future<Map<String, dynamic>> menteeSubmitJournalEntry({
     required String content,

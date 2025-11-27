@@ -32,6 +32,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   int _journalPending = 0;        // 일일 일지(멘티): 오늘 미제출 or 새 멘토 피드백 시 점 표시
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
+  RealtimeChannel? _journalRt;
   // 탭 내 컨트롤을 위한 키/노티파이어
   final GlobalKey<MyTodoViewState> _todoKey = GlobalKey<MyTodoViewState>();
   final ValueNotifier<bool> _eduIsTheory = ValueNotifier<bool>(true);
@@ -44,6 +45,8 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
       await _initTodosOnce();
       await _ensureChatRealtime();
       await _refreshChatBadge();
+      await _ensureJournalRealtime();
+      await _refreshJournalBadge();
     });
   }
 
@@ -117,9 +120,51 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
     _chatRt = _chatSvc.subscribeListRefresh(onChanged: _refreshChatBadge);
   }
 
+  Future<void> _ensureJournalRealtime() async {
+    _journalRt?.unsubscribe();
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+
+    // loginKey를 SupabaseService에 반영 (RLS 매핑용)
+    try {
+      await SupabaseService.instance.loginWithKey(loginKey);
+    } catch (_) {
+      // ignore
+    }
+
+    final sb = Supabase.instance.client;
+    final channelName = 'mentee_journals_${DateTime.now().microsecondsSinceEpoch}';
+    final ch = sb.channel(channelName);
+
+    void handler(PostgresChangePayload payload) {
+      final rec = payload.newRecord ?? payload.oldRecord ?? <String, dynamic>{};
+      final jId = (rec['journal_id'] ?? '').toString();
+      // 저널 아이디가 비어 있어도, 내 계정에 보이는 메시지면 일단 배지를 다시 계산
+      _refreshJournalBadge();
+    }
+
+    ch
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..subscribe();
+
+    _journalRt = ch;
+  }
+
   @override
   void dispose() {
     _chatRt?.unsubscribe();
+    _journalRt?.unsubscribe();
     super.dispose();
   }
 
