@@ -143,6 +143,10 @@ class _MentorJournalDetailDemo extends StatelessWidget {
         backgroundColor: Colors.white,
         elevation: 0,
         title: Text('$menteeName · ${_fmtMd(today)} 일지', style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         actions: [
           IconButton(
             tooltip: '히스토리(달력) - 데모',
@@ -159,7 +163,7 @@ class _MentorJournalDetailDemo extends StatelessWidget {
           // 최신(멘토) → 오래된(멘티)
           _JournalBubble(author: 'mentor', selfRole: 'mentor', text: '수고했어요! 2번째 사진 각도만 조금 수정해 보세요.', photos: 1, time: '오전 11:00', showConfirm: false, confirmed: true),
           SizedBox(height: 8),
-          _JournalBubble(author: 'mentee', selfRole: 'mentor', text: '오늘 제출합니다. 사진은 3장 첨부했어요.', photos: 3, time: '오전 10:12', showConfirm: true, confirmed: false),
+          _JournalBubble(author: 'mentee', selfRole: 'mentor', text: '오늘 제출합니다. 사진은 3장 첨부했어요.', photos: 3, time: '오전 10:12', showConfirm: false, confirmed: false),
         ],
       ),
       bottomNavigationBar: SafeArea(
@@ -232,19 +236,37 @@ class _JournalBubble extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(isMenteeMsg ? '멘티' : '멘토', style: TextStyle(color: fg, fontWeight: FontWeight.w800, fontSize: 12)),
+              if (photos > 0) ...[
+                const SizedBox(height: 8),
+                photos == 1
+                    ? Container(
+                        width: 200,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: const Icon(Icons.photo, size: 40, color: UiTokens.actionIcon),
+                      )
+                    : Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: List.generate(
+                            photos,
+                            (i) => Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFE2E8F0))),
+                                  child: const Icon(Icons.photo, color: UiTokens.actionIcon),
+                                )),
+                      ),
+              ],
               const SizedBox(height: 6),
               Text(text, style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
-              if (photos > 0) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6, runSpacing: 6,
-                  children: List.generate(photos, (i) => Container(
-                    width: 64, height: 64,
-                    decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFE2E8F0))),
-                    child: const Icon(Icons.photo, color: UiTokens.actionIcon),
-                  )),
-                ),
-              ],
               const SizedBox(height: 6),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -254,18 +276,30 @@ class _JournalBubble extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (!mine && showConfirm)
-                        FilledButton(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 확인 처리는 후속 단계에서 구현됩니다.')));
+                        InkWell(
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 확인 처리')));
                           },
-                          style: FilledButton.styleFrom(
-                            backgroundColor: canEdit ? UiTokens.primaryBlue : const Color(0xFFE2E8F0),
-                            foregroundColor: canEdit ? Colors.white : UiTokens.title,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            minimumSize: const Size(0, 32),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(10, 5, 12, 5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: UiTokens.primaryBlue.withOpacity(0.3), width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.check_rounded, size: 14, color: UiTokens.primaryBlue),
+                                SizedBox(width: 4),
+                                Text(
+                                  '확인하기',
+                                  style: TextStyle(color: UiTokens.primaryBlue, fontWeight: FontWeight.w700, fontSize: 12),
+                                ),
+                              ],
+                            ),
                           ),
-                          child: const Text('확인', style: TextStyle(fontWeight: FontWeight.w800)),
                         ),
                       if (mine && confirmed) ...[
                         const Icon(Icons.check_circle, size: 14, color: Color(0xFF059669)),
