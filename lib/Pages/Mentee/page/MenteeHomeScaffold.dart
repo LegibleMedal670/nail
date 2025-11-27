@@ -14,6 +14,7 @@ import 'package:nail/Services/ChatService.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Mentee/page/MenteeEducationPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteeJournalPage.dart';
+import 'package:nail/Pages/Mentee/page/MenteeJournalHistoryPage.dart';
 
 class MenteeHomeScaffold extends StatefulWidget {
   const MenteeHomeScaffold({super.key});
@@ -142,10 +143,14 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
             ),
           ] else if (_currentIndex == 1) ...[
             IconButton(
-              tooltip: '히스토리(달력) - 데모',
+              tooltip: '히스토리(달력)',
               icon: const Icon(Icons.calendar_month_rounded, color: UiTokens.title),
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 히스토리는 후속 단계에서 구현됩니다.')));
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const MenteeJournalHistoryPage(),
+                  ),
+                );
               },
             ),
           ] else if (_currentIndex == 2) ...[

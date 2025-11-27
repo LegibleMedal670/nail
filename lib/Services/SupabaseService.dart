@@ -932,6 +932,26 @@ class SupabaseService {
     });
   }
 
+  /// [멘토] 특정 멘티의 월별 일지 목록 (히스토리/달력용)
+  /// - from, to: YYYY-MM-DD (보통 한 달 범위)
+  /// - 반환: [{ journal_id, date, status }, ...]
+  Future<List<Map<String, dynamic>>> mentorListMenteeJournalsByMonth({
+    required String menteeId,
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing');
+    }
+    return _rpcList('mentor_list_mentee_journals_by_month', {
+      'p_login_key': key,
+      'p_mentee_id': menteeId,
+      'p_from': from.toIso8601String().substring(0, 10),
+      'p_to': to.toIso8601String().substring(0, 10),
+    });
+  }
+
   /// [멘토] 답장하기
   Future<void> mentorReplyJournal({
     required String journalId,

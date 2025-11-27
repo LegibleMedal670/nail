@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Pages/Mentor/page/MentorJournalHistoryPage.dart';
 
 class MentorJournalPage extends StatefulWidget {
   final bool embedded;
@@ -100,12 +101,14 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
   Future<void> _openDetail(Map<String, dynamic> row) async {
     final journalId = (row['journal_id'] ?? row['id']).toString();
     final menteeName = (row['mentee_name'] ?? '멘티').toString();
+    final menteeId = (row['mentee_id'] ?? '').toString();
     final date = _parseDate(row['date']);
 
     final changed = await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => _MentorJournalDetailPage(
           journalId: journalId,
+          menteeId: menteeId,
           menteeName: menteeName,
           date: date,
         ),
@@ -325,10 +328,12 @@ class _JournalListTile extends StatelessWidget {
 
 class _MentorJournalDetailPage extends StatefulWidget {
   final String journalId;
+  final String menteeId;
   final String menteeName;
   final DateTime? date;
   const _MentorJournalDetailPage({
     required this.journalId,
+    required this.menteeId,
     required this.menteeName,
     this.date,
   });
@@ -454,12 +459,15 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
           ),
         actions: [
           IconButton(
-            tooltip: '히스토리(달력) - 데모',
+            tooltip: '멘티 히스토리(달력)',
             icon: const Icon(Icons.calendar_month_rounded, color: UiTokens.title),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('데모: 히스토리는 후속 단계에서 구현됩니다.'),
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => MentorJournalHistoryPage(
+                    menteeId: widget.menteeId,
+                    menteeName: widget.menteeName,
+                  ),
                 ),
               );
             },
