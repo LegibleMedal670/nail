@@ -8,7 +8,12 @@ import 'package:nail/Pages/Mentee/page/MenteeJournalSubmitPage.dart';
 
 class MenteeJournalPage extends StatefulWidget {
   final bool embedded;
-  const MenteeJournalPage({super.key, this.embedded = false});
+  final ValueChanged<bool>? onBadgeChanged; // 하단 탭 점 상태 콜백
+  const MenteeJournalPage({
+    super.key,
+    this.embedded = false,
+    this.onBadgeChanged,
+  });
 
   @override
   State<MenteeJournalPage> createState() => _MenteeJournalPageState();
@@ -39,6 +44,14 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
       } else {
         _messages = [];
       }
+
+      // 배지 상태 동기화: 오늘 일지/최신 멘토 피드백 기준
+      if (widget.onBadgeChanged != null) {
+        final bool needDot = await SupabaseService.instance.menteeJournalNeedDot();
+        if (mounted) {
+          widget.onBadgeChanged!.call(needDot);
+        }
+      }
     } catch (e) {
       debugPrint('MenteeJournalPage load error: $e');
       // ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('오류: $e')));
@@ -53,7 +66,7 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
       MaterialPageRoute(builder: (_) => const MenteeJournalSubmitPage()),
     );
     if (result == true) {
-      _load(); // 제출 성공 시 새로고침
+      _load(); // 제출/답장 성공 시 리스트 및 배지 상태 새로고침
     }
   }
 

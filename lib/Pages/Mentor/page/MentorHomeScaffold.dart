@@ -44,6 +44,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
       await _ensureChatRealtime();
       await _refreshChatBadge();
       await _refreshTodoBadge();
+      await _refreshJournalBadge();
     });
   }
 
@@ -68,6 +69,20 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
       final rows = await TodoService.instance.listMyTodos(loginKey: loginKey, filter: 'not_done');
       if (!mounted) return;
       setState(() => _todoNotDoneCount = rows.length);
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  Future<void> _refreshJournalBadge() async {
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+    try {
+      SupabaseService.instance.loginKey = loginKey;
+      final rows =
+          await SupabaseService.instance.mentorListDailyJournals(date: null, statusFilter: 'pending');
+      if (!mounted) return;
+      setState(() => _journalPendingCount = rows.length);
     } catch (_) {
       // ignore
     }
@@ -100,7 +115,10 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     final pages = <Widget>[
       MyTodoView(key: _todoKey, embedded: true),
       MentorTodoGroupsView(key: _groupsKey, embedded: true),
-      const MentorJournalPage(embedded: true),
+      MentorJournalPage(
+        embedded: true,
+        onPendingChanged: _refreshJournalBadge,
+      ),
       const ChatRoomListPage(embedded: true),
       const MentorDashboardBody(),
     ];
@@ -213,6 +231,9 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
           setState(() => _currentIndex = i);
           if (i == 3) {
             _refreshChatBadge();
+          }
+          if (i == 2) {
+            _refreshJournalBadge();
           }
         },
         type: BottomNavigationBarType.fixed,

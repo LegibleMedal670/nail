@@ -29,7 +29,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   bool _initialized = false;      // 첫 진입 1회 처리 (모달 + 배지 로딩)
   int _todoNotDoneCount = 0;      // 미완료 TODO 카운트 배지
   int _chatUnread = 0;            // 채팅 미읽음 배지
-  int _journalPending = 0;        // 일일 일지(멘티): 미제출 시 1 표시
+  int _journalPending = 0;        // 일일 일지(멘티): 오늘 미제출 or 새 멘토 피드백 시 점 표시
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
   // 탭 내 컨트롤을 위한 키/노티파이어
@@ -56,6 +56,9 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
 
     // 2) 배지용 "미완료 TODO" 카운트 1회 로딩
     await _refreshTodoBadge();
+
+    // 3) 배지용 "오늘 일지 제출 여부" 1회 로딩
+    await _refreshJournalBadge();
   }
 
   Future<void> _refreshTodoBadge() async {
@@ -79,6 +82,23 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
       final sum = rows.fold<int>(0, (acc, r) => acc + (int.tryParse((r['unread'] ?? '0').toString()) ?? 0));
       if (!mounted) return;
       setState(() => _chatUnread = sum);
+    } catch (_) {
+      // 조용히 무시
+    }
+  }
+
+  Future<void> _refreshJournalBadge() async {
+    final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+    if (loginKey.isEmpty) return;
+    try {
+      // SupabaseService.loginKey와 UserProvider 동기화는 로그인 시점에 이미 처리됨
+      SupabaseService.instance.loginKey = loginKey;
+      final needDot =
+          await SupabaseService.instance.menteeJournalNeedDot();
+      if (!mounted) return;
+      setState(() {
+        _journalPending = needDot ? 1 : 0;
+      });
     } catch (_) {
       // 조용히 무시
     }
@@ -108,7 +128,14 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       MyTodoView(key: _todoKey, embedded: true), // 투두
-      const MenteeJournalPage(embedded: true),   // 일일 일지
+      MenteeJournalPage(                       // 일일 일지
+        embedded: true,
+        onBadgeChanged: (needDot) {
+          setState(() {
+            _journalPending = needDot ? 1 : 0;
+          });
+        },
+      ),
       const ChatRoomListPage(embedded: true),    // 채팅
       MenteeEducationPage(embedded: true, isTheoryNotifier: _eduIsTheory), // 학습(이론/실습)
     ];
@@ -194,7 +221,8 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
           currentIndex: _currentIndex,
           onTap: (i) {
             setState(() => _currentIndex = i);
-            _refreshTodoBadge(); // ✅ 탭 전환 시 배지 동기화 (가벼운 호출)
+            _refreshTodoBadge(); // ✅ 탭 전환 시 TODO 배지 동기화 (가벼운 호출)
+            _refreshJournalBadge(); // ✅ 탭 전환 시 일지 배지도 동기화
             if (i == 2) {
               _refreshChatBadge(); // 채팅 탭 전환 시 배지도 동기화
             }
@@ -262,14 +290,11 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
                       right: -8,
                       top: -4,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
                           color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _journalPending > 99 ? '99+' : '$_journalPending',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                          shape: BoxShape.circle,
                         ),
                       ),
                     ),
@@ -284,14 +309,11 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
                       right: -6,
                       top: -4,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
                           color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          _journalPending > 99 ? '99+' : '$_journalPending',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                          shape: BoxShape.circle,
                         ),
                       ),
                     ),

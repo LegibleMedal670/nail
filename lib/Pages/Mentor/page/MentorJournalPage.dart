@@ -9,7 +9,13 @@ import 'package:nail/Pages/Mentor/page/MentorJournalHistoryPage.dart';
 
 class MentorJournalPage extends StatefulWidget {
   final bool embedded;
-  const MentorJournalPage({super.key, this.embedded = false});
+  /// 목록이 갱신되었을 때(확인/답장 등) 상위에서 배지를 다시 계산하기 위한 콜백
+  final Future<void> Function()? onPendingChanged;
+  const MentorJournalPage({
+    super.key,
+    this.embedded = false,
+    this.onPendingChanged,
+  });
 
   @override
   State<MentorJournalPage> createState() => _MentorJournalPageState();
@@ -35,13 +41,20 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
       _error = null;
     });
     try {
+      // 기본은 "오늘 일지"만 표시하도록 오늘 날짜로 한정
+      final today = DateTime.now();
       final rows = await SupabaseService.instance.mentorListDailyJournals(
-        date: null,
+        date: today,
         statusFilter: _statusFilter,
       );
       setState(() {
         _items = rows;
       });
+      // 목록이 갱신되었으므로, 상위(홈 스캐폴드)의 미응답 카운트도 다시 계산하도록 요청
+      if (widget.onPendingChanged != null) {
+        // fire-and-forget
+        widget.onPendingChanged!();
+      }
     } catch (e) {
       setState(() {
         _error = '$e';
@@ -115,7 +128,7 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
       ),
     );
     if (changed == true) {
-      _load();
+      _load(); // 상세에서 확인/답장 후 돌아오면 목록 및 배지 동기화
     }
   }
 
@@ -124,36 +137,36 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
     final content = RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-        children: [
-          Row(
-            children: [
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+      children: [
+        Row(
+          children: [
               _FilterChip(
                 selected: _statusFilter == 'pending',
                 label: '미응답 우선',
                 onTap: () => _setFilter('pending'),
               ),
-              const SizedBox(width: 8),
+            const SizedBox(width: 8),
               _FilterChip(
                 selected: _statusFilter == null,
                 label: '전체',
                 onTap: () => _setFilter(null),
               ),
-              const Spacer(),
-              IconButton(
-                tooltip: '검색(데모)',
-                onPressed: () {
+            const Spacer(),
+            IconButton(
+              tooltip: '검색(데모)',
+              onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('데모: 검색/필터는 후속 단계에서 구현됩니다.'),
                     ),
                   );
-                },
-                icon: const Icon(Icons.search_rounded, color: UiTokens.actionIcon),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+              },
+              icon: const Icon(Icons.search_rounded, color: UiTokens.actionIcon),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
           if (_loading && _items.isEmpty)
             const Padding(
               padding: EdgeInsets.only(top: 40),
@@ -176,8 +189,8 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
                     '$_error',
                     style: const TextStyle(color: Colors.redAccent, fontSize: 12),
                     textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
+        ),
+        const SizedBox(height: 8),
                   FilledButton(
                     onPressed: _load,
                     style: FilledButton.styleFrom(
@@ -442,8 +455,8 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
         return false;
       },
       child: Scaffold(
-        backgroundColor: Colors.white,
-        appBar: AppBar(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         title: Text(
@@ -453,10 +466,10 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
             fontWeight: FontWeight.w800,
           ),
         ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
             onPressed: () => Navigator.pop(context, _dirty),
-          ),
+        ),
         actions: [
           IconButton(
             tooltip: '멘티 히스토리(달력)',
@@ -473,8 +486,8 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
             },
           ),
         ],
-        ),
-        bottomNavigationBar: SafeArea(
+      ),
+      bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
           child: SizedBox(
@@ -484,7 +497,7 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
               style: FilledButton.styleFrom(
                 backgroundColor: UiTokens.primaryBlue,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12),
                 ),
               ),
               child: const Text('답장 작성', style: TextStyle(fontWeight: FontWeight.w800)),
@@ -524,7 +537,7 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
                   onConfirm: () => _confirmMessage(msgId),
                 );
               },
-            ),
+        ),
       ),
     );
   }
@@ -611,12 +624,12 @@ class _MentorJournalBubble extends StatelessWidget {
                     ? GestureDetector(
                         onTap: () => openGallery(0),
                         child: Container(
-                          width: 200,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                        width: 200,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
                             image: DecorationImage(
                               image: NetworkImage(photoUrls.first),
                               fit: BoxFit.cover,
@@ -632,11 +645,11 @@ class _MentorJournalBubble extends StatelessWidget {
                           (i) => GestureDetector(
                             onTap: () => openGallery(i),
                             child: Container(
-                              width: 70,
-                              height: 70,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(8),
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
                                   color: const Color(0xFFE2E8F0),
                                 ),
@@ -673,10 +686,10 @@ class _MentorJournalBubble extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(left: 10.0),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                         if (!mine && showConfirm && !confirmed)
-                          InkWell(
+                        InkWell(
                             onTap: onConfirm ??
                                 () {
                                   ScaffoldMessenger.of(context).showSnackBar(
@@ -684,40 +697,40 @@ class _MentorJournalBubble extends StatelessWidget {
                                       content: Text('데모: 확인 처리'),
                                     ),
                                   );
-                                },
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
+                          },
+                          borderRadius: BorderRadius.circular(20),
+                          child: Container(
                               padding:
                                   const EdgeInsets.fromLTRB(10, 5, 12, 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.6),
+                              borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: UiTokens.primaryBlue.withOpacity(0.3),
                                   width: 1,
                                 ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
                                   Icon(
                                     Icons.check_rounded,
                                     size: 14,
                                     color: UiTokens.primaryBlue,
                                   ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    '확인하기',
+                                SizedBox(width: 4),
+                                Text(
+                                  '확인하기',
                                     style: TextStyle(
                                       color: UiTokens.primaryBlue,
                                       fontWeight: FontWeight.w700,
                                       fontSize: 12,
                                     ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
+                        ),
                         // 내가 받은 최신 메시지인데 이미 확인한 경우
                         if (!mine && confirmed && showConfirm) ...[
                           const Icon(
@@ -742,7 +755,7 @@ class _MentorJournalBubble extends StatelessWidget {
                             size: 14,
                             color: Color(0xFF059669),
                           ),
-                          const SizedBox(width: 4),
+                        const SizedBox(width: 4),
                           const Text(
                             '확인됨',
                             style: TextStyle(
@@ -866,21 +879,15 @@ class _MentorJournalReplyPageState extends State<_MentorJournalReplyPage> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: _uploading ? null : _submit,
-            child: _uploading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text(
-                    '전송',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4),
+            child: FilledButton(
+              onPressed: _uploading ? null : _submit,
+              style: FilledButton.styleFrom(backgroundColor: UiTokens.primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              child: _uploading
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('전송', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
           ),
           const SizedBox(width: 8),
         ],
