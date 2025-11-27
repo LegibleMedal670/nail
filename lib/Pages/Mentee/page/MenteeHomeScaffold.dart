@@ -13,6 +13,7 @@ import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/ChatService.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Mentee/page/MenteeEducationPage.dart';
+import 'package:nail/Pages/Mentee/page/MenteeJournalPage.dart';
 
 class MenteeHomeScaffold extends StatefulWidget {
   const MenteeHomeScaffold({super.key});
@@ -27,6 +28,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   bool _initialized = false;      // 첫 진입 1회 처리 (모달 + 배지 로딩)
   int _todoNotDoneCount = 0;      // 미완료 TODO 카운트 배지
   int _chatUnread = 0;            // 채팅 미읽음 배지
+  int _journalPending = 0;        // 일일 일지(멘티): 미제출 시 1 표시
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
   // 탭 내 컨트롤을 위한 키/노티파이어
@@ -105,11 +107,12 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   Widget build(BuildContext context) {
     final pages = <Widget>[
       MyTodoView(key: _todoKey, embedded: true), // 투두
+      const MenteeJournalPage(embedded: true),   // 일일 일지
       const ChatRoomListPage(embedded: true),    // 채팅
-      MenteeEducationPage(embedded: true, isTheoryNotifier: _eduIsTheory), // 교육(이론/실습 토글)
+      MenteeEducationPage(embedded: true, isTheoryNotifier: _eduIsTheory), // 학습(이론/실습)
     ];
 
-    final titles = ['할 일 목록', '채팅', '학습'];
+    final titles = ['투두', '일일 일지', '채팅', '학습'];
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -136,6 +139,14 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
               tooltip: '새로고침',
               icon: const Icon(Icons.refresh_rounded, color: UiTokens.title),
               onPressed: () => _todoKey.currentState?.reload(),
+            ),
+          ] else if (_currentIndex == 1) ...[
+            IconButton(
+              tooltip: '히스토리(달력) - 데모',
+              icon: const Icon(Icons.calendar_month_rounded, color: UiTokens.title),
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 히스토리는 후속 단계에서 구현됩니다.')));
+              },
             ),
           ] else if (_currentIndex == 2) ...[
             Center(
@@ -177,7 +188,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
           onTap: (i) {
             setState(() => _currentIndex = i);
             _refreshTodoBadge(); // ✅ 탭 전환 시 배지 동기화 (가벼운 호출)
-            if (i == 1) {
+            if (i == 2) {
               _refreshChatBadge(); // 채팅 탭 전환 시 배지도 동기화
             }
           },
@@ -226,6 +237,53 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
                         ),
                         child: Text(
                           _todoNotDoneCount > 99 ? '99+' : '$_todoNotDoneCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            BottomNavigationBarItem(
+              label: '일일 일지',
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.menu_book_rounded),
+                  if (_journalPending > 0)
+                    Positioned(
+                      right: -8,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _journalPending > 99 ? '99+' : '$_journalPending',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              activeIcon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.menu_book_rounded),
+                  if (_journalPending > 0)
+                    Positioned(
+                      right: -6,
+                      top: -4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _journalPending > 99 ? '99+' : '$_journalPending',
                           style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
                         ),
                       ),

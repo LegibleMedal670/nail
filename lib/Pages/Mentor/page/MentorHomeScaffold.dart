@@ -4,6 +4,7 @@ import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsView.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
+import 'package:nail/Pages/Mentor/page/MentorJournalPage.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
@@ -29,6 +30,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
   // 채팅 배지
   int _chatUnread = 0;
   int _todoNotDoneCount = 0;
+  int _journalPendingCount = 0; // 일일 일지(멘토) 미응답 배지
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
   // 탭 컨트롤용 키
@@ -94,15 +96,16 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     final up = context.watch<UserProvider>();
     final loginKey = up.current?.loginKey ?? '';
 
-    // 페이지 구성: 받은TODO / TODO 현황 / 채팅 / 대시보드
+    // 페이지 구성: 받은TODO / TODO 현황 / 일일 일지 / 채팅 / 대시보드
     final pages = <Widget>[
       MyTodoView(key: _todoKey, embedded: true),
       MentorTodoGroupsView(key: _groupsKey, embedded: true),
+      const MentorJournalPage(embedded: true),
       const ChatRoomListPage(embedded: true),
       const MentorDashboardBody(),
     ];
 
-    final titles = ['받은TODO', 'TODO 현황', '채팅', '대시보드'];
+    final titles = ['받은TODO', 'TODO 현황', '일일 일지', '채팅', '대시보드'];
 
     // 스캐폴드 전체를 MentorProvider로 감싸 AppBar/탭/라우팅 전역에서 접근 가능하게 함
     return ChangeNotifierProvider(
@@ -208,7 +211,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
         currentIndex: _currentIndex,
         onTap: (i) {
           setState(() => _currentIndex = i);
-          if (i == 2) {
+          if (i == 3) {
             _refreshChatBadge();
           }
         },
@@ -224,6 +227,53 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
           const BottomNavigationBarItem(
             icon: Icon(Icons.fact_check_outlined),
             label: 'TODO 현황',
+          ),
+          BottomNavigationBarItem(
+            label: '일일 일지',
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.menu_book_rounded),
+                if (_journalPendingCount > 0)
+                  Positioned(
+                    right: -8,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _journalPendingCount > 99 ? '99+' : '$_journalPendingCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            activeIcon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.menu_book_rounded),
+                if (_journalPendingCount > 0)
+                  Positioned(
+                    right: -6,
+                    top: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        _journalPendingCount > 99 ? '99+' : '$_journalPendingCount',
+                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
           BottomNavigationBarItem(
             label: '채팅',
