@@ -29,11 +29,13 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
 
   /// null = 전체, 'pending' = 미응답만
   String? _statusFilter;
+  RealtimeChannel? _listRt;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _bindRealtime();
   }
 
   Future<void> _load() async {
@@ -66,6 +68,35 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
         });
       }
     }
+  }
+
+  void _bindRealtime() {
+    _listRt?.unsubscribe();
+    final sb = Supabase.instance.client;
+    final channelName = 'mentor_journal_list_${DateTime.now().microsecondsSinceEpoch}';
+    final ch = sb.channel(channelName);
+
+    void handler(PostgresChangePayload payload) {
+      // 일지 메시지에 변화가 생기면 목록/배지를 다시 계산
+      _load();
+    }
+
+    ch
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.insert,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'daily_journal_messages',
+        callback: handler,
+      )
+      ..subscribe();
+
+    _listRt = ch;
   }
 
   void _setFilter(String? status) {
@@ -257,6 +288,7 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
     return Scaffold(backgroundColor: Colors.white, body: content);
   }
 }
+
 
 class _FilterChip extends StatelessWidget {
   final bool selected;
