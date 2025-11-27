@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
+import 'package:nail/Pages/Mentee/page/MenteeJournalHistoryPage.dart';
 
 import 'package:nail/Pages/Mentee/page/MenteeJournalSubmitPage.dart';
 
@@ -168,10 +169,12 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
         title: const Text('일일 일지', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
         actions: [
           IconButton(
-            tooltip: '히스토리(달력) - 데모',
+            tooltip: '히스토리(달력)',
             icon: const Icon(Icons.calendar_month_rounded, color: UiTokens.title),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('데모: 히스토리는 후속 단계에서 구현됩니다.')));
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MenteeJournalHistoryPage()),
+              );
             },
           ),
         ],

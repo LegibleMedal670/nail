@@ -973,6 +973,24 @@ class SupabaseService {
 
   /// [멘티] 오늘 제출 여부 확인 (배지용)
 
+  /// [멘티] 월별 일지 목록 (히스토리/달력용)
+  /// - from, to는 YYYY-MM-DD 기준 (보통 한 달 범위)
+  /// - 반환: [{ journal_id, date, status }, ...]
+  Future<List<Map<String, dynamic>>> menteeListJournalsByMonth({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing');
+    }
+    return _rpcList('mentee_list_journals_by_month', {
+      'p_login_key': key,
+      'p_from': from.toIso8601String().substring(0, 10),
+      'p_to': to.toIso8601String().substring(0, 10),
+    });
+  }
+
   /// [공통] 일지 사진 업로드 (단건) -> Storage Path 반환
   Future<String> uploadJournalPhoto(File file) async {
     final now = DateTime.now();
