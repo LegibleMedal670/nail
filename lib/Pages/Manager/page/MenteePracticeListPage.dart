@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/MenteeBrief.dart';
 import 'package:nail/Pages/Manager/models/PracticeAttempt.dart';
+import 'package:nail/Pages/Manager/widgets/UnassignMenteeConfirmModal.dart';
 import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:nail/Services/StorageService.dart'; // ★ 키 → 서명 URL
 import 'package:provider/provider.dart';
@@ -146,44 +147,11 @@ class _MenteePracticeListPageState extends State<MenteePracticeListPage> {
             tooltip: '배정 해제',
             icon: const Icon(Icons.link_off_rounded, color: UiTokens.actionIcon),
             onPressed: () async {
-              // 멘티 배정 해제 확인 다이얼로그
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) {
-                  return AlertDialog(
-                    title: const Text(
-                      '멘티 배정 해제',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: UiTokens.title,
-                      ),
-                    ),
-                    content: Text(
-                      '현재 멘토와 ${m.name}님의 배정을 해제할까요?\n\n'
-                      '실습 기록 자체는 유지되지만, 이 멘토의 담당 멘티 목록에서는 제거됩니다.',
-                      style: const TextStyle(color: UiTokens.title),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                        child: const Text('취소'),
-                      ),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: UiTokens.primaryBlue,
-                        ),
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                        child: const Text(
-                          '배정 해제',
-                          style: TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+              final ok = await showUnassignMenteeConfirmDialog(
+                context,
+                menteeName: m.name,
               );
-
-              if (ok != true) return;
+              if (!ok) return;
 
               try {
                 // 상위에서 실제 RPC 호출 및 목록 갱신
