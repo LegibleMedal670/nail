@@ -145,9 +145,75 @@ class _MenteePracticeListPageState extends State<MenteePracticeListPage> {
           IconButton(
             tooltip: '배정 해제',
             icon: const Icon(Icons.link_off_rounded, color: UiTokens.actionIcon),
-            onPressed: () {
-              // 디버그 로그 확인용
-              if (_error != null) debugPrint(_error);
+            onPressed: () async {
+              // 멘티 배정 해제 확인 다이얼로그
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (ctx) {
+                  return AlertDialog(
+                    title: const Text(
+                      '멘티 배정 해제',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: UiTokens.title,
+                      ),
+                    ),
+                    content: Text(
+                      '현재 멘토와 ${m.name}님의 배정을 해제할까요?\n\n'
+                      '실습 기록 자체는 유지되지만, 이 멘토의 담당 멘티 목록에서는 제거됩니다.',
+                      style: const TextStyle(color: UiTokens.title),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(false),
+                        child: const Text('취소'),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: UiTokens.primaryBlue,
+                        ),
+                        onPressed: () => Navigator.of(ctx).pop(true),
+                        child: const Text(
+                          '배정 해제',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              );
+
+              if (ok != true) return;
+
+              try {
+                // 상위에서 실제 RPC 호출 및 목록 갱신
+                final success = await widget.onUnassign();
+                if (!mounted) return;
+
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${m.name}님이 이 멘토에서 배정 해제되었습니다.',
+                      ),
+                    ),
+                  );
+                  Navigator.of(context).pop(); // 멘티 실습 목록 페이지 닫기
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('배정 해제에 실패했습니다.'),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('배정 해제 중 오류가 발생했습니다: $e'),
+                  ),
+                );
+              }
             },
           ),
         ],
