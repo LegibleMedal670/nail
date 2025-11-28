@@ -172,28 +172,16 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
       children: [
         Row(
           children: [
-              _FilterChip(
-                selected: _statusFilter == 'pending',
-                label: '미응답 우선',
-                onTap: () => _setFilter('pending'),
-              ),
+            _FilterChip(
+              selected: _statusFilter == 'pending',
+              label: '미응답 우선',
+              onTap: () => _setFilter('pending'),
+            ),
             const SizedBox(width: 8),
-              _FilterChip(
-                selected: _statusFilter == null,
-                label: '전체',
-                onTap: () => _setFilter(null),
-              ),
-            const Spacer(),
-            IconButton(
-              tooltip: '검색(데모)',
-              onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('데모: 검색/필터는 후속 단계에서 구현됩니다.'),
-                    ),
-                  );
-              },
-              icon: const Icon(Icons.search_rounded, color: UiTokens.actionIcon),
+            _FilterChip(
+              selected: _statusFilter == null,
+              label: '전체',
+              onTap: () => _setFilter(null),
             ),
           ],
         ),
@@ -263,12 +251,17 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
                 Builder(
                   builder: (context) {
                     final r = _items[i];
-                    final menteeName = (r['mentee_name'] ?? '멘티').toString();
+                    final menteeName =
+                        (r['mentee_name'] ?? '멘티').toString();
                     final status = (r['status'] ?? 'pending').toString();
-                    final submittedAt = _formatSubmittedAt(
-                      r['last_message_at'],
-                      r['date'],
-                    );
+
+                    // 미제출 상태면 제출 시각은 '—'로 표기
+                    final String submittedAt = status == 'not_submitted'
+                        ? '—'
+                        : _formatSubmittedAt(
+                            r['last_message_at'],
+                            r['date'],
+                          );
                     return _JournalListTile(
                       menteeName: menteeName,
                       submittedAt: submittedAt,
@@ -318,7 +311,7 @@ class _FilterChip extends StatelessWidget {
 class _JournalListTile extends StatelessWidget {
   final String menteeName;
   final String submittedAt;
-  final String status; // 'pending' | 'replied' | 'completed'
+  final String status; // 'pending' | 'replied' | 'completed' | 'not_submitted'
   final VoidCallback onTap;
   const _JournalListTile({
     required this.menteeName,
@@ -330,11 +323,24 @@ class _JournalListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool pending = status == 'pending';
-    final Color chipColor = pending
-        ? const Color(0xFFEA580C)
-        : (status == 'replied' ? const Color(0xFF059669) : const Color(0xFF64748B));
-    final String chipText =
-        pending ? '미응답' : (status == 'replied' ? '응답완료' : '완료');
+    final bool notSubmitted = status == 'not_submitted';
+
+    late final Color chipColor;
+    late final String chipText;
+
+    if (notSubmitted) {
+      chipColor = const Color(0xFF94A3B8); // 슬레이트 톤
+      chipText = '미제출';
+    } else if (pending) {
+      chipColor = const Color(0xFFEA580C); // 주황
+      chipText = '미응답';
+    } else if (status == 'replied') {
+      chipColor = const Color(0xFF059669); // 초록
+      chipText = '응답완료';
+    } else {
+      chipColor = const Color(0xFF64748B); // 기본 회색
+      chipText = '완료';
+    }
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
