@@ -262,11 +262,12 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
                             r['last_message_at'],
                             r['date'],
                           );
+                    final isNotSubmitted = status == 'not_submitted';
                     return _JournalListTile(
                       menteeName: menteeName,
                       submittedAt: submittedAt,
                       status: status,
-                      onTap: () => _openDetail(r),
+                      onTap: isNotSubmitted ? null : () => _openDetail(r),
                     );
                   },
                 ),
@@ -312,7 +313,7 @@ class _JournalListTile extends StatelessWidget {
   final String menteeName;
   final String submittedAt;
   final String status; // 'pending' | 'replied' | 'completed' | 'not_submitted'
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   const _JournalListTile({
     required this.menteeName,
     required this.submittedAt,
@@ -342,7 +343,7 @@ class _JournalListTile extends StatelessWidget {
       chipText = '완료';
     }
     return InkWell(
-      onTap: onTap,
+      onTap: onTap, // 미제출이면 null → 탭해도 아무 동작 없음
       borderRadius: BorderRadius.circular(14),
       child: Container(
         decoration: BoxDecoration(
