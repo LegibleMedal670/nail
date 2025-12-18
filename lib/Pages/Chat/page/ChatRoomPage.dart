@@ -378,6 +378,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (key.isEmpty) return;
     final file = File(localPath);
     if (!await file.exists()) return;
+    if (!mounted) return;
     final int size = await file.length();
     final String name = _basename(localPath);
     final String mime = _guessImageMime(localPath);
@@ -390,6 +391,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         kind: 'images',
         contentType: mime,
       );
+      if (!mounted) return;
       await _svc.sendFile(
         loginKey: key,
         roomId: widget.roomId,
@@ -400,13 +402,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         kind: 'image',
         meta: {'client_ts': DateTime.now().toIso8601String()},
       );
+      if (!mounted) return;
       await _reloadLatestWindow();
+      if (!mounted) return;
       setState(() {
         _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.image);
       });
       await _markRead();
-    } finally {
-      // no-op
+    } catch (e) {
+      debugPrint('sendImage error: $e');
     }
   }
 
@@ -415,6 +419,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (key.isEmpty) return;
     final file = File(localPath);
     if (!await file.exists()) return;
+    if (!mounted) return;
     final int size = fileBytes > 0 ? fileBytes : await file.length();
     final String name = (fileName.isNotEmpty) ? fileName : _basename(localPath);
     final String mime = _guessFileMime(name);
@@ -426,6 +431,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         kind: 'files',
         contentType: mime,
       );
+      if (!mounted) return;
       await _svc.sendFile(
         loginKey: key,
         roomId: widget.roomId,
@@ -436,13 +442,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         kind: 'file',
         meta: {'client_ts': DateTime.now().toIso8601String()},
       );
+      if (!mounted) return;
       await _reloadLatestWindow();
+      if (!mounted) return;
       setState(() {
         _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.file);
       });
       await _markRead();
-    } finally {
-      // no-op
+    } catch (e) {
+      debugPrint('sendFile error: $e');
     }
   }
 
@@ -486,9 +494,18 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       final list = _applyFileCache(rows.map(_mapRowToMsg(my)).toList());
 
       setState(() {
+        // ✅ 버그 수정: 전송중인 임시 버블은 유지 (단, 서버에서 같은 타입의 메시지를 받았으면 제외)
+        final tempMessages = _messages.where((m) => m.sendStatus == _SendStatus.sending).toList();
+        final serverTypes = list.map((m) => m.type).toSet();
+        // 서버에서 같은 타입의 진짜 메시지를 받았으면 해당 임시 버블은 복원 안 함
+        final tempToRestore = tempMessages.where((t) => !serverTypes.contains(t.type)).toList();
+        
         _messages
           ..clear()
-          ..addAll(list);
+          ..addAll(list)
+          ..addAll(tempToRestore);  // 중복 안 되는 임시 버블만 복원
+        _messages.sort((a, b) => a.id.compareTo(b.id));
+        
         _oldestId = list.isNotEmpty ? list.first.id : null;
         _latestId = list.isNotEmpty ? list.last.id : null;
         _hasMore = list.length >= 50;
@@ -512,12 +529,23 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     final key = _loginKey();
     if (key.isEmpty) return;
 
-    final rows = await _svc.fetchMessages(
-      loginKey: key,
-      roomId: widget.roomId,
-      afterId: (_latestId! - 200),
-      limit: 200,
-    );
+    // 조회 범위: (_latestId - 200) 이후의 메시지
+    final queryAfterId = _latestId! - 200;
+    
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await _svc.fetchMessages(
+        loginKey: key,
+        roomId: widget.roomId,
+        afterId: queryAfterId,
+        limit: 200,
+      );
+    } catch (e) {
+      // 네트워크 에러 시 메시지 삭제 로직 실행 안 함 (기존 상태 유지)
+      debugPrint('fetchMessages error: $e');
+      return;
+    }
+    
     if (!mounted) return;
     rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
     final my = _myUid();
@@ -526,16 +554,44 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         (r['id'] as num).toInt(): _applyFileCache([_mapRowToMsg(my)(r)]).first
     };
 
+    // 서버에서 받은 메시지 ID 집합
+    final serverIds = patch.keys.toSet();
+    
+    // 서버 조회가 성공했을 때만 삭제 로직 실행
+    // (빈 결과도 정상 응답이므로 삭제된 메시지 정리)
+    if (!mounted) return;
     setState(() {
+      // ✅ 버그 수정: 조회 범위 내에서 서버에 없는 메시지는 삭제된 것 → 제거
+      // (단, 임시 전송중인 메시지는 유지)
+      _messages.removeWhere((m) {
+        // 전송중인 임시 메시지는 유지
+        if (m.sendStatus == _SendStatus.sending) return false;
+        // 조회 범위 밖의 메시지는 건드리지 않음
+        if (m.id <= queryAfterId) return false;
+        // 조회 범위 내인데 서버에 없으면 삭제됨 → 제거
+        return !serverIds.contains(m.id);
+      });
+
+      // 기존 메시지 업데이트
       for (int i = 0; i < _messages.length; i++) {
         final id = _messages[i].id;
         if (patch.containsKey(id)) _messages[i] = patch[id]!;
       }
+      // 새 메시지 추가
       for (final e in patch.entries) {
         if (!_messages.any((m) => m.id == e.key)) _messages.add(e.value);
       }
       _messages.sort((a, b) => a.id.compareTo(b.id));
-      _latestId = _messages.isNotEmpty ? _messages.last.id : _latestId;
+      
+      // ✅ 버그 수정: 모든 메시지가 삭제되었으면 ID 초기화
+      final realMessages = _messages.where((m) => m.sendStatus != _SendStatus.sending);
+      if (realMessages.isEmpty) {
+        _latestId = null;
+        _oldestId = null;
+      } else {
+        _latestId = realMessages.last.id;
+        _oldestId = realMessages.first.id;
+      }
     });
   }
 
@@ -617,7 +673,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         text: text,
         meta: {'client_ts': DateTime.now().toIso8601String()},
       );
+      if (!mounted) return;
       await _reloadLatestWindow();
+      if (!mounted) return;
       setState(() {
         _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.text);
       });
@@ -640,12 +698,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         final f = File(pth);
         if (await f.exists()) files.add(f);
       }
+      if (!mounted) return;
       final storagePaths = await _storage.uploadChatFilesBatch(
         files: files,
         roomId: widget.roomId,
         kind: 'images',
         contentTypeResolver: (f) => _guessImageMime(f.path),
       );
+      if (!mounted) return;
       final filesMeta = <Map<String, dynamic>>[];
       for (int i = 0; i < files.length; i++) {
         final f = files[i];
@@ -665,13 +725,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         files: filesMeta,
         meta: {'client_ts': DateTime.now().toIso8601String()},
       );
+      if (!mounted) return;
       await _reloadLatestWindow();
+      if (!mounted) return;
       setState(() {
         _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.imageGroup);
       });
       await _markRead();
-    } finally {
-      // no-op
+    } catch (e) {
+      debugPrint('sendImagesGroup error: $e');
     }
   }
 

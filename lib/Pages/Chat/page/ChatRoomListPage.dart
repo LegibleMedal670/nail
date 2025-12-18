@@ -93,15 +93,16 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
         final lastKind = (m['last_kind'] ?? '').toString();
         final unread = int.tryParse((m['unread'] ?? '0').toString()) ?? 0;
 
-        // last_at이 null일 수 있으므로 updatedAt은 last_at fallback now
+        // last_at 파싱 (서버에서 COALESCE로 항상 값이 내려옴)
         DateTime updatedAt;
         final lastAtRaw = m['last_at'];
         if (lastAtRaw is String && lastAtRaw.isNotEmpty) {
-          updatedAt = DateTime.tryParse(lastAtRaw) ?? DateTime.now();
+          updatedAt = DateTime.tryParse(lastAtRaw) ?? DateTime(2000, 1, 1);
         } else if (lastAtRaw is DateTime) {
           updatedAt = lastAtRaw;
         } else {
-          updatedAt = DateTime.now();
+          // 서버에서 항상 값이 오지만, 만약의 경우 과거 날짜로 폴백 (최하단으로)
+          updatedAt = DateTime(2000, 1, 1);
         }
 
         return _RoomItem(
@@ -114,8 +115,8 @@ class _ChatRoomListPageState extends State<ChatRoomListPage> {
         );
       }).toList();
 
-      // 최신순 정렬(서버가 이미 정렬하지만 방어로 한 번 더)
-      mapped.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+      // 서버에서 이미 정렬해서 내려주므로 클라이언트 재정렬 제거
+      // (서버 정렬 순서 그대로 사용)
 
       setState(() {
         _rooms = mapped;
