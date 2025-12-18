@@ -1310,7 +1310,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     final List<_RowItem> out = [];
     DateTime? lastDay;
     for (final m in src) {
-      final day = DateTime(m.createdAt.year, m.createdAt.month, m.createdAt.day);
+      // UTC → Local 변환 후 날짜 비교 (시간대 버그 수정)
+      final local = m.createdAt.toLocal();
+      final day = DateTime(local.year, local.month, local.day);
       if (lastDay == null || day.difference(lastDay).inDays != 0) {
         out.add(_RowItem.separator(day));
         lastDay = day;
