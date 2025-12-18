@@ -1,7 +1,6 @@
 // lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
-import 'package:nail/Pages/Common/widgets/MyTodoModal.dart';
 import 'package:nail/Pages/Mentor/page/MentorMenteeDetailPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
@@ -65,10 +64,7 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
     if (_initialized || !mounted) return;
     _initialized = true;
 
-    // 1) 로그인 직후 미확인 활성 TODO 있으면 리스트형 모달 강제 노출
-    await showMyTodosModalIfNeeded(context);
-
-    // 2) 배지용 "완료하지 않은 TODO" 카운트 1회 로딩
+    // 배지용 "완료하지 않은 TODO" 카운트 1회 로딩
     await _refreshTodoBadge();
   }
 

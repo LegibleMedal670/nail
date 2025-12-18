@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
-import 'package:nail/Pages/Common/widgets/MyTodoModal.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/TodoService.dart';
 import 'package:provider/provider.dart';
@@ -54,13 +53,10 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
     if (_initialized || !mounted) return;
     _initialized = true;
 
-    // 1) 로그인 직후 미확인 활성 TODO 모달 강제 노출
-    await showMyTodosModalIfNeeded(context);
-
-    // 2) 배지용 "미완료 TODO" 카운트 1회 로딩
+    // 배지용 "미완료 TODO" 카운트 1회 로딩
     await _refreshTodoBadge();
 
-    // 3) 배지용 "오늘 일지 제출 여부" 1회 로딩
+    // 배지용 "오늘 일지 제출 여부" 1회 로딩
     await _refreshJournalBadge();
   }
 

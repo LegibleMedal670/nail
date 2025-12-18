@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/page/MyTodoDetailPage.dart';
 import 'package:nail/Services/TodoService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -169,119 +170,129 @@ class MyTodoViewState extends State<MyTodoView> {
                       ? const _Empty(message: '표시할 항목이 없습니다.')
                       : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
-                        itemBuilder: (_, i) {
-                          final m = _items[i];
-                          final title = (m['title'] ?? '').toString();
-                          final desc = (m['description'] ?? '').toString();
-                          final role =
-                              (m['created_by_role'] ?? 'admin')
-                                  .toString(); // 'admin'|'mentor'
-                          final audience =
-                              (m['audience'] ?? 'mentee').toString();
-                          final bool done = m['done_at'] != null;
-                          final bool acked = m['ack_at'] != null;
+                    itemBuilder: (_, i) {
+                      final m = _items[i];
+                      final title = (m['title'] ?? '').toString();
+                      // final desc = (m['description'] ?? '').toString(); // 필요 시 사용
+                      final role = (m['created_by_role'] ?? 'admin').toString();
+                      final audience = (m['audience'] ?? 'mentee').toString();
+                      final bool done = m['done_at'] != null;
+                      final bool acked = m['ack_at'] != null;
 
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: UiTokens.cardBorder),
-                              borderRadius: BorderRadius.circular(14),
-                              boxShadow: [UiTokens.cardShadow],
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      _RoleBadge(role: role),
-                                      const SizedBox(width: 8),
-                                      _AudienceChip(audience: audience),
-                                      const Spacer(),
-                                      if (done)
-                                        const _StateBadge(
-                                          label: '완료',
-                                          color: Color(0xFF059669),
-                                          bg: Color(0xFFECFDF5),
-                                          border: Color(0xFFA7F3D0),
-                                        )
-                                      else if (acked)
-                                        const _StateBadge(
-                                          label: '확인',
-                                          color: Color(0xFF2563EB),
-                                          bg: Color(0xFFEFF6FF),
-                                          border: Color(0xFFBFDBFE),
-                                        )
-                                      else
-                                        const _StateBadge(
-                                          label: '미확인',
-                                          color: Color(0xFFB45309),
-                                          bg: Color(0xFFFFFBEB),
-                                          border: Color(0xFFFEF3C7),
-                                        ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    title,
-                                    style: const TextStyle(
-                                      color: UiTokens.title,
-                                      fontWeight: FontWeight.w900,
-                                      fontSize: 16,
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: UiTokens.cardBorder),
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [UiTokens.cardShadow],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16), // 패딩을 조금 더 넉넉하게 조정 (12 -> 16)
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.end, // 버튼과 텍스트 영역 수직 중앙 정렬
+                            children: [
+                              // [좌측 영역] 배지들 + 제목
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // 1. 배지 Row (순서 변경: 상태 -> 역할 -> 대상)
+                                    Row(
+                                      children: [
+                                        _RoleBadge(role: role),
+
+                                        const SizedBox(width: 8),
+
+                                        if (done)
+                                          const _StateBadge(
+                                            label: '완료',
+                                            color: Color(0xFF059669),
+                                            bg: Color(0xFFECFDF5),
+                                            border: Color(0xFFA7F3D0),
+                                          )
+                                        else if (acked)
+                                          const _StateBadge(
+                                            label: '확인',
+                                            color: Color(0xFF2563EB),
+                                            bg: Color(0xFFEFF6FF),
+                                            border: Color(0xFFBFDBFE),
+                                          )
+                                        else
+                                          const _StateBadge(
+                                            label: '미확인',
+                                            color: Color(0xFFB45309),
+                                            bg: Color(0xFFFFFBEB),
+                                            border: Color(0xFFFEF3C7),
+                                          ),
+
+                                      ],
                                     ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  if (desc.isNotEmpty)
+
+                                    const SizedBox(height: 12),
+
+                                    // 2. 제목 (2줄 제한 + 말줄임표)
                                     Text(
-                                      desc,
-                                      style: TextStyle(
-                                        color: UiTokens.title.withOpacity(
-                                          0.75,
-                                        ),
-                                        fontWeight: FontWeight.w700,
+                                      title,
+                                      maxLines: 2, // 최대 2줄
+                                      overflow: TextOverflow.ellipsis, // 말줄임표 (...)
+                                      style: const TextStyle(
+                                        color: UiTokens.title,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        height: 1.3, // 줄간격 살짝 조정
                                       ),
                                     ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton(
-                                          onPressed:
-                                              acked ? null : () => _ackNow(m),
-                                          child: const Text(
-                                            '확인',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: FilledButton(
-                                          onPressed: () => _toggleDone(m),
-                                          style: FilledButton.styleFrom(
-                                            backgroundColor:
-                                                done
-                                                    ? const Color(0xFF64748B)
-                                                    : UiTokens.primaryBlue,
-                                          ),
-                                          child: Text(
-                                            done ? '완료 해제' : '완료',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          );
-                        },
+
+                              const SizedBox(width: 16), // 텍스트와 버튼 사이 간격
+
+                              // [우측 영역] 자세히 보기 버튼
+                              OutlinedButton(
+                                onPressed: () async {
+                                  // 미확인 상태라면 확인 처리 먼저 수행
+                                  if (m['ack_at'] == null) {
+                                    await _ackNow(m);
+                                  }
+                                  if (!mounted) return;
+                                  
+                                  // 상세 페이지로 이동
+                                  final result = await Navigator.push<Map<String, dynamic>>(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => MyTodoDetailPage(todoData: m),
+                                    ),
+                                  );
+                                  // 상세 페이지에서 돌아오면 목록 새로고침
+                                  if (mounted) {
+                                    _load();
+                                  }
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  side: const BorderSide(color: UiTokens.primaryBlue),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  foregroundColor: Colors.white,
+                                  backgroundColor: UiTokens.primaryBlue,
+                                  minimumSize: Size.zero, // 버튼 내부 여백을 줄이기 위해
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text(
+                                  '자세히 보기',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                         separatorBuilder:
                             (_, __) => const SizedBox(height: 10),
                         itemCount: _items.length,
@@ -515,14 +526,11 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 60),
-        child: Text(
-          message,
-          style: TextStyle(
-            color: UiTokens.title.withOpacity(0.6),
-            fontWeight: FontWeight.w700,
-          ),
+      child: Text(
+        message,
+        style: TextStyle(
+          color: UiTokens.title.withOpacity(0.6),
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
