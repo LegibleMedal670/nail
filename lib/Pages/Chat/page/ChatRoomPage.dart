@@ -8,6 +8,7 @@ import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomInfoPage.dart';
@@ -435,6 +436,66 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     });
     
     await _jumpToMessage(_searchResultIds[_currentSearchIndex]);
+  }
+  
+  /// 날짜 선택 바텀시트 표시
+  Future<void> _showDatePicker() async {
+    final now = DateTime.now();
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    
+    // 메시지가 있는 날짜 목록 조회
+    Set<DateTime> availableDates = {};
+    try {
+      availableDates = await _svc.getMessageDates(
+        loginKey: key,
+        roomId: widget.roomId,
+      );
+    } catch (e) {
+      debugPrint('Get message dates error: $e');
+    }
+    
+    if (!mounted) return;
+    
+    final picked = await showModalBottomSheet<DateTime>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _DatePickerSheet(
+        initialDate: now,
+        firstDate: DateTime(2020, 1, 1),
+        lastDate: now,
+        availableDates: availableDates,
+      ),
+    );
+    
+    if (picked == null || !mounted) return;
+    
+    await _jumpToDate(picked);
+  }
+  
+  /// 선택한 날짜의 첫 메시지로 점프
+  Future<void> _jumpToDate(DateTime date) async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    
+    try {
+      final messageId = await _svc.findFirstMessageByDate(
+        loginKey: key,
+        roomId: widget.roomId,
+        date: date,
+      );
+      
+      if (!mounted) return;
+      if (messageId == null) return; // 대화 있는 날짜만 선택 가능하므로 발생하지 않음
+      
+      await _jumpToMessage(messageId);
+    } catch (e) {
+      debugPrint('Jump to date error: $e');
+    }
   }
   
   /// 특정 메시지로 점프
@@ -1426,7 +1487,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     final totalDisplay = _searchResultIds.length;
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: Colors.grey[200]!)),
@@ -1435,6 +1496,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         top: false,
         child: Row(
           children: [
+            // 좌측: 달력 버튼
+            IconButton(
+              icon: const Icon(Icons.calendar_month_outlined),
+              color: UiTokens.title,
+              onPressed: _showDatePicker,
+              tooltip: '날짜로 이동',
+            ),
             // 중앙: 결과 카운터 또는 "검색 결과 없음"
             Expanded(
               child: Center(
@@ -2146,6 +2214,180 @@ class ChatDaySeparator extends StatelessWidget {
           ),
           const Expanded(child: SizedBox.shrink()),
         ],
+      ),
+    );
+  }
+}
+
+// ========== 커스텀 날짜 선택 바텀시트 ==========
+class _DatePickerSheet extends StatefulWidget {
+  final DateTime initialDate;
+  final DateTime firstDate;
+  final DateTime lastDate;
+  final Set<DateTime> availableDates; // 대화가 있는 날짜만
+
+  const _DatePickerSheet({
+    required this.initialDate,
+    required this.firstDate,
+    required this.lastDate,
+    required this.availableDates,
+  });
+
+  @override
+  State<_DatePickerSheet> createState() => _DatePickerSheetState();
+}
+
+class _DatePickerSheetState extends State<_DatePickerSheet> {
+  late DateTime _focusedDay;
+  DateTime? _selectedDay;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusedDay = widget.initialDate;
+  }
+  
+  /// 해당 날짜에 대화가 있는지 확인
+  bool _hasMessages(DateTime day) {
+    final normalized = DateTime(day.year, day.month, day.day);
+    return widget.availableDates.contains(normalized);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // 상단 핸들
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // 달력
+            TableCalendar(
+              firstDay: widget.firstDate,
+              lastDay: widget.lastDate,
+              focusedDay: _focusedDay,
+              selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+              onDaySelected: (selectedDay, focusedDay) {
+                // 대화가 없는 날짜는 선택 불가
+                if (!_hasMessages(selectedDay)) return;
+                
+                setState(() {
+                  _selectedDay = selectedDay;
+                  _focusedDay = focusedDay;
+                });
+                
+                // 선택 후 바로 닫기
+                Navigator.of(context).pop(selectedDay);
+              },
+              onPageChanged: (focusedDay) {
+                _focusedDay = focusedDay;
+              },
+              locale: 'ko_KR',
+              startingDayOfWeek: StartingDayOfWeek.sunday,
+              headerStyle: HeaderStyle(
+                formatButtonVisible: false,
+                titleCentered: true,
+                titleTextStyle: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: UiTokens.title,
+                ),
+                leftChevronIcon: const Icon(Icons.chevron_left, color: UiTokens.title),
+                rightChevronIcon: const Icon(Icons.chevron_right, color: UiTokens.title),
+                headerPadding: const EdgeInsets.symmetric(vertical: 8),
+              ),
+              daysOfWeekStyle: DaysOfWeekStyle(
+                weekdayStyle: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600],
+                ),
+                weekendStyle: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[400],
+                ),
+              ),
+              calendarStyle: CalendarStyle(
+                // 오늘 (대화가 있는 경우)
+                todayDecoration: BoxDecoration(
+                  color: _hasMessages(DateTime.now()) 
+                      ? UiTokens.primaryBlue.withOpacity(0.15)
+                      : Colors.transparent,
+                  shape: BoxShape.circle,
+                ),
+                todayTextStyle: TextStyle(
+                  color: _hasMessages(DateTime.now()) 
+                      ? UiTokens.primaryBlue 
+                      : Colors.grey[300],
+                  fontWeight: FontWeight.w700,
+                ),
+                // 선택된 날짜
+                selectedDecoration: const BoxDecoration(
+                  color: UiTokens.primaryBlue,
+                  shape: BoxShape.circle,
+                ),
+                selectedTextStyle: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+                // 기본 날짜
+                defaultTextStyle: const TextStyle(
+                  color: UiTokens.title,
+                  fontWeight: FontWeight.w500,
+                ),
+                // 주말
+                weekendTextStyle: TextStyle(
+                  color: Colors.grey[400],
+                  fontWeight: FontWeight.w500,
+                ),
+                // 범위 밖 날짜 (대화 없음)
+                disabledTextStyle: TextStyle(
+                  color: Colors.grey[300],
+                  fontWeight: FontWeight.w400,
+                ),
+                // 외부 날짜 (다른 달)
+                outsideTextStyle: TextStyle(
+                  color: Colors.grey[300],
+                  fontWeight: FontWeight.w400,
+                ),
+                outsideDaysVisible: true,
+                cellMargin: const EdgeInsets.all(4),
+              ),
+              // 대화가 있는 날짜만 선택 가능
+              enabledDayPredicate: (day) => _hasMessages(day),
+              // 대화가 있는 날짜에 마커 표시
+              calendarBuilders: CalendarBuilders(
+                markerBuilder: (context, day, events) {
+                  if (_hasMessages(day) && !isSameDay(_selectedDay, day)) {
+                    return Positioned(
+                      bottom: 4,
+                      child: Container(
+                        width: 5,
+                        height: 5,
+                        decoration: const BoxDecoration(
+                          color: UiTokens.primaryBlue,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    );
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

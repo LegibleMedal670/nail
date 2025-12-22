@@ -378,6 +378,46 @@ class ChatService {
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
+  /// 특정 날짜의 첫 메시지 ID 조회
+  Future<int?> findFirstMessageByDate({
+    required String loginKey,
+    required String roomId,
+    required DateTime date,
+  }) async {
+    final res = await _sb.rpc('rpc_find_first_message_by_date', params: {
+      'p_login_key': loginKey,
+      'p_room_id': roomId,
+      'p_date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+    });
+    if (res == null) return null;
+    if (res is num) return res.toInt();
+    return null;
+  }
+
+  /// 채팅방의 메시지가 있는 날짜 목록 조회
+  Future<Set<DateTime>> getMessageDates({
+    required String loginKey,
+    required String roomId,
+  }) async {
+    final res = await _sb.rpc('rpc_get_message_dates', params: {
+      'p_login_key': loginKey,
+      'p_room_id': roomId,
+    });
+    final rows = (res is List) ? res : [];
+    final dates = <DateTime>{};
+    for (final row in rows) {
+      if (row is Map && row['message_date'] != null) {
+        final dateStr = row['message_date'].toString();
+        final parsed = DateTime.tryParse(dateStr);
+        if (parsed != null) {
+          // 날짜만 사용 (시간 제거)
+          dates.add(DateTime(parsed.year, parsed.month, parsed.day));
+        }
+      }
+    }
+    return dates;
+  }
+
   // ============== Realtime ==============
   /// 목록 화면 전체 갱신용(내가 볼 수 있는 모든 방의 변화 수신)
   /// 필터 없이 테이블 단위로 구독하면 RLS로 걸러져 내가 볼 수 있는 것만 온다.
