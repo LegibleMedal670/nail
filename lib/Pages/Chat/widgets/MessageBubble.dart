@@ -7,6 +7,11 @@ class MessageBubble extends StatelessWidget {
   final DateTime createdAt;
   final int? readCount;
   final VoidCallback? onLongPressDelete;
+  
+  /// 검색어 하이라이트용 (null이면 하이라이트 없음)
+  final String? highlightQuery;
+  /// 현재 포커스된 검색 결과인지 (더 진한 하이라이트)
+  final bool isCurrentSearchResult;
 
   const MessageBubble({
     Key? key,
@@ -15,12 +20,17 @@ class MessageBubble extends StatelessWidget {
     required this.createdAt,
     this.readCount,
     this.onLongPressDelete,
+    this.highlightQuery,
+    this.isCurrentSearchResult = false,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final bg = isMe ? UiTokens.primaryBlue : Colors.grey[100]!;
     final fg = isMe ? Colors.white : UiTokens.title;
+
+    // 검색어 하이라이트 적용된 텍스트 위젯
+    final textWidget = _buildHighlightedText(text, fg);
 
     final bubble = GestureDetector(
       onLongPress: onLongPressDelete,
@@ -34,7 +44,7 @@ class MessageBubble extends StatelessWidget {
             border: isMe ? null : Border.all(color: UiTokens.cardBorder),
             boxShadow: const [UiTokens.cardShadow],
           ),
-          child: Text(text, style: TextStyle(color: fg, fontSize: 14, height: 1.30, fontWeight: FontWeight.w500)),
+          child: textWidget,
         ),
       ),
     );
@@ -58,6 +68,78 @@ class MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end, // 하단 기준 정렬
           children: rowChildren,
         ));
+  }
+
+  /// 검색어 하이라이트가 적용된 텍스트 위젯 빌드
+  Widget _buildHighlightedText(String content, Color defaultColor) {
+    // 검색어가 없거나 빈 문자열이면 일반 텍스트
+    if (highlightQuery == null || highlightQuery!.trim().isEmpty) {
+      return Text(
+        content,
+        style: TextStyle(color: defaultColor, fontSize: 14, height: 1.30, fontWeight: FontWeight.w500),
+      );
+    }
+
+    final query = highlightQuery!.toLowerCase();
+    final lowerContent = content.toLowerCase();
+    
+    // 검색어가 포함되지 않으면 일반 텍스트
+    if (!lowerContent.contains(query)) {
+      return Text(
+        content,
+        style: TextStyle(color: defaultColor, fontSize: 14, height: 1.30, fontWeight: FontWeight.w500),
+      );
+    }
+
+    // 하이라이트 색상: 현재 결과는 진한 주황, 그 외는 연한 노랑
+    final highlightBg = isCurrentSearchResult
+        ? const Color(0xFFFFAB40) // 진한 주황 (현재 포커스)
+        : const Color(0xFFFFEB3B); // 연한 노랑 (다른 결과)
+    
+    // 하이라이트된 텍스트 색상 (가독성을 위해 어두운 색)
+    const highlightFg = UiTokens.title;
+
+    // TextSpan 리스트 생성
+    final spans = <TextSpan>[];
+    int start = 0;
+    
+    while (true) {
+      final matchIndex = lowerContent.indexOf(query, start);
+      if (matchIndex == -1) {
+        // 남은 텍스트 추가
+        if (start < content.length) {
+          spans.add(TextSpan(
+            text: content.substring(start),
+            style: TextStyle(color: defaultColor, fontSize: 14, height: 1.30, fontWeight: FontWeight.w500),
+          ));
+        }
+        break;
+      }
+      
+      // 매치 전 텍스트 추가
+      if (matchIndex > start) {
+        spans.add(TextSpan(
+          text: content.substring(start, matchIndex),
+          style: TextStyle(color: defaultColor, fontSize: 14, height: 1.30, fontWeight: FontWeight.w500),
+        ));
+      }
+      
+      // 하이라이트된 텍스트 추가
+      spans.add(TextSpan(
+        text: content.substring(matchIndex, matchIndex + query.length),
+        style: TextStyle(
+          color: highlightFg,
+          fontSize: 14,
+          height: 1.30,
+          fontWeight: FontWeight.w600,
+          backgroundColor: highlightBg,
+        ),
+      ));
+      
+      start = matchIndex + query.length;
+    }
+
+    return RichText(text: TextSpan(children: spans));
   }
 
   String _friendlyTime(DateTime t) {

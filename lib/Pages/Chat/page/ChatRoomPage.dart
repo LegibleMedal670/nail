@@ -7,6 +7,7 @@ import 'package:nail/Services/ChatService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomInfoPage.dart';
@@ -51,7 +52,9 @@ class ChatRoomPage extends StatefulWidget {
 }
 
 class _ChatRoomPageState extends State<ChatRoomPage> {
-  final ScrollController _scroll = ScrollController();
+  // scrollable_positioned_list 컨트롤러들
+  final ItemScrollController _itemScrollController = ItemScrollController();
+  final ItemPositionsListener _itemPositionsListener = ItemPositionsListener.create();
   final GlobalKey<MessageInputBarState> _inputKey = GlobalKey<MessageInputBarState>();
 
   final _svc = ChatService.instance;
@@ -66,6 +69,20 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   int? _latestId;
   int? _oldestId;
   bool _sendingAttach = false;
+
+  // ========== 검색 모드 ==========
+  bool _isSearchMode = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  String _searchQuery = '';
+  List<int> _searchResultIds = []; // 검색 결과 메시지 ID 목록
+  int _currentSearchIndex = 0; // 현재 보고 있는 검색 결과 인덱스
+  
+  // 검색 전 상태 저장 (취소 시 복귀용)
+  List<_Msg> _preSearchMessages = [];
+  int? _preSearchLatestId;
+  int? _preSearchOldestId;
+  // ScrollablePositionedList는 offset이 아닌 index 기반 (현재 사용 안 함)
 
   // 공지
   static const double _kNoticeCollapsed = 76.0;
@@ -146,7 +163,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   void initState() {
     super.initState();
     _roomName = widget.roomName;
-    _scroll.addListener(_onScroll);
+    // ItemPositionsListener로 스크롤 감지
+    _itemPositionsListener.itemPositions.addListener(_onScrollPositionChanged);
     _loadFileCache();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _prepareRealtimeThenLoad();
@@ -155,9 +173,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   @override
   void dispose() {
-    _scroll.removeListener(_onScroll);
-    _scroll.dispose();
+    _itemPositionsListener.itemPositions.removeListener(_onScrollPositionChanged);
     _roomRt?.unsubscribe();
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
@@ -215,24 +234,49 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   }
 
   void _jumpToBottom({bool animate = false}) {
-    if (!_scroll.hasClients) return;
-    final dest = _scroll.position.minScrollExtent; // reverse:true
+    if (!_itemScrollController.isAttached) return;
+    final items = _buildItemsWithSeparators(_messages);
+    if (items.isEmpty) return;
+    
+    // reverse: true이므로 index 0이 최신(맨 아래)
     if (animate) {
-      _scroll.animateTo(dest, duration: const Duration(milliseconds: 220), curve: Curves.easeOut);
+      _itemScrollController.scrollTo(
+        index: 0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
     } else {
-      _scroll.jumpTo(dest);
+      _itemScrollController.jumpTo(index: 0);
     }
   }
 
   bool get _nearBottom {
-    if (!_scroll.hasClients) return true;
-    final pos = _scroll.position;
-    return (pos.pixels - pos.minScrollExtent).abs() < 120;
+    final positions = _itemPositionsListener.itemPositions.value;
+    if (positions.isEmpty) return true;
+    // reverse ListView에서 index 0이 보이면 맨 아래에 있는 것
+    return positions.any((pos) => pos.index == 0);
   }
 
   void _autoScrollIfNearBottom() {
     if (_nearBottom) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom(animate: true));
+    }
+  }
+  
+  /// 스크롤 위치 변경 감지 (과거 메시지 로드 트리거)
+  void _onScrollPositionChanged() {
+    final positions = _itemPositionsListener.itemPositions.value;
+    if (positions.isEmpty) return;
+    
+    final items = _buildItemsWithSeparators(_messages);
+    if (items.isEmpty) return;
+    
+    // 가장 큰 인덱스 (reverse에서 가장 오래된 메시지 방향)
+    final maxIndex = positions.map((p) => p.index).reduce((a, b) => a > b ? a : b);
+    
+    // 끝에서 5개 이내면 과거 메시지 로드
+    if (maxIndex >= items.length - 5) {
+      _loadOlder();
     }
   }
 
@@ -288,6 +332,199 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         if (!mounted) return;
         await _reloadLatestWindow();
       },
+    );
+  }
+
+  // ========== 검색 모드 함수들 ==========
+  
+  /// 검색 모드 진입
+  void _enterSearchMode() {
+    // 현재 상태 저장 (취소 시 현재 위치 유지하므로 스크롤 위치 저장 불필요)
+    _preSearchMessages = List.from(_messages);
+    _preSearchLatestId = _latestId;
+    _preSearchOldestId = _oldestId;
+    
+    setState(() {
+      _isSearchMode = true;
+      _searchQuery = '';
+      _searchResultIds = [];
+      _currentSearchIndex = 0;
+    });
+    
+    // 텍스트필드에 포커스
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _searchFocusNode.requestFocus();
+    });
+  }
+  
+  /// 검색 모드 종료 (취소) - 현재 위치 유지
+  void _exitSearchMode() {
+    setState(() {
+      _isSearchMode = false;
+      _searchQuery = '';
+      _searchResultIds = [];
+      _currentSearchIndex = 0;
+      _searchController.clear();
+      // 현재 보고 있는 메시지/위치는 그대로 유지
+    });
+  }
+  
+  /// 검색 실행 (Enter 시)
+  Future<void> _executeSearch() async {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _searchQuery = '';
+        _searchResultIds = [];
+        _currentSearchIndex = 0;
+      });
+      return;
+    }
+    
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    
+    try {
+      final results = await _svc.searchMessages(
+        loginKey: key,
+        roomId: widget.roomId,
+        query: query,
+        limit: 100,
+      );
+      
+      if (!mounted) return;
+      
+      // 검색 결과 ID 목록 (오래된 순으로 정렬)
+      final ids = results
+          .map((r) => (r['id'] as num).toInt())
+          .toList()
+        ..sort();
+      
+      setState(() {
+        _searchQuery = query;
+        _searchResultIds = ids;
+        _currentSearchIndex = ids.isNotEmpty ? ids.length - 1 : 0; // 최신 결과부터
+      });
+      
+      // 첫 번째 결과로 점프
+      if (ids.isNotEmpty) {
+        await _jumpToMessage(ids[_currentSearchIndex]);
+      }
+    } catch (e) {
+      debugPrint('Search error: $e');
+    }
+  }
+  
+  /// 위로 이동 (▲) - 더 최신 메시지로
+  Future<void> _goToPreviousResult() async {
+    if (_searchResultIds.isEmpty) return;
+    
+    setState(() {
+      _currentSearchIndex = (_currentSearchIndex - 1).clamp(0, _searchResultIds.length - 1);
+    });
+    
+    await _jumpToMessage(_searchResultIds[_currentSearchIndex]);
+  }
+  
+  /// 아래로 이동 (▼) - 더 오래된 메시지로
+  Future<void> _goToNextResult() async {
+    if (_searchResultIds.isEmpty) return;
+    
+    setState(() {
+      _currentSearchIndex = (_currentSearchIndex + 1).clamp(0, _searchResultIds.length - 1);
+    });
+    
+    await _jumpToMessage(_searchResultIds[_currentSearchIndex]);
+  }
+  
+  /// 특정 메시지로 점프
+  Future<void> _jumpToMessage(int targetId) async {
+    final key = _loginKey();
+    if (key.isEmpty) return;
+    
+    // 이미 로드된 메시지에 있는지 확인
+    final existingIndex = _messages.indexWhere((m) => m.id == targetId);
+    if (existingIndex != -1) {
+      // 이미 있으면 스크롤만 이동
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToMessageId(targetId);
+      });
+      return;
+    }
+    
+    try {
+      // targetId 기준으로 앞뒤 메시지 로드
+      final rows = await _svc.fetchMessages(
+        loginKey: key,
+        roomId: widget.roomId,
+        afterId: targetId - 100,
+        beforeId: targetId + 100,
+        limit: 200,
+      );
+      
+      if (!mounted) return;
+      
+      rows.sort((a, b) => ((a['id'] as num).toInt()).compareTo((b['id'] as num).toInt()));
+      final my = _myUid();
+      final newMessages = _applyFileCache(rows.map(_mapRowToMsg(my)).toList());
+      
+      if (newMessages.isEmpty) return;
+      
+      setState(() {
+        // 기존 메시지와 새 메시지 병합 (중복 제거)
+        final existingIds = _messages.map((m) => m.id).toSet();
+        for (final msg in newMessages) {
+          if (!existingIds.contains(msg.id)) {
+            _messages.add(msg);
+          }
+        }
+        // 정렬
+        _messages.sort((a, b) => a.id.compareTo(b.id));
+        
+        // ID 범위 갱신
+        if (_messages.isNotEmpty) {
+          _oldestId = _messages.first.id;
+          _latestId = _messages.last.id;
+        }
+        _hasMore = true;
+      });
+      
+      // 해당 메시지로 스크롤
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToMessageId(targetId);
+      });
+    } catch (e) {
+      debugPrint('Jump to message error: $e');
+    }
+  }
+  
+  /// 특정 메시지 ID로 스크롤 (정확한 인덱스 기반)
+  void _scrollToMessageId(int targetId) {
+    if (!_itemScrollController.isAttached) return;
+    
+    final items = _buildItemsWithSeparators(_messages);
+    
+    // 해당 메시지의 아이템 인덱스 찾기
+    int itemIndex = -1;
+    for (int i = 0; i < items.length; i++) {
+      final it = items[i];
+      if (it.msg != null && it.msg!.id == targetId) {
+        itemIndex = i;
+        break;
+      }
+    }
+    
+    if (itemIndex == -1) return;
+    
+    // reverse ListView에서의 인덱스
+    final reverseIndex = items.length - 1 - itemIndex;
+    
+    // 정확한 인덱스 기반 스크롤!
+    _itemScrollController.scrollTo(
+      index: reverseIndex,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+      alignment: 0.3, // 화면의 30% 위치에 표시
     );
   }
 
@@ -623,14 +860,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       });
     } finally {
       if (mounted) setState(() => _paging = false);
-    }
-  }
-
-  void _onScroll() {
-    if (!_scroll.hasClients) return;
-    final pos = _scroll.position;
-    if (pos.atEdge && pos.pixels != pos.minScrollExtent) {
-      _loadOlder();
     }
   }
 
@@ -1064,6 +1293,199 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     return '멘티';
   }
 
+  // ---------- AppBar 빌드 ----------
+  AppBar _buildNormalAppBar(bool isAdmin) {
+    return AppBar(
+      title: Row(
+        mainAxisSize: MainAxisSize.max,
+        children: [
+          Expanded(
+            child: Text(
+              _roomName ?? widget.roomName,
+              style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              softWrap: false,
+            ),
+          ),
+          const SizedBox(width: 6),
+          if (_memberCount != null && _memberCount! > 2)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '$_memberCount',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: UiTokens.title),
+              ),
+            ),
+        ],
+      ),
+      backgroundColor: Colors.white,
+      elevation: 0,
+      iconTheme: const IconThemeData(color: UiTokens.title),
+      actions: [
+        // 검색 버튼 추가
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: _enterSearchMode,
+        ),
+        IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () async {
+            final result = await Navigator.of(context).push<dynamic>(
+              MaterialPageRoute(
+                builder: (_) => ChatRoomInfoPage(
+                  roomId: widget.roomId,
+                  roomName: _roomName ?? widget.roomName,
+                  isAdmin: isAdmin,
+                  members: const <RoomMemberBrief>[],
+                ),
+              ),
+            );
+            if (!mounted) return;
+            if (result == '__cleared__') {
+              await _loadFirst();
+              _jumpToBottom();
+            } else if (result is String && result.isNotEmpty) {
+              setState(() => _roomName = result);
+            }
+          },
+        ),
+      ],
+    );
+  }
+  
+  AppBar _buildSearchAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 0,
+      automaticallyImplyLeading: false,
+      titleSpacing: 0,
+      title: Row(
+        children: [
+          const SizedBox(width: 12),
+          // 검색 아이콘
+          const Icon(Icons.search, color: Colors.grey, size: 22),
+          const SizedBox(width: 8),
+          // 검색 텍스트필드
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              focusNode: _searchFocusNode,
+              decoration: InputDecoration(
+                hintText: '대화내용 검색',
+                hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                // X 버튼 (텍스트 지우기)
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.cancel, color: Colors.grey, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                            _searchResultIds = [];
+                            _currentSearchIndex = 0;
+                          });
+                        },
+                      )
+                    : null,
+              ),
+              style: const TextStyle(fontSize: 16, color: UiTokens.title),
+              textInputAction: TextInputAction.search,
+              onChanged: (_) => setState(() {}), // X 버튼 표시 갱신용
+              onSubmitted: (_) => _executeSearch(),
+            ),
+          ),
+          // 취소 버튼
+          TextButton(
+            onPressed: _exitSearchMode,
+            child: const Text(
+              '취소',
+              style: TextStyle(
+                color: UiTokens.title,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // ---------- 검색 하단 네비게이션 바 ----------
+  Widget _buildSearchNavigationBar() {
+    final hasResults = _searchResultIds.isNotEmpty;
+    final currentDisplay = hasResults ? _searchResultIds.length - _currentSearchIndex : 0;
+    final totalDisplay = _searchResultIds.length;
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            // 중앙: 결과 카운터 또는 "검색 결과 없음"
+            Expanded(
+              child: Center(
+                child: hasResults
+                    ? Text(
+                        '$currentDisplay/$totalDisplay',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: UiTokens.title,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
+                    : Text(
+                        _searchQuery.isNotEmpty ? '검색 결과 없음' : '',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+              ),
+            ),
+            // 위로 (▲) - 더 최신 메시지로
+            IconButton(
+              icon: Icon(
+                Icons.keyboard_arrow_up,
+                color: hasResults && _currentSearchIndex > 0
+                    ? UiTokens.title
+                    : Colors.grey[300],
+              ),
+              onPressed: hasResults && _currentSearchIndex > 0
+                  ? _goToPreviousResult
+                  : null,
+            ),
+            // 아래로 (▼) - 더 오래된 메시지로
+            IconButton(
+              icon: Icon(
+                Icons.keyboard_arrow_down,
+                color: hasResults && _currentSearchIndex < _searchResultIds.length - 1
+                    ? UiTokens.title
+                    : Colors.grey[300],
+              ),
+              onPressed: hasResults && _currentSearchIndex < _searchResultIds.length - 1
+                  ? _goToNextResult
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ---------- build ----------
   @override
   Widget build(BuildContext context) {
@@ -1074,64 +1496,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Expanded(
-              child: Text(
-                _roomName ?? widget.roomName,
-                style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-                softWrap: false,
-              ),
-            ),
-            const SizedBox(width: 6),
-            if (_memberCount != null && _memberCount! > 2)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  '$_memberCount',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: UiTokens.title),
-                ),
-              ),
-          ],
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: UiTokens.title),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () async {
-              // 기존 InfoPage는 외부에서 멤버 목록을 받게 되어 있었음(목업 기반).
-              // 우선 현재 대화 참여자 UI는 보류하고 방 정보 페이지로만 이동.
-              final result = await Navigator.of(context).push<dynamic>(
-                MaterialPageRoute(
-                  builder: (_) => ChatRoomInfoPage(
-                    roomId: widget.roomId,
-                    roomName: _roomName ?? widget.roomName, // 최신 제목 전달
-                    isAdmin: isAdmin,
-                    members: const <RoomMemberBrief>[],
-                  ),
-                ),
-              );
-              if (!mounted) return;
-              if (result == '__cleared__') {
-                await _loadFirst();
-                _jumpToBottom();
-              } else if (result is String && result.isNotEmpty) {
-                setState(() => _roomName = result);
-              }
-            },
-          ),
-        ],
-      ),
+      appBar: _isSearchMode ? _buildSearchAppBar() : _buildNormalAppBar(isAdmin),
       backgroundColor: Colors.white,
 
       body: GestureDetector(
@@ -1145,8 +1510,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
             Column(
               children: [
                 Expanded(
-                  child: ListView.builder(
-                    controller: _scroll,
+                  child: ScrollablePositionedList.builder(
+                    itemScrollController: _itemScrollController,
+                    itemPositionsListener: _itemPositionsListener,
                     reverse: true,
                     padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     itemCount: items.length,
@@ -1163,6 +1529,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       final m = it.msg!;
                       final isMe = m.me;
 
+                      // 검색 모드에서 현재 결과인지 확인
+                      final isCurrentResult = _isSearchMode && 
+                          _searchResultIds.isNotEmpty && 
+                          _currentSearchIndex < _searchResultIds.length &&
+                          m.id == _searchResultIds[_currentSearchIndex];
+                      
                       // 버블 생성
                       Widget bubbleRow;
                       if (m.deleted) {
@@ -1180,6 +1552,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               text: m.text ?? '',
                               createdAt: m.createdAt,
                               readCount: m.isSystem ? null : m.readCount,
+                              highlightQuery: _isSearchMode ? _searchQuery : null,
+                              isCurrentSearchResult: isCurrentResult,
                             );
                             break;
                           case _MsgType.image:
@@ -1329,13 +1703,17 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     },
                   ),
                 ),
-                MessageInputBar(
-                  key: _inputKey,
-                  onSendText: _sendText,
-                  onSendImageLocalPath: _sendImageLocalPath,
-                  onSendFileLocalPath: _sendFileLocalPath,
-                  onSendImagesLocalPaths: _sendImagesLocalPaths,
-                ),
+                // 검색 모드일 때는 네비게이션 바, 아니면 입력바
+                if (_isSearchMode)
+                  _buildSearchNavigationBar()
+                else
+                  MessageInputBar(
+                    key: _inputKey,
+                    onSendText: _sendText,
+                    onSendImageLocalPath: _sendImageLocalPath,
+                    onSendFileLocalPath: _sendFileLocalPath,
+                    onSendImagesLocalPaths: _sendImagesLocalPaths,
+                  ),
               ],
             ),
 
