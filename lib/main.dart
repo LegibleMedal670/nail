@@ -3,6 +3,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:nail/Providers/AdminProgressProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'env/env.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
@@ -10,6 +11,9 @@ import 'package:nail/Providers/CurriculumProvider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Firebase 초기화
+  await Firebase.initializeApp();
 
   await Supabase.initialize(
     url: Env.supabaseURL,
