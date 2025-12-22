@@ -332,6 +332,7 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
             hintStyle: TextStyle(
               color: UiTokens.title.withOpacity(0.3),
               fontWeight: FontWeight.w500,
+              letterSpacing: 3.0,
             ),
             filled: true,
             fillColor: const Color(0xFFF5F7FA),
