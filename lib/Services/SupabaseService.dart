@@ -490,8 +490,9 @@ class SupabaseService {
       'p_firebase_uid': key,
       'p_mentee_ids': menteeIds,
     });
-    if (rows.isEmpty) return 0;
-    return (rows.first['updated_count'] as num?)?.toInt() ?? 0;
+    // 서버는 {id, nickname, mentor} 행들을 반환하므로
+    // 반환된 행 수를 업데이트된 멘티 수로 사용한다.
+    return rows.length;
   }
 
   Future<Map<String, dynamic>?> adminReassignMentee({
