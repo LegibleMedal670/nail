@@ -89,7 +89,7 @@ class ChatService {
   }) async {
     final res = await _sb.rpc('rpc_get_or_create_dm', params: {
       'p_firebase_uid': loginKey,
-      'p_target_id': targetUserId,
+      'p_other_user_id': targetUserId,
     });
     return (res as String);
   }
@@ -270,12 +270,11 @@ class ChatService {
   // ============== 공지(핀) ==============
   Future<void> pinNotice({
     required String adminLoginKey,
-    required String roomId,
+    required String roomId, // 서버에는 전달하지 않지만 호출부 호환을 위해 유지
     required int messageId,
   }) async {
     await _sb.rpc('rpc_pin_notice', params: {
       'p_firebase_uid': adminLoginKey,
-      'p_room_id': roomId,
       'p_message_id': messageId,
     });
   }
@@ -309,14 +308,12 @@ class ChatService {
   Future<List<Map<String, dynamic>>> listNotices({
     required String loginKey,
     required String roomId,
-    int limit = 50,
+    int limit = 50,   // 서버는 limit/offset 인자를 받지 않지만, 호출부 호환용
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_notices', params: {
       'p_firebase_uid': loginKey,
       'p_room_id': roomId,
-      'p_limit': limit,
-      'p_offset': offset,
     });
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
@@ -365,7 +362,7 @@ class ChatService {
   }
 
   /// 갤러리/파일 탭
-  /// returns: [{message_id,storage_path,mime,created_at,sender_id}, ...]
+  /// returns: [{id,urls,created_at,sender_nickname,type}, ...]
   Future<List<Map<String, dynamic>>> listMedia({
     required String loginKey,
     required String roomId,
@@ -376,12 +373,12 @@ class ChatService {
     final res = await _sb.rpc('rpc_list_media', params: {
       'p_firebase_uid': loginKey,
       'p_room_id': roomId,
-      'p_kind': kinds,
       'p_limit': limit,
       'p_offset': offset,
     });
     final rows = (res is List) ? res : [res];
-    return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    final all = rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    return all.where((row) => kinds.contains((row['type'] ?? '').toString())).toList(growable: false);
   }
 
   Future<List<Map<String, dynamic>>> searchMessages({
@@ -394,7 +391,7 @@ class ChatService {
     final res = await _sb.rpc('rpc_search_messages', params: {
       'p_firebase_uid': loginKey,
       'p_room_id': roomId,
-      'p_q': query,
+      'p_query': query,
       'p_limit': limit,
       'p_offset': offset,
     });
