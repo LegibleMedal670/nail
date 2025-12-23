@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Pages/Welcome/SelectRolePage.dart';
+import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
+import 'package:nail/Pages/Mentor/page/MentorHomeScaffold.dart';
+import 'package:nail/Pages/Mentee/page/MenteeHomeScaffold.dart';
+import 'package:nail/Pages/Welcome/BasicInfoInputPage.dart';
+import 'package:nail/Pages/Welcome/PendingRolePage.dart';
+import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/FirebaseAuthService.dart';
 
 class PhoneLoginPage extends StatefulWidget {
@@ -67,8 +73,7 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
       },
       onAutoVerified: (credential) {
         if (mounted) {
-          setState(() => _isLoading = false);
-          _onLoginSuccess();
+          _onFirebaseLoginSuccess();
         }
       },
     );
@@ -95,20 +100,80 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
     );
 
     if (result != null && mounted) {
-      setState(() => _isLoading = false);
-      _onLoginSuccess();
+      _onFirebaseLoginSuccess();
     }
   }
 
-  /// 로그인 성공 처리
-  void _onLoginSuccess() {
+  /// Firebase 로그인 성공 → Supabase 연동
+  Future<void> _onFirebaseLoginSuccess() async {
     final uid = _authService.currentUid;
+    final phone = _phoneNumberController.text.replaceAll('-', '');
+    
     debugPrint('Firebase 로그인 성공! UID: $uid');
-    
-    // TODO: Supabase와 연동 - Firebase UID로 사용자 조회/생성
-    
+
+    if (uid == null) {
+      setState(() => _isLoading = false);
+      _showError('인증 정보를 가져올 수 없습니다.');
+      return;
+    }
+
+    try {
+      // Supabase 연동
+      final userProvider = context.read<UserProvider>();
+      final result = await userProvider.syncWithSupabase(
+        firebaseUid: uid,
+        phone: phone,
+      );
+
+      if (!mounted) return;
+
+      if (result.user == null) {
+        setState(() => _isLoading = false);
+        _showError('사용자 정보를 가져올 수 없습니다.');
+        return;
+      }
+
+      // 신규 사용자 → 이름 입력 페이지
+      if (result.isNewUser) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const BasicInfoInputPage()),
+          (route) => false,
+        );
+        return;
+      }
+
+      // 기존 사용자 → 역할에 따라 적절한 페이지로 이동
+      _navigateByRole(result.user!.role);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showError('서버 연결에 실패했습니다: $e');
+      }
+    }
+  }
+
+  /// 역할에 따라 적절한 페이지로 이동
+  void _navigateByRole(String role) {
+    Widget destination;
+
+    switch (role) {
+      case 'admin':
+        destination = const ManagerMainPage();
+        break;
+      case 'mentor':
+        destination = const MentorHomeScaffold();
+        break;
+      case 'mentee':
+        destination = const MenteeHomeScaffold();
+        break;
+      case 'pending':
+      default:
+        destination = const PendingRolePage();
+        break;
+    }
+
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const SelectRolePage()),
+      MaterialPageRoute(builder: (_) => destination),
       (route) => false,
     );
   }
@@ -165,7 +230,7 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 80),
 
                   // 타이틀
                   Text(

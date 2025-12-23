@@ -9,10 +9,11 @@ class CacheService {
 
   // _ : 라이브러리 private
   // k : 상수(constant) 키 네이밍 컨벤션
-  static const String _kLoginKey = 'login_key'; // 멘티 접속코드(=login_key)
+  static const String _kLoginKey = 'login_key'; // (레거시) 멘티 접속코드
   static const String _kUserId = 'user_id';
   static const String _kNickname = 'nickname';
   static const String _kIsAdmin = 'is_admin';
+  static const String _kFirebaseUid = 'firebase_uid'; // Firebase UID
 
   /// 멘티 로그인 성공 시 세션 저장
   Future<void> saveMenteeSession({
@@ -52,6 +53,18 @@ class CacheService {
     );
   }
 
+  /// Firebase UID 저장 (전화번호 인증 후)
+  Future<void> saveFirebaseUid(String uid) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_kFirebaseUid, uid);
+  }
+
+  /// 저장된 Firebase UID 가져오기
+  Future<String?> getFirebaseUid() async {
+    final sp = await SharedPreferences.getInstance();
+    return sp.getString(_kFirebaseUid);
+  }
+
   /// 로그아웃 등 세션 정리
   Future<void> clear() async {
     final sp = await SharedPreferences.getInstance();
@@ -59,5 +72,6 @@ class CacheService {
     await sp.remove(_kUserId);
     await sp.remove(_kNickname);
     await sp.remove(_kIsAdmin);
+    await sp.remove(_kFirebaseUid);
   }
 }
