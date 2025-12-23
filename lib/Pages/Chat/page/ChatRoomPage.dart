@@ -677,12 +677,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     final file = File(localPath);
     if (!await file.exists()) return;
     if (!mounted) return;
-    final int size = await file.length();
-    final String name = _basename(localPath);
-    final String mime = _guessImageMime(localPath);
-    // optimistic bubble
+
+    // optimistic bubble (단일 이미지 미리보기)
     _insertTempImageBubble(localPath);
     try {
+      // 스토리지에 업로드
+      final mime = _guessImageMime(localPath);
       final storagePath = await _storage.uploadChatFile(
         file: file,
         roomId: widget.roomId,
@@ -690,14 +690,22 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         contentType: mime,
       );
       if (!mounted) return;
-      await _svc.sendFile(
+
+      final size = await file.length();
+      final name = _basename(localPath);
+
+      // rpc_send_images 를 단일 파일로 호출해서 type='image' 메시지 생성
+      await _svc.sendImagesGroup(
         loginKey: key,
         roomId: widget.roomId,
-        fileName: name,
-        sizeBytes: size,
-        mime: mime,
-        storagePath: storagePath,
-        kind: 'image',
+        files: [
+          {
+            'file_name': name,
+            'size_bytes': size,
+            'mime': mime,
+            'storage_path': storagePath,
+          },
+        ],
         meta: {'client_ts': DateTime.now().toIso8601String()},
       );
       if (!mounted) return;
@@ -2126,21 +2134,20 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
     try { meta = jsonDecode(m) as Map<String, dynamic>; } catch (_) {}
   }
   final deletedBy = (meta['deleted_by'] ?? '').toString();
+  final fileName  = (meta['file_name'] ?? meta['filename'])?.toString();
+  final fileBytes = (meta['size_bytes']);
 
-  final fileName  = (r['file_name'] ?? meta['file_name'])?.toString();
-  final fileBytes = (r['size_bytes'] ?? meta['size_bytes']);
-  final storagePath = (r['storage_path'] ?? meta['storage_path'])?.toString();
-  // attachments (그룹 이미지)
-  final attachmentsRaw = r['attachments'];
-  final attachPaths = <String>[];
-  if (attachmentsRaw is List) {
-    for (final x in attachmentsRaw) {
-      if (x is Map && (x['storage_path'] ?? '').toString().isNotEmpty) {
-        attachPaths.add((x['storage_path']).toString());
-      }
+  // urls는 스토리지 경로 배열 (단일/그룹 이미지 및 파일 공통)
+  final urlsRaw = r['urls'];
+  final urlList = <String>[];
+  if (urlsRaw is List) {
+    for (final u in urlsRaw) {
+      final s = u?.toString() ?? '';
+      if (s.isNotEmpty) urlList.add(s);
     }
   }
-  final isGroup = attachPaths.length > 1;
+  final storagePath = urlList.isNotEmpty ? urlList.first : null;
+  final isGroup = t == 'image' && urlList.length > 1;
 
   return _Msg(
     id: id,
@@ -2153,8 +2160,8 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
     },
     text: (r['text'] ?? '').toString(),
     senderId: senderId.isNotEmpty ? senderId : null,
-    imageUrl: (t == 'image') ? storagePath : null, // 단일 이미지의 기본 미리보기
-    imageUrls: (t == 'image' && isGroup) ? attachPaths : null,
+    imageUrl: (t == 'image' && !isGroup) ? storagePath : null, // 단일 이미지
+    imageUrls: (t == 'image' && isGroup) ? urlList : null,     // 이미지 그룹
     fileUrl:  (t == 'file')  ? storagePath : null,
     fileName: fileName,
     fileBytes: (fileBytes is num) ? fileBytes.toInt() : null,

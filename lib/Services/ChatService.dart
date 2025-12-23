@@ -134,12 +134,26 @@ class ChatService {
     int? beforeId,
     int limit = 50,
   }) async {
+    // 서버 시그니처: rpc_fetch_messages(p_firebase_uid, p_room_id, p_cursor, p_limit, p_direction)
+    // - afterId가 있으면: 기준 ID 이후의 "신규(newer)" 메시지
+    // - 없고 beforeId가 있으면: 기준 ID 이전의 "과거(older)" 메시지
+    // - 둘 다 없으면: 최신 기준 older 페이지
+    int? cursor;
+    String direction = 'older';
+    if (afterId != null) {
+      cursor = afterId;
+      direction = 'newer';
+    } else if (beforeId != null) {
+      cursor = beforeId;
+      direction = 'older';
+    }
+
     final res = await _sb.rpc('rpc_fetch_messages', params: {
       'p_firebase_uid': loginKey,
       'p_room_id': roomId,
-      'p_after_id': afterId,
-      'p_before_id': beforeId,
+      'p_cursor': cursor,
       'p_limit': limit,
+      'p_direction': direction,
     });
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
@@ -165,7 +179,6 @@ class ChatService {
   }
 
   /// 파일/이미지 전송(스토리지 업로드 후) → message_id
-  /// kind: 'file' | 'image'
   Future<int> sendFile({
     required String loginKey,
     required String roomId,
@@ -176,15 +189,19 @@ class ChatService {
     String kind = 'file',
     Map<String, dynamic>? meta,
   }) async {
+    // 서버 시그니처: rpc_send_file(p_firebase_uid, p_room_id, p_url, p_filename, p_meta)
+    // 우리는 storagePath를 URL로 저장하고, 사이즈/타입 등은 meta에 넣어둔다.
     final res = await _sb.rpc('rpc_send_file', params: {
       'p_firebase_uid': loginKey,
       'p_room_id': roomId,
-      'p_file_name': fileName,
-      'p_size_bytes': sizeBytes,
-      'p_mime': mime,
-      'p_storage_path': storagePath,
-      'p_kind': kind,
-      'p_meta': meta ?? <String, dynamic>{},
+      'p_url': storagePath,
+      'p_filename': fileName,
+      'p_meta': {
+        'size_bytes': sizeBytes,
+        'mime': mime,
+        'kind': kind,
+        ...?meta,
+      },
     });
     return (res as num).toInt();
   }
@@ -197,11 +214,22 @@ class ChatService {
     required List<Map<String, dynamic>> files,
     Map<String, dynamic>? meta,
   }) async {
+    // 서버 시그니처: rpc_send_images(p_firebase_uid, p_room_id, p_urls, p_meta)
+    // files 배열에서 storage_path만 추출해서 p_urls로 보내고,
+    // 나머지 메타 정보는 meta에 묶어서 보관한다.
+    final urls = <String>[];
+    for (final f in files) {
+      final p = (f['storage_path'] ?? '').toString();
+      if (p.isNotEmpty) urls.add(p);
+    }
     final res = await _sb.rpc('rpc_send_images', params: {
       'p_firebase_uid': loginKey,
       'p_room_id': roomId,
-      'p_files': files,
-      'p_meta': meta ?? <String, dynamic>{},
+      'p_urls': urls,
+      'p_meta': {
+        'files': files,
+        ...?meta,
+      },
     });
     return (res as num).toInt();
   }
