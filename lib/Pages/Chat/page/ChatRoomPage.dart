@@ -221,6 +221,20 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     } catch (_) {}
   }
 
+  Future<void> _dismissNotice() async {
+    final current = _pinned;
+    if (current == null) return;
+    // 로컬에 마지막으로 숨긴 공지 ID 저장
+    if (_prefs != null) {
+      await _prefs!.setInt('chat_notice_dismiss_${widget.roomId}', current.msgId);
+    }
+    if (!mounted) return;
+    setState(() {
+      _pinned = null;
+      _noticeExpanded = false;
+    });
+  }
+
   // ---------- utils ----------
   String _loginKey() {
     if (!mounted) return '';
@@ -942,11 +956,21 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       return;
     }
     final createdAt = DateTime.tryParse(m['created_at']?.toString() ?? '') ?? DateTime.now();
+    final msgId = (m['message_id'] as num).toInt();
+    // 이미 '보지 않기'로 숨긴 공지라면 표시하지 않음
+    final lastDismissedId = _prefs?.getInt('chat_notice_dismiss_${widget.roomId}');
+    if (lastDismissedId != null && lastDismissedId == msgId) {
+      setState(() => _pinned = null);
+      return;
+    }
+    final body = (m['body'] ?? '').toString();
+    // 접혀 있을 때는 제목 대신 본문 1줄을 보여준다.
+    final firstLine = body.trim().isEmpty ? '공지' : body.trim().split('\n').first;
     setState(() {
       _pinned = _PinnedNotice(
-        msgId: (m['message_id'] as num).toInt(),
-        title: (m['title'] ?? '공지').toString(),
-        body: (m['body'] ?? '').toString(),
+        msgId: msgId,
+        title: firstLine,
+        body: body,
         createdAt: createdAt,
         author: (m['author'] ?? '').toString(),
       );
@@ -1809,10 +1833,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         MaterialPageRoute(builder: (_) => _NoticeDetailPage(data: _pinned!)),
                       );
                     },
-                    onDismiss: () => setState(() {
-                      _pinned = null;
-                      _noticeExpanded = false;
-                    }),
+                    onDismiss: _dismissNotice,
                   ),
                 ),
               ),
