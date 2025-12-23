@@ -14,7 +14,7 @@ class TodoService {
     required String adminLoginKey,
   }) async {
     final res = await _sb.rpc('list_mentors_for_select', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
     });
 
     final rows = (res is List) ? res : [res];
@@ -53,7 +53,7 @@ class TodoService {
     required List<Map<String, dynamic>> items,
   }) async {
     final res = await _sb.rpc('rpc_create_todo_groups', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_items': items,
     });
     final rows = (res is List) ? res : [res];
@@ -68,7 +68,7 @@ class TodoService {
     required String filter,
   }) async {
     final res = await _sb.rpc('rpc_list_todo_groups', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_filter': filter,
     });
     final rows = (res is List) ? res : [res];
@@ -82,7 +82,7 @@ class TodoService {
     required String groupId,
   }) async {
     final res = await _sb.rpc('rpc_get_todo_group_summary', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_group_id': groupId,
     });
     if (res is List && res.isNotEmpty) {
@@ -102,7 +102,7 @@ class TodoService {
     required String tab,
   }) async {
     final res = await _sb.rpc('rpc_get_todo_group_members', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_group_id': groupId,
       'p_tab': tab,
     });
@@ -118,7 +118,7 @@ class TodoService {
     required bool toArchived,
   }) async {
     final res = await _sb.rpc('rpc_toggle_group_archive', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_group_id': groupId,
       'p_to_archived': toArchived,
     });
@@ -137,7 +137,7 @@ class TodoService {
     required String groupId,
   }) async {
     await _sb.rpc('rpc_delete_todo_group', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_group_id': groupId,
     });
   }
@@ -148,7 +148,7 @@ class TodoService {
     required String loginKey,
   }) async {
     final res = await _sb.rpc('rpc_list_my_unread_active_todos', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
@@ -162,7 +162,7 @@ class TodoService {
     String filter = 'active',
   }) async {
     final res = await _sb.rpc('rpc_list_my_todos', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_filter': filter,
     });
     final rows = (res is List) ? res : [res];
@@ -176,7 +176,7 @@ class TodoService {
     required String groupId,
   }) async {
     final res = await _sb.rpc('rpc_acknowledge_todo', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_group_id': groupId,
     });
     if (res is List && res.isNotEmpty) {
@@ -195,7 +195,7 @@ class TodoService {
     required bool done,
   }) async {
     final res = await _sb.rpc('rpc_set_my_todo_done', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_group_id': groupId,
       'p_done': done,
     });

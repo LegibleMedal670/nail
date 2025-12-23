@@ -108,6 +108,41 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     }
   }
 
+  // ===== 빈 목록 상태 =====
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.person_off_outlined,
+            size: 64,
+            color: UiTokens.title.withOpacity(0.2),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '등록된 멘티가 없습니다',
+            style: TextStyle(
+              color: UiTokens.title.withOpacity(0.5),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '아래 버튼을 눌러 멘티를 추가해보세요',
+            style: TextStyle(
+              color: UiTokens.title.withOpacity(0.4),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// ===== KPI Grid (고정 높이 ❌ / 내용 기반 높이 ✅) =====
   Widget _buildKpiGrid({
     required BuildContext context,
@@ -298,15 +333,18 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
               ),
             ),
 
-            // ===== 멘티 목록 =====
-            ListView.separated(
-              itemCount: sorted.length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              separatorBuilder: (_, __) =>
-              const SizedBox(height: 10),
-              itemBuilder: (itemCtx, i) {
-                final m = sorted[i];
+                            // ===== 멘티 목록 =====
+                            if (sorted.isEmpty)
+                              _buildEmptyState()
+                            else
+                              ListView.separated(
+                                itemCount: sorted.length,
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                                itemBuilder: (itemCtx, i) {
+                                  final m = sorted[i];
 
                 // 지연 로딩: 모듈별 진행 맵
                 admin.loadMenteeProgress(m.id);
@@ -382,13 +420,6 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_mentee_add',
-        backgroundColor: UiTokens.primaryBlue,
-        onPressed: () => _addMentee(mentees),
-        icon: const Icon(Icons.person_add_alt_rounded),
-        label: const Text('추가'),
-      ),
       body: body,
     );
   }

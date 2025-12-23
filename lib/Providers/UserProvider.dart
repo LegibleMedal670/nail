@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Services/CacheService.dart';
 import 'package:nail/Services/FirebaseAuthService.dart';
+import 'package:nail/Services/SupabaseService.dart';
 
 /// 런타임 사용자 세션 모델 (UI가 구독)
 class UserAccount {
@@ -102,8 +103,8 @@ class UserProvider extends ChangeNotifier {
   String? get firebaseUid => _current?.firebaseUid ?? _firebaseAuth.currentUid;
 
   // ===== 호환성 getter/method (레거시 코드용) =====
-  /// @deprecated - 관리자 기능은 별도 처리 필요. RPC 마이그레이션 후 제거
-  String? get adminKey => isAdmin ? firebaseUid : null;
+  /// @deprecated Use `firebaseUid` instead - 서버에서 권한 검증
+  String? get adminKey => firebaseUid;
   
   /// @deprecated Use `firebaseUid` instead
   String? get loginKey => firebaseUid;
@@ -173,6 +174,9 @@ class UserProvider extends ChangeNotifier {
       }
 
       _current = _mapRowToAccount(row);
+      
+      // SupabaseService에 키 설정 (레거시 호환)
+      _syncSupabaseServiceKeys();
     } catch (e) {
       debugPrint('[UserProvider] hydrate error: $e');
       _current = null;
@@ -217,7 +221,10 @@ class UserProvider extends ChangeNotifier {
       final isNewUser = _asBool(row['is_new_user']);
       _current = _mapRowToAccount(row);
 
-      // 3. 캐시에 Firebase UID 저장 (다음 앱 시작 시 복원용)
+      // 3. SupabaseService에 키 설정 (레거시 호환)
+      _syncSupabaseServiceKeys();
+
+      // 4. 캐시에 Firebase UID 저장 (다음 앱 시작 시 복원용)
       await _cache.saveFirebaseUid(firebaseUid);
 
       return (user: _current, isNewUser: isNewUser);
@@ -262,6 +269,7 @@ class UserProvider extends ChangeNotifier {
       final row = await _getProfile(fbUid);
       if (row != null) {
         _current = _mapRowToAccount(row);
+        _syncSupabaseServiceKeys();
         notifyListeners();
       }
     } catch (e) {
@@ -280,10 +288,21 @@ class UserProvider extends ChangeNotifier {
     }
 
     _current = null;
+    
+    // SupabaseService 키 초기화
+    SupabaseService.instance.adminKey = null;
+    SupabaseService.instance.loginKey = null;
     notifyListeners();
   }
 
   // ===== Private Helpers =====
+
+  /// SupabaseService에 레거시 키 설정
+  void _syncSupabaseServiceKeys() {
+    final svc = SupabaseService.instance;
+    svc.adminKey = _current?.firebaseUid;
+    svc.loginKey = _current?.firebaseUid;
+  }
 
   Future<Map<String, dynamic>?> _getProfile(String firebaseUid) async {
     final res = await _sb.rpc('rpc_get_my_profile', params: {

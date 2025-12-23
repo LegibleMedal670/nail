@@ -76,7 +76,7 @@ class VideoProgressService {
   }) async {
     final code = ModuleKey.norm(moduleCode);
     final res = await _sb.rpc('mentee_get_video_progress', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_module_code': code,
     });
 
@@ -117,7 +117,7 @@ class VideoProgressService {
     }
 
     final res = await _sb.rpc('mentee_upsert_video_progress', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_module_code': code,
       'p_duration_sec': durationSec,
       'p_bucket_size': bucketSize,

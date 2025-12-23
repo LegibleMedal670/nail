@@ -57,7 +57,7 @@ class SupabaseService {
       'p_joined': joinedAt.toIso8601String().substring(0, 10),
       'p_mentor': mentorId,             // ✅ uuid 그대로 전달
       'p_photo_url': photoUrl,
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     final rows = (res is List) ? res : [res];
     if (rows.isEmpty) throw Exception('create_mentee returned empty');
@@ -79,7 +79,7 @@ class SupabaseService {
       'p_joined': joinedAt == null ? null : joinedAt.toIso8601String().substring(0, 10),
       // 'p_mentor': mentorId,            // ✅ uuid 그대로 전달
       'p_photo_url': photoUrl,
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     final rows = (res is List) ? res : [res];
     if (rows.isEmpty) throw Exception('update_user_min returned empty');
@@ -113,7 +113,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) {
       throw Exception('adminKey is missing');
     }
-    final res = await _sb.rpc('admin_list_mentors', params: {'p_admin_key': key});
+    final res = await _sb.rpc('admin_list_mentors', params: {'p_firebase_uid': key});
     if (res == null) return <Map<String, dynamic>>[];
     final rows = (res is List) ? res : [res];
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList(growable: false);
@@ -135,7 +135,7 @@ class SupabaseService {
       'p_nickname': nickname,
       'p_joined': hiredAt.toIso8601String().substring(0, 10),
       'p_photo_url': photoUrl,
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     final rows = (res is List) ? res : [res];
     if (rows.isEmpty) throw Exception('admin_create_mentor returned empty');
@@ -332,7 +332,7 @@ class SupabaseService {
     required int score,
   }) async {
     final res = await _sb.rpc('mentee_submit_exam', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_module_code': moduleCode,
       'p_answers': answers,
       'p_score': score,
@@ -640,7 +640,7 @@ class SupabaseService {
     int recentDays = 7,
   }) {
     return _rpcSingle('mentor_overview', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_avg_days': avgDays,
       'p_recent_days': recentDays,
     });
@@ -652,7 +652,7 @@ class SupabaseService {
     int offset = 0,
   }) {
     return _rpcList('mentor_list_my_mentees', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_only_pending': onlyPending,
       'p_limit': limit,
       'p_offset': offset,
@@ -664,7 +664,7 @@ class SupabaseService {
     int offset = 0,
   }) {
     return _rpcList('mentor_list_pending_queue', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_limit': limit,
       'p_offset': offset,
     });
@@ -676,7 +676,7 @@ class SupabaseService {
     int offset = 0,
   }) {
     return _rpcList('mentor_list_history', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_last_n_days': lastNDays,
       'p_limit': limit,
       'p_offset': offset,
@@ -685,7 +685,7 @@ class SupabaseService {
 
   Future<Map<String, dynamic>?> mentorGetAttempt(String attemptId) {
     return _rpcSingle('mentor_get_attempt', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_attempt_id': attemptId,
     });
   }
@@ -697,7 +697,7 @@ class SupabaseService {
     int limit = 20,
   }) {
     return _rpcList('mentor_list_prev_attempts', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_mentee_id': menteeId,
       'p_set_id': setId,
       'p_exclude_id': excludeAttemptId,
@@ -711,7 +711,7 @@ class SupabaseService {
     required String feedback,
   }) {
     return _rpcSingle('mentor_review_attempt', {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_attempt_id': attemptId,
       'p_grade_kor': gradeKor,
       'p_feedback': feedback,
@@ -742,7 +742,7 @@ class SupabaseService {
       'p_set_id': setId,
       'p_limit': limit,
       'p_offset': offset,
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     if (res == null) return null;
     final row = (res is List && res.isNotEmpty) ? res.first : res;
@@ -753,7 +753,7 @@ class SupabaseService {
   Future<Map<String, dynamic>?> menteeStartOrContinue({required String setId}) async {
     final res = await _sb.rpc('mentee_start_or_continue', params: {
       'p_set_id': setId,
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     if (res == null) return null;
     final row = (res is List && res.isNotEmpty) ? res.first : res;
@@ -768,7 +768,7 @@ class SupabaseService {
     final res = await _sb.rpc('mentee_submit_attempt', params: {
       'p_attempt_id': attemptId,
       'p_image_paths': imagePaths,
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
     if (res == null) return null;
     final row = (res is List && res.isNotEmpty) ? res.first : res;
@@ -795,7 +795,7 @@ class SupabaseService {
     }
 
     final res = await _sb.rpc('mentee_practice_completion_ratio', params: {
-      'p_login_key': key,
+      'p_firebase_uid': key,
     });
 
     if (res == null) return 0.0;
@@ -814,7 +814,7 @@ class SupabaseService {
       throw Exception('loginKey is missing');
     }
     final res = await _sb.rpc('mentee_list_latest_attempts_by_set', params: {
-      'p_login_key': key,
+      'p_firebase_uid': key,
     });
     if (res == null) return const <Map<String, dynamic>>[];
     final rows = (res is List) ? res : [res];
@@ -835,7 +835,7 @@ class SupabaseService {
       final result = await _sb.rpc(
         'mentor_list_mentee_sets',
         params: {
-          'p_login_key': key,
+          'p_firebase_uid': key,
           'p_mentee_id': menteeId,
           'p_limit': limit,
           'p_offset': offset,
@@ -896,7 +896,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
 
     return _rpcSingle('mentee_get_today_journal', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
     });
   }
 
@@ -939,7 +939,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
 
     final res = await _rpcSingle('mentee_submit_journal_entry', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_content': content,
       'p_photos': photos,
     });
@@ -956,7 +956,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
 
     return _rpcList('mentor_list_daily_journals', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_date': date?.toIso8601String().substring(0, 10),
       'p_status_filter': statusFilter,
     });
@@ -975,7 +975,7 @@ class SupabaseService {
       throw Exception('loginKey is missing');
     }
     return _rpcList('mentor_list_mentee_journals_by_month', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_mentee_id': menteeId,
       'p_from': from.toIso8601String().substring(0, 10),
       'p_to': to.toIso8601String().substring(0, 10),
@@ -992,7 +992,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
 
     await _rpcSingle('mentor_reply_journal', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_journal_id': journalId,
       'p_content': content,
       'p_photos': photos,
@@ -1005,7 +1005,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
 
     await _rpcSingle('common_confirm_message', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_message_id': messageId,
     });
   }
@@ -1016,7 +1016,7 @@ class SupabaseService {
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
 
     return _rpcSingle('get_journal_detail', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_journal_id': journalId,
     });
   }
@@ -1035,7 +1035,7 @@ class SupabaseService {
       throw Exception('loginKey is missing');
     }
     return _rpcList('mentee_list_journals_by_month', {
-      'p_login_key': key,
+      'p_firebase_uid': key,
       'p_from': from.toIso8601String().substring(0, 10),
       'p_to': to.toIso8601String().substring(0, 10),
     });

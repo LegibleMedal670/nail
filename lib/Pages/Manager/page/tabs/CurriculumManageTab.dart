@@ -104,6 +104,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
           .map((e) => _PracticeSet.fromJson(Map<String, dynamic>.from(e)))
           .toList(growable: true);
     } catch (e) {
+      print(e);
       _pracError = e.toString();
     } finally {
       if (!mounted) return;

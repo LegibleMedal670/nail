@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Pages/Chat/page/CreateChatRoomPage.dart';
+import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
+import 'package:nail/Pages/Manager/page/PendingUsersPage.dart';
+import 'package:nail/Pages/Welcome/PhoneLoginPage.dart';
 import 'package:nail/Services/ChatService.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -24,13 +27,56 @@ class ManagerMainPage extends StatefulWidget {
 class _ManagerMainPageState extends State<ManagerMainPage> {
   int _currentIndex = 0;
   final _svc = ChatService.instance;
+  final _sb = Supabase.instance.client;
   int _chatUnread = 0;
+  int _pendingCount = 0; // 가입 대기 사용자 수
   RealtimeChannel? _chatRt;
   String? _rtLoginKeyBound; // 현재 구독이 묶여 있는 loginKey
   int _chatReloadToken = 0;
 
   /// 교육 관리 탭의 이론/실습 전환 상태(앱바 토글 ↔ 하위 탭 동기화)
   final ValueNotifier<String> _manageKind = ValueNotifier<String>(kKindTheory);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingCount();
+  }
+
+  Future<void> _loadPendingCount() async {
+    try {
+      final res = await _sb.rpc('rpc_list_pending_users');
+      if (mounted) {
+        setState(() {
+          _pendingCount = (res as List?)?.length ?? 0;
+        });
+      }
+    } catch (_) {
+      // 무시
+    }
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: '로그아웃 하시겠습니까?',
+      message: '다시 로그인하려면 전화번호 인증이 필요합니다.',
+      confirmText: '로그아웃',
+      isDanger: true,
+      icon: Icons.logout_rounded,
+    );
+
+    if (!confirmed || !mounted) return;
+
+    await context.read<UserProvider>().signOut();
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PhoneLoginPage()),
+      (route) => false,
+    );
+  }
 
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: '대시보드'),
@@ -89,10 +135,51 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
           },
         ),
         // ✅ 앱바 우측 액션:
-        // - 대시보드(0) / 멘토 관리(1) / 멘티 관리(2)일 때만 "TODO 현황" 아이콘 표시
+        // - 대시보드(0)일 때: 가입 승인 + TODO 현황
+        // - 멘토 관리(1) / 멘티 관리(2)일 때: TODO 현황
         // - 채팅(3)일 때는 방 생성 + 버튼
         // - 교육 관리(4)일 때는 기존 이론/실습 토글 노출
         actions: [
+          // 대시보드(0)일 때 가입 승인 버튼
+          if (_currentIndex == 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  IconButton(
+                    tooltip: '가입 승인',
+                    icon: const Icon(Icons.switch_account, color: UiTokens.title),
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PendingUsersPage()),
+                      );
+                      _loadPendingCount(); // 돌아왔을 때 갱신
+                    },
+                  ),
+                  if (_pendingCount > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          _pendingCount > 99 ? '99+' : '$_pendingCount',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           if (_currentIndex < 3)
             IconButton(
               tooltip: 'TODO 현황',
@@ -102,6 +189,13 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
                   MaterialPageRoute(builder: (_) => const ManagerTodoStatusPage()),
                 );
               },
+            ),
+          // 대시보드(0)일 때 로그아웃 버튼
+          if (_currentIndex == 0)
+            IconButton(
+              tooltip: '로그아웃',
+              icon: const Icon(Icons.logout, color: UiTokens.title),
+              onPressed: _logout,
             ),
           if (_currentIndex == 3)
             IconButton(

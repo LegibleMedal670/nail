@@ -208,7 +208,7 @@ class CourseProgressService {
     required String loginKey,
   }) async {
     final res = await _sb.rpc('mentee_course_overview', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
 
     if (res is List && res.isNotEmpty) {
@@ -237,7 +237,7 @@ class CourseProgressService {
     required String loginKey,
   }) async {
     final res = await _sb.rpc('mentee_course_progress', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
     });
 
     final List<Map<String, dynamic>> rows;

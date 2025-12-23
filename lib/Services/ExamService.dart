@@ -87,7 +87,7 @@ class ExamService {
     required int score,
   }) async {
     final res = await _sb.rpc('mentee_submit_exam', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_module_code': moduleCode,
       'p_answers': answers,
       'p_score': score,
@@ -106,7 +106,7 @@ class ExamService {
     required String moduleCode,
   }) async {
     final res = await _sb.rpc('mentee_list_attempts', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_module_code': moduleCode,
     });
 
@@ -137,7 +137,7 @@ class ExamService {
     required String moduleCode,
   }) async {
     final res = await _sb.rpc('mentee_list_attempts', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_module_code': moduleCode,
     });
 

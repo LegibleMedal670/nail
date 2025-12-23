@@ -292,13 +292,6 @@ class _MentorManageTabState extends State<MentorManageTab> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_mentor_add',
-        backgroundColor: UiTokens.primaryBlue,
-        onPressed: _addMentor,
-        icon: const Icon(Icons.person_add_alt_rounded),
-        label: const Text('추가'),
-      ),
       body: RefreshIndicator(
         onRefresh: _load,
         color: UiTokens.primaryBlue,
@@ -357,23 +350,61 @@ class _MentorManageTabState extends State<MentorManageTab> {
               ),
 
               // 멘토 목록
-              ListView.separated(
-                itemCount: list.length,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) {
-                  final m = list[i];
-                  return GestureDetector(
-                    onTap: () => _openDetail(m), // ✅ 상세로 이동 (A안)
-                    onLongPress: () => _openEdit(m), // (옵션) 롱프레스 시 편집
-                    child: MentorTile(mentor: m),
-                  );
-                },
-              ),
+              if (list.isEmpty)
+                _buildEmptyState()
+              else
+                ListView.separated(
+                  itemCount: list.length,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  separatorBuilder: (_, __) => const SizedBox(height: 10),
+                  itemBuilder: (_, i) {
+                    final m = list[i];
+                    return GestureDetector(
+                      onTap: () => _openDetail(m), // ✅ 상세로 이동 (A안)
+                      onLongPress: () => _openEdit(m), // (옵션) 롱프레스 시 편집
+                      child: MentorTile(mentor: m),
+                    );
+                  },
+                ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ===== 빈 목록 상태 =====
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 60),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.person_off_outlined,
+            size: 64,
+            color: UiTokens.title.withOpacity(0.2),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '등록된 멘토가 없습니다',
+            style: TextStyle(
+              color: UiTokens.title.withOpacity(0.5),
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '아래 버튼을 눌러 멘토를 추가해보세요',
+            style: TextStyle(
+              color: UiTokens.title.withOpacity(0.4),
+              fontSize: 14,
+            ),
+          ),
+        ],
       ),
     );
   }

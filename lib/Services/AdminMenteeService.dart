@@ -45,7 +45,7 @@ class AdminMenteeService {
   })> fetchMenteeCourseData(String loginKey) async {
     // 1) 기본 모듈 진행 요약 (멘티 뷰 카드 구성에 사용)
     final data = await _client
-        .rpc('mentee_course_progress', params: {'p_login_key': loginKey})
+        .rpc('mentee_course_progress', params: {'p_firebase_uid': loginKey})
         .select(); // supabase 2.x
 
     final List rows = (data is List) ? data : <dynamic>[];

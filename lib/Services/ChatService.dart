@@ -16,7 +16,7 @@ class ChatService {
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_rooms_for_user', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_limit': limit,
       'p_offset': offset,
     });
@@ -31,7 +31,7 @@ class ChatService {
     List<String> memberIds = const [],
   }) async {
     final res = await _sb.rpc('rpc_create_room', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_name': name,
       'p_member_ids': memberIds,
     });
@@ -44,7 +44,7 @@ class ChatService {
     required String roomId,
   }) async {
     final res = await _sb.rpc('rpc_delete_room', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
     });
     if (res is bool) return res;
@@ -58,7 +58,7 @@ class ChatService {
     required String roomId,
   }) async {
     final res = await _sb.rpc('rpc_clear_room_messages', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
     });
     if (res is bool) return res;
@@ -73,7 +73,7 @@ class ChatService {
     required String name,
   }) async {
     final res = await _sb.rpc('rpc_rename_room', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
       'p_name': name,
     });
@@ -88,7 +88,7 @@ class ChatService {
     required String targetUserId,
   }) async {
     final res = await _sb.rpc('rpc_get_or_create_dm', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_target_id': targetUserId,
     });
     return (res as String);
@@ -101,7 +101,7 @@ class ChatService {
     required List<String> memberIds,
   }) async {
     final res = await _sb.rpc('rpc_invite_members', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
       'p_member_ids': memberIds,
     });
@@ -115,7 +115,7 @@ class ChatService {
     required String memberId,
   }) async {
     final res = await _sb.rpc('rpc_kick_member', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
       'p_member_id': memberId,
     });
@@ -135,7 +135,7 @@ class ChatService {
     int limit = 50,
   }) async {
     final res = await _sb.rpc('rpc_fetch_messages', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_after_id': afterId,
       'p_before_id': beforeId,
@@ -153,7 +153,7 @@ class ChatService {
     Map<String, dynamic>? meta,
   }) async {
     final res = await _sb.rpc('rpc_send_text', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_text': text,
       'p_meta': meta ?? <String, dynamic>{
@@ -177,7 +177,7 @@ class ChatService {
     Map<String, dynamic>? meta,
   }) async {
     final res = await _sb.rpc('rpc_send_file', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_file_name': fileName,
       'p_size_bytes': sizeBytes,
@@ -198,7 +198,7 @@ class ChatService {
     Map<String, dynamic>? meta,
   }) async {
     final res = await _sb.rpc('rpc_send_images', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_files': files,
       'p_meta': meta ?? <String, dynamic>{},
@@ -212,7 +212,7 @@ class ChatService {
     required int messageId,
   }) async {
     await _sb.rpc('rpc_delete_message', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_message_id': messageId,
     });
   }
@@ -223,7 +223,7 @@ class ChatService {
     required int messageId,
   }) async {
     await _sb.rpc('rpc_delete_my_message', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_message_id': messageId,
     });
   }
@@ -234,7 +234,7 @@ class ChatService {
     required String roomId,
   }) async {
     await _sb.rpc('rpc_mark_read', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
     });
   }
@@ -246,7 +246,7 @@ class ChatService {
     required int messageId,
   }) async {
     await _sb.rpc('rpc_pin_notice', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
       'p_message_id': messageId,
     });
@@ -257,7 +257,7 @@ class ChatService {
     required String roomId,
   }) async {
     await _sb.rpc('rpc_unpin_notice', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
     });
   }
@@ -268,7 +268,7 @@ class ChatService {
     required String roomId,
   }) async {
     final res = await _sb.rpc('rpc_get_notice', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
     });
     if (res == null) return <String, dynamic>{};
@@ -285,7 +285,7 @@ class ChatService {
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_notices', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_limit': limit,
       'p_offset': offset,
@@ -301,7 +301,7 @@ class ChatService {
     required String roomId,
   }) async {
     final res = await _sb.rpc('rpc_list_room_members', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
     });
     final rows = (res is List) ? res : [res];
@@ -316,7 +316,7 @@ class ChatService {
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_room_non_members', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
       'p_limit': limit,
       'p_offset': offset,
@@ -332,7 +332,7 @@ class ChatService {
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_admins_for_select', params: {
-      'p_login_key': adminLoginKey,
+      'p_firebase_uid': adminLoginKey,
       'p_limit': limit,
       'p_offset': offset,
     });
@@ -350,7 +350,7 @@ class ChatService {
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_media', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_kind': kinds,
       'p_limit': limit,
@@ -368,7 +368,7 @@ class ChatService {
     int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_search_messages', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_q': query,
       'p_limit': limit,
@@ -385,7 +385,7 @@ class ChatService {
     required DateTime date,
   }) async {
     final res = await _sb.rpc('rpc_find_first_message_by_date', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
       'p_date': '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
     });
@@ -400,7 +400,7 @@ class ChatService {
     required String roomId,
   }) async {
     final res = await _sb.rpc('rpc_get_message_dates', params: {
-      'p_login_key': loginKey,
+      'p_firebase_uid': loginKey,
       'p_room_id': roomId,
     });
     final rows = (res is List) ? res : [];
