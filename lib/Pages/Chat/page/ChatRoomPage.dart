@@ -2167,9 +2167,10 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
     fileBytes: (fileBytes is num) ? fileBytes.toInt() : null,
     createdAt: created,
     deleted: deleted,
-    readCount: (r['read_count'] as num?)?.toInt(),
-    nickname: (r['sender_nick'] ?? '') as String?,
-    photoUrl: (r['sender_photo'] ?? '') as String?,
+    // 서버에서 계산된 '아직 안 읽은 사람 수' (전체 인원 - 읽은 사람 - 보낸 사람)
+    readCount: (r['read_remaining'] as num?)?.toInt(),
+    nickname: (r['nickname'] ?? '') as String?,
+    photoUrl: (r['photo_url'] ?? '') as String?,
     isSystem: isSystem,
     systemText: isSystem ? (r['text'] ?? '').toString() : null,
     deletedBy: deletedBy.isEmpty ? null : deletedBy,
