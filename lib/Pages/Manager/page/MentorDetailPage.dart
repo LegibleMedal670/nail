@@ -52,30 +52,30 @@ class _MentorDetailPageState extends State<MentorDetailPage> {
                 ),
                 backgroundColor: Colors.white,
                 elevation: 0,
-                actions: [
-                  IconButton(
-                    tooltip: '수정',
-                    icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
-                    onPressed: () async {
-                      final res = await Navigator.of(context).push<MentorEditResult>(
-                        MaterialPageRoute(builder: (_) => MentorEditPage(initial: _mentor)),
-                      );
-                      if (!context.mounted || res == null) return;
-
-                      if (res.deleted) {
-                        Navigator.of(context).pop(true); // 삭제는 그대로 bool
-                        return;
-                      }
-                      if (res.mentor != null) {
-                        setState(() {
-                          _mentor = res.mentor!;
-                          _edited = true; // ← 편집 반영됨 표시
-                        });
-                      }
-                      await p.refresh();
-                    },
-                  ),
-                ],
+                // actions: [
+                //   IconButton(
+                //     tooltip: '수정',
+                //     icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
+                //     onPressed: () async {
+                //       final res = await Navigator.of(context).push<MentorEditResult>(
+                //         MaterialPageRoute(builder: (_) => MentorEditPage(initial: _mentor)),
+                //       );
+                //       if (!context.mounted || res == null) return;
+                //
+                //       if (res.deleted) {
+                //         Navigator.of(context).pop(true); // 삭제는 그대로 bool
+                //         return;
+                //       }
+                //       if (res.mentor != null) {
+                //         setState(() {
+                //           _mentor = res.mentor!;
+                //           _edited = true; // ← 편집 반영됨 표시
+                //         });
+                //       }
+                //       await p.refresh();
+                //     },
+                //   ),
+                // ],
               ),
               body: loading && p.overview == null
                   ? const Center(child: CircularProgressIndicator())

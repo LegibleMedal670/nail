@@ -29,7 +29,7 @@ class ExamService {
     // ExamQuestion.toJson()이 프로젝트에 구현되어 있다는 가정
     final payload = questions.map((e) => e.toJson()).toList(growable: false);
     await _sb.rpc('admin_upsert_exam_set', params: {
-      'p_admin_key': adminKey,
+      'p_firebase_uid': adminKey,
       'p_module_code': moduleCode,
       'p_pass_score': passScore,
       'p_questions': payload,
@@ -43,7 +43,7 @@ class ExamService {
     required String moduleCode,
   }) async {
     await _sb.rpc('admin_delete_exam_set', params: {
-      'p_admin_key': adminKey,
+      'p_firebase_uid': adminKey,
       'p_module_code': moduleCode,
     });
   }
@@ -54,7 +54,7 @@ class ExamService {
     required String userId, // uuid string
   }) async {
     final res = await _sb.rpc('admin_get_exam_attempts', params: {
-      'p_admin_key': adminKey,
+      'p_firebase_uid': adminKey,
       'p_module_code': moduleCode,
       'p_user_id': userId,
     });

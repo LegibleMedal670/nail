@@ -85,7 +85,10 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
         _byId = map;
         _loadingProg = false;
       });
-    } catch (_) {
+    } catch (e) {
+
+      print(e);
+
       if (!mounted) return;
       setState(() {
         _errorProg = true;

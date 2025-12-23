@@ -94,6 +94,9 @@ class _MenteePracticeListPageState extends State<MenteePracticeListPage> {
         _loading = false;
       });
     } catch (e) {
+
+      print(e);
+
       setState(() {
         _loading = false;
         _error = '$e';

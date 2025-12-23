@@ -131,7 +131,7 @@ class SupabaseService {
       throw Exception('adminKey is missing');
     }
     final res = await _sb.rpc('admin_create_mentor', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_nickname': nickname,
       'p_joined': hiredAt.toIso8601String().substring(0, 10),
       'p_photo_url': photoUrl,
@@ -207,7 +207,7 @@ class SupabaseService {
       throw Exception('adminKey is missing');
     }
     await _sb.rpc('admin_update_curriculum', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_code': code,
       'p_goals': goals,
       'p_resources': resources,
@@ -254,7 +254,7 @@ class SupabaseService {
     }
 
     final res = await _sb.rpc('admin_create_curriculum', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_code': code,
       'p_week': week,
       'p_title': title,
@@ -290,7 +290,7 @@ class SupabaseService {
       throw Exception('adminKey is missing');
     }
     await _sb.rpc('admin_delete_curriculum', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_code': code,
     });
   }
@@ -315,7 +315,7 @@ class SupabaseService {
       throw Exception('adminKey is missing');
     }
     final res = await _sb.rpc('admin_upsert_exam_set', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_module_code': moduleCode,
       'p_pass_score': passScore,
       'p_questions': questions,
@@ -451,7 +451,7 @@ class SupabaseService {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
     return _rpcSingle('admin_mentor_overview', {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_avg_days': avgDays,
       'p_mentor_id': mentorId,
       'p_recent_days': recentDays,
@@ -468,7 +468,7 @@ class SupabaseService {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
     return _rpcList('admin_list_mentees_of_mentor', {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_mentor_id': mentorId,
       'p_only_pending': onlyPending,
       'p_limit': limit,
@@ -484,7 +484,7 @@ class SupabaseService {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
     final rows = await _rpcList('admin_assign_mentees_to_mentor', {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_mentor_id': mentorId,
       'p_mentee_ids': menteeIds,
     });
@@ -499,7 +499,7 @@ class SupabaseService {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
     final rows = await _rpcList('admin_unassign_mentees', {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_mentee_ids': menteeIds,
     });
     if (rows.isEmpty) return 0;
@@ -514,7 +514,7 @@ class SupabaseService {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
     return _rpcSingle('admin_reassign_mentee', {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_mentee_id': menteeId,
       'p_new_mentor_id': newMentorId,
     });
@@ -528,8 +528,8 @@ class SupabaseService {
   }) async {
     final key = adminKey ?? this.adminKey;
     if (key == null || key.isEmpty) throw Exception('adminKey is missing');
-    return _rpcList('admin_list_mentee_attempts', {
-      'p_admin_key': key,
+    return _rpcList('admin_list_mentee_practice_attempts', {
+      'p_firebase_uid': key,
       'p_mentee_id': menteeId,
       'p_limit': limit,
       'p_offset': offset,
@@ -547,7 +547,7 @@ class SupabaseService {
       throw Exception('adminKey is missing');
     }
     return _rpcList('admin_list_unassigned_mentees', {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_search': (search == null || search.trim().isEmpty) ? null : search.trim(),
       'p_limit': limit,
       'p_offset': offset,
@@ -573,7 +573,7 @@ class SupabaseService {
     }
 
     final res = await _sb.rpc('admin_upsert_practice_set', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_code': code,
       'p_title': title,
       'p_instructions': instructions,
@@ -603,7 +603,7 @@ class SupabaseService {
     }
 
     final res = await _sb.rpc('admin_list_practice_sets', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_active_only': activeOnly, // null 허용
       'p_limit': limit,
       'p_offset': offset,
@@ -627,7 +627,7 @@ class SupabaseService {
     await _sb.rpc(
       'admin_delete_practice_set',
       params: {
-        'p_admin_key': key,
+        'p_firebase_uid': key,
         'p_code': code,
       },
     );
@@ -878,7 +878,7 @@ class SupabaseService {
 
     final rows = await _sb
         .rpc('admin_list_mentee_sets', params: {
-      'p_admin_key': key,
+      'p_firebase_uid': key,
       'p_mentee_id': menteeId,
       'p_limit': limit,
       'p_offset': offset,

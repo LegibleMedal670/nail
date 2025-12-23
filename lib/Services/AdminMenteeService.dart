@@ -21,7 +21,7 @@ class AdminMenteeService {
     final data = await _client.rpc(
       'admin_rank_mentees_by_progress',
       params: {
-        'p_admin_key': _adminKey,
+        'p_firebase_uid': _adminKey,
         'p_limit': 1,
       },
     ).select(); // supabase 2.x
@@ -106,7 +106,7 @@ class AdminMenteeService {
     }
 
     final res = await _client.rpc('admin_list_mentees_metrics', params: {
-      'p_admin_key': _adminKey,
+      'p_firebase_uid': _adminKey,
       'p_days': days,
       'p_low_score': lowScore,
       'p_max_attempts': maxAttempts,

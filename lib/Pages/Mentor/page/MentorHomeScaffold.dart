@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
+import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
 import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsView.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
 import 'package:nail/Pages/Mentor/page/MentorJournalPage.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
-import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:nail/Pages/Welcome/PhoneLoginPage.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/ChatService.dart';
@@ -88,6 +89,28 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     } catch (_) {
       // ignore
     }
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: '로그아웃 하시겠습니까?',
+      message: '다시 로그인하려면 전화번호 인증이 필요합니다.',
+      confirmText: '로그아웃',
+      isDanger: true,
+      icon: Icons.logout_rounded,
+    );
+
+    if (!confirmed || !mounted) return;
+
+    await context.read<UserProvider>().signOut();
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PhoneLoginPage()),
+      (route) => false,
+    );
   }
 
   Future<void> _ensureChatRealtime() async {
@@ -193,19 +216,6 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
               icon: const Icon(Icons.refresh_rounded, color: UiTokens.title),
               onPressed: () => _todoKey.currentState?.reload(),
             ),
-            IconButton(
-              tooltip: '로그아웃',
-              icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
-              onPressed: () async {
-                await context.read<UserProvider>().signOut();
-                if (!mounted) return;
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const SplashScreen()),
-                  (route) => false,
-                );
-              },
-            ),
-            const SizedBox(width: 4),
           ] else if (_currentIndex == 1) ...[
             Builder(
               builder: (ctx) => IconButton(
@@ -228,34 +238,14 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
                 },
               ),
             ),
-            IconButton(
-              tooltip: '로그아웃',
-              icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
-              onPressed: () async {
-                await context.read<UserProvider>().signOut();
-                if (!mounted) return;
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const SplashScreen()),
-                  (route) => false,
-                );
-              },
-            ),
-            const SizedBox(width: 4),
-          ] else ...[
-            IconButton(
-              tooltip: '로그아웃',
-              icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
-              onPressed: () async {
-                await context.read<UserProvider>().signOut();
-                if (!mounted) return;
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const SplashScreen()),
-                  (route) => false,
-                );
-              },
-            ),
-            const SizedBox(width: 4),
           ],
+          // 공통 로그아웃 버튼
+          IconButton(
+            tooltip: '로그아웃',
+            icon: const Icon(Icons.logout_rounded, color: UiTokens.title),
+            onPressed: _logout,
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: IndexedStack(index: _currentIndex, children: pages),

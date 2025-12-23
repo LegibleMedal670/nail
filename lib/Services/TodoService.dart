@@ -67,9 +67,11 @@ class TodoService {
     required String loginKey,
     required String filter,
   }) async {
+    // filter를 p_include_archived boolean으로 변환
+    final includeArchived = filter == 'all' || filter == 'inactive';
     final res = await _sb.rpc('rpc_list_todo_groups', params: {
       'p_firebase_uid': loginKey,
-      'p_filter': filter,
+      'p_include_archived': includeArchived,
     });
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);

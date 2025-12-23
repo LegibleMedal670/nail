@@ -128,7 +128,10 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
           // 🔽 현재 로그인 사용자(본인) 제외
               .where((u) => u.id != _myId)
               .toList(growable: false);
-        } catch (_) {
+        } catch (e) {
+
+          print(e);
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('멘토 목록을 불러오지 못했습니다 (권한 확인).')),
