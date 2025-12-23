@@ -131,10 +131,10 @@ class _MentorEditPageState extends State<MentorEditPage> {
         row = await SupabaseService.instance.updateUserMin(
           id: widget.initial!.id,
           nickname: nickname,
-          joinedAt: _hiredAt,
+          // joinedAt: _hiredAt,
           // mentorId: null,           // 멘토 자신 편집이라 mentor(uuid) 사용 안 함
-          photoUrl: photoUrl,
-          loginKey: loginKey.isEmpty ? null : loginKey,
+          // photoUrl: photoUrl,
+          // loginKey: loginKey.isEmpty ? null : loginKey,
         );
       }
 
@@ -196,67 +196,67 @@ class _MentorEditPageState extends State<MentorEditPage> {
               ),
               const SizedBox(height: 16),
 
-              InkWell(
-                onTap: _pickDate,
-                borderRadius: BorderRadius.circular(14),
-                child: InputDecorator(
-                  decoration: _dec('등록일', Icons.event_outlined),
-                  child: Row(
-                    children: [
-                      Text(_fmtDate(_hiredAt),
-                          style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
-                      const Spacer(),
-                      const Icon(Icons.calendar_today_outlined, color: UiTokens.actionIcon),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _photo,
-                decoration: _dec('사진 URL(옵션)', Icons.link_outlined),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _code,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(4),
-                ],
-                decoration: _dec('접속 코드 (4자리 숫자)', Icons.vpn_key_outlined).copyWith(
-                  suffixIcon: IconButton(
-                    tooltip: '랜덤 생성',
-                    onPressed: () async {
-                      // 서버에서 고유 코드 생성 API가 있으므로 그것도 사용 가능
-                      try {
-                        final gen = await SupabaseService.instance.generateUniqueLoginCode(digits: 4);
-                        _code.text = gen;
-                      } catch (_) {
-                        _code.text = _genUnique4();
-                      }
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('랜덤 코드를 생성했어요')),
-                      );
-                    },
-                    icon: const Icon(Icons.casino_rounded),
-                  ),
-                ),
-                validator: (v) {
-                  final s = (v ?? '').trim();
-                  if (s.isEmpty) return '접속 코드를 입력하세요';
-                  if (s.length != 4) return '4자리 숫자를 입력하세요';
-                  if (int.tryParse(s) == null) return '숫자만 입력하세요';
-
-                  final exists = widget.existingCodes.contains(s);
-                  final sameAsInitial = (widget.initial?.accessCode == s);
-                  if (exists && !sameAsInitial) return '이미 존재하는 코드입니다';
-                  return null;
-                },
-              ),
+              // InkWell(
+              //   onTap: _pickDate,
+              //   borderRadius: BorderRadius.circular(14),
+              //   child: InputDecorator(
+              //     decoration: _dec('등록일', Icons.event_outlined),
+              //     child: Row(
+              //       children: [
+              //         Text(_fmtDate(_hiredAt),
+              //             style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+              //         const Spacer(),
+              //         const Icon(Icons.calendar_today_outlined, color: UiTokens.actionIcon),
+              //       ],
+              //     ),
+              //   ),
+              // ),
+              // const SizedBox(height: 16),
+              //
+              // TextFormField(
+              //   controller: _photo,
+              //   decoration: _dec('사진 URL(옵션)', Icons.link_outlined),
+              // ),
+              // const SizedBox(height: 16),
+              //
+              // TextFormField(
+              //   controller: _code,
+              //   keyboardType: TextInputType.number,
+              //   inputFormatters: [
+              //     FilteringTextInputFormatter.digitsOnly,
+              //     LengthLimitingTextInputFormatter(4),
+              //   ],
+              //   decoration: _dec('접속 코드 (4자리 숫자)', Icons.vpn_key_outlined).copyWith(
+              //     suffixIcon: IconButton(
+              //       tooltip: '랜덤 생성',
+              //       onPressed: () async {
+              //         // 서버에서 고유 코드 생성 API가 있으므로 그것도 사용 가능
+              //         try {
+              //           final gen = await SupabaseService.instance.generateUniqueLoginCode(digits: 4);
+              //           _code.text = gen;
+              //         } catch (_) {
+              //           _code.text = _genUnique4();
+              //         }
+              //         if (!mounted) return;
+              //         ScaffoldMessenger.of(context).showSnackBar(
+              //           const SnackBar(content: Text('랜덤 코드를 생성했어요')),
+              //         );
+              //       },
+              //       icon: const Icon(Icons.casino_rounded),
+              //     ),
+              //   ),
+              //   validator: (v) {
+              //     final s = (v ?? '').trim();
+              //     if (s.isEmpty) return '접속 코드를 입력하세요';
+              //     if (s.length != 4) return '4자리 숫자를 입력하세요';
+              //     if (int.tryParse(s) == null) return '숫자만 입력하세요';
+              //
+              //     final exists = widget.existingCodes.contains(s);
+              //     final sameAsInitial = (widget.initial?.accessCode == s);
+              //     if (exists && !sameAsInitial) return '이미 존재하는 코드입니다';
+              //     return null;
+              //   },
+              // ),
             ]),
           ),
         ),

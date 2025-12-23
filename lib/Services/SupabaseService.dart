@@ -47,17 +47,11 @@ class SupabaseService {
   /// 멘티 생성 (멘토 지정은 uuid 사용)
   Future<Map<String, dynamic>> createMentee({
     required String nickname,
-    required DateTime joinedAt,
     String? mentorId,   // ✅ uuid
-    String? photoUrl,
-    String? loginKey,
   }) async {
     final res = await _sb.rpc('create_mentee', params: {
       'p_nickname': nickname,
-      'p_joined': joinedAt.toIso8601String().substring(0, 10),
       'p_mentor': mentorId,             // ✅ uuid 그대로 전달
-      'p_photo_url': photoUrl,
-      'p_firebase_uid': loginKey,
     });
     final rows = (res is List) ? res : [res];
     if (rows.isEmpty) throw Exception('create_mentee returned empty');
@@ -68,18 +62,12 @@ class SupabaseService {
   Future<Map<String, dynamic>> updateUserMin({
     required String id,
     String? nickname,
-    DateTime? joinedAt,
-    // String? mentorId,   // ✅ uuid
-    String? photoUrl,
-    String? loginKey,
+    String? mentorId,   // ✅ uuid
   }) async {
     final res = await _sb.rpc('update_user_min', params: {
       'p_id': id,
       'p_nickname': nickname,
-      'p_joined': joinedAt == null ? null : joinedAt.toIso8601String().substring(0, 10),
-      // 'p_mentor': mentorId,            // ✅ uuid 그대로 전달
-      'p_photo_url': photoUrl,
-      'p_firebase_uid': loginKey,
+      'p_mentor': mentorId,            // ✅ uuid 그대로 전달
     });
     final rows = (res is List) ? res : [res];
     if (rows.isEmpty) throw Exception('update_user_min returned empty');

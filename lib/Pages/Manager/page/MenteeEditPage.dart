@@ -197,39 +197,20 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     if (!_formKey.currentState!.validate()) return;
 
     final nickname = _name.text.trim();
-    final photo = _photoUrl.text.trim().isEmpty ? null : _photoUrl.text.trim();
-    final code = _accessCode.text.trim().isEmpty ? null : _accessCode.text.trim();
     final mentorId = _selectedMentorId; // null이면 미배정
 
     try {
       Map<String, dynamic> row;
       if (widget.initial == null) {
-        // 추가
-        row = await SupabaseService.instance.createMentee(
-          nickname: nickname,
-          joinedAt: _startedAt,
-          mentorId: mentorId,      // ✅ uuid 전달
-          photoUrl: photo,
-          loginKey: code,
-        );
-        final newId = row['id'] as String;
-
-// 멘토 선택되어 있으면 배정까지 마무리
-        if (mentorId != null) {
-          await SupabaseService.instance.adminAssignMenteesToMentor(
-            mentorId: mentorId,
-            menteeIds: [newId],
-          );
-        }
+        // 현재 UI 플로우에서는 신규 멘티 추가를 사용하지 않음 (FAB 제거됨).
+        // 혹시 호출되더라도 안전하게 막아둔다.
+        throw Exception('신규 멘티 추가는 현재 지원하지 않습니다.');
       } else {
         // 편집
         row = await SupabaseService.instance.updateUserMin(
           id: widget.initial!.id,
           nickname: nickname,
-          joinedAt: _startedAt,
-          // mentorId: mentorId,      // ✅ uuid 전달(미배정은 null)
-          photoUrl: photo,
-          loginKey: code, // 비워두면 기존 유지
+          mentorId: mentorId,      // ✅ uuid 전달(미배정은 null)
         );
         // ---- 여기부터 추가: 멘토 변경 시 관리자 RPC로 배정/해제 수행 ----
         final prevMentorId = widget.initial!.mentorId;   // 예전 배정
@@ -254,13 +235,13 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
       // 반환 row에는 mentor_name이 없을 수도 있으니, 드롭다운에서 보던 이름으로 보정
       final merged = Map<String, dynamic>.from(row);
       merged['mentor_name'] ??= (mentorId == null ? null : _mentorNameById[mentorId]);
-      merged['login_key'] ??= code;
 
       final entry = Mentee.fromRow(merged);
 
       if (!mounted) return;
       Navigator.of(context).pop(MenteeEditResult(mentee: entry));
     } catch (e) {
+      print(e);
       final msg = e.toString().contains('DUPLICATE_LOGIN_KEY')
           ? '이미 존재하는 접속 코드입니다'
           : '저장 실패: $e';
@@ -358,66 +339,66 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // 시작일
-                  InkWell(
-                    onTap: _pickDate,
-                    borderRadius: BorderRadius.circular(14),
-                    child: InputDecorator(
-                      decoration: _dec('시작일', Icons.event_outlined),
-                      child: Row(
-                        children: [
-                          Text(
-                            _fmtDate(_startedAt),
-                            style: const TextStyle(
-                              color: UiTokens.title,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const Spacer(),
-                          const Icon(Icons.calendar_today_outlined, color: UiTokens.actionIcon),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 사진 URL (옵션)
-                  TextFormField(
-                    controller: _photoUrl,
-                    decoration: _dec('사진 URL(옵션)', Icons.link_outlined),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // 접속 코드(필수, 중복 체크는 서버 + 폼에서 1차 체크)
-                  TextFormField(
-                    controller: _accessCode,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(4),
-                    ],
-                    decoration: _dec('접속 코드 (4자리 숫자)', Icons.vpn_key_outlined).copyWith(
-                      suffixIcon: IconButton(
-                        tooltip: '랜덤 생성',
-                        onPressed: _fillRandomCode,
-                        icon: const Icon(Icons.casino_rounded),
-                      ),
-                    ),
-                    validator: (v) {
-                      final s = (v ?? '').trim();
-                      if (s.isEmpty) return '접속 코드를 입력하세요';
-                      if (s.length != 4) return '4자리 숫자를 입력하세요';
-                      if (int.tryParse(s) == null) return '숫자만 입력하세요';
-
-                      final isSameAsInitial =
-                          (widget.initial?.accessCode.isNotEmpty ?? false) &&
-                              widget.initial!.accessCode == s;
-                      if (!isSameAsInitial && widget.existingCodes.contains(s)) {
-                        return '이미 존재하는 코드입니다';
-                      }
-                      return null;
-                    },
-                  ),
+                  // // 시작일
+                  // InkWell(
+                  //   onTap: _pickDate,
+                  //   borderRadius: BorderRadius.circular(14),
+                  //   child: InputDecorator(
+                  //     decoration: _dec('시작일', Icons.event_outlined),
+                  //     child: Row(
+                  //       children: [
+                  //         Text(
+                  //           _fmtDate(_startedAt),
+                  //           style: const TextStyle(
+                  //             color: UiTokens.title,
+                  //             fontWeight: FontWeight.w800,
+                  //           ),
+                  //         ),
+                  //         const Spacer(),
+                  //         const Icon(Icons.calendar_today_outlined, color: UiTokens.actionIcon),
+                  //       ],
+                  //     ),
+                  //   ),
+                  // ),
+                  // const SizedBox(height: 16),
+                  //
+                  // // 사진 URL (옵션)
+                  // TextFormField(
+                  //   controller: _photoUrl,
+                  //   decoration: _dec('사진 URL(옵션)', Icons.link_outlined),
+                  // ),
+                  // const SizedBox(height: 16),
+                  //
+                  // // 접속 코드(필수, 중복 체크는 서버 + 폼에서 1차 체크)
+                  // TextFormField(
+                  //   controller: _accessCode,
+                  //   keyboardType: TextInputType.number,
+                  //   inputFormatters: [
+                  //     FilteringTextInputFormatter.digitsOnly,
+                  //     LengthLimitingTextInputFormatter(4),
+                  //   ],
+                  //   decoration: _dec('접속 코드 (4자리 숫자)', Icons.vpn_key_outlined).copyWith(
+                  //     suffixIcon: IconButton(
+                  //       tooltip: '랜덤 생성',
+                  //       onPressed: _fillRandomCode,
+                  //       icon: const Icon(Icons.casino_rounded),
+                  //     ),
+                  //   ),
+                  //   validator: (v) {
+                  //     final s = (v ?? '').trim();
+                  //     if (s.isEmpty) return '접속 코드를 입력하세요';
+                  //     if (s.length != 4) return '4자리 숫자를 입력하세요';
+                  //     if (int.tryParse(s) == null) return '숫자만 입력하세요';
+                  //
+                  //     final isSameAsInitial =
+                  //         (widget.initial?.accessCode.isNotEmpty ?? false) &&
+                  //             widget.initial!.accessCode == s;
+                  //     if (!isSameAsInitial && widget.existingCodes.contains(s)) {
+                  //       return '이미 존재하는 코드입니다';
+                  //     }
+                  //     return null;
+                  //   },
+                  // ),
                 ],
               ),
             ),
