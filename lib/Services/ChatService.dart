@@ -103,7 +103,7 @@ class ChatService {
     final res = await _sb.rpc('rpc_invite_members', params: {
       'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
-      'p_member_ids': memberIds,
+      'p_user_ids': memberIds,
     });
     return (res as int);
   }
@@ -117,7 +117,7 @@ class ChatService {
     final res = await _sb.rpc('rpc_kick_member', params: {
       'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
-      'p_member_id': memberId,
+      'p_target_user_id': memberId,
     });
     if (res is bool) return res;
     if (res is num) return res != 0;
@@ -340,14 +340,10 @@ class ChatService {
   Future<List<Map<String, dynamic>>> listRoomNonMembers({
     required String adminLoginKey,
     required String roomId,
-    int limit = 200,
-    int offset = 0,
   }) async {
     final res = await _sb.rpc('rpc_list_room_non_members', params: {
       'p_firebase_uid': adminLoginKey,
       'p_room_id': roomId,
-      'p_limit': limit,
-      'p_offset': offset,
     });
     final rows = (res is List) ? res : [res];
     return rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);

@@ -61,7 +61,11 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
       _liveMembers = rows.map((r) => RoomMemberBrief(
         userId: (r['user_id'] ?? '').toString(),
         nickname: (r['nickname'] ?? '사용자').toString(),
-        role: _roleKo((r['role'] ?? '').toString()),
+        role: _roleKo(
+          ((r['is_admin'] == true)
+              ? 'admin'
+              : (r['is_mentor'] == true) ? 'mentor' : 'mentee'),
+        ),
         photoUrl: (r['photo_url'] ?? '').toString().isEmpty ? null : (r['photo_url'] as String),
       )).toList();
     });
@@ -458,6 +462,9 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
             }
             return ok;
           } catch (e) {
+
+            print(e);
+
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('강퇴 실패: $e')));
             }
@@ -480,12 +487,17 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
     try {
       final rows = await _svc.listRoomNonMembers(adminLoginKey: adminKey, roomId: widget.roomId);
       candidates = rows.map((r) => _InviteVm(
-        id: (r['id'] ?? '').toString(),
+        id: (r['user_id'] ?? '').toString(),
         nickname: (r['nickname'] ?? '사용자').toString(),
         photoUrl: (r['photo_url'] ?? '').toString(),
-        role: (r['role'] ?? 'mentee').toString(),
+        role: ((r['is_admin'] == true)
+            ? 'admin'
+            : (r['is_mentor'] == true) ? 'mentor' : 'mentee').toString(),
       )).toList();
     } catch (e) {
+
+      print(e);
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('목록 로드 실패: $e')));
       return;
