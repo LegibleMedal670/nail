@@ -44,6 +44,7 @@ class MentorDetailProvider extends ChangeNotifier {
         ..clear()
         ..addAll(rows.map(MenteeBrief.fromRow));
       _set(loading: false, error: null);
+      notifyListeners(); // ✅ 데이터 업데이트 후 명시적으로 알림
     } catch (e) {
       _set(loading: false, error: '불러오기 실패: $e');
     }

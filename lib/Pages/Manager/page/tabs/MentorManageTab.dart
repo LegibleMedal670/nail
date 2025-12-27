@@ -10,10 +10,10 @@ import 'package:nail/Pages/Manager/widgets/MentorTile.dart';
 import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
-// ✅ 추가: 관리자 세션 키를 읽기 위함
+// ✅ 관리자 세션 키를 읽기 위함
 import 'package:nail/Providers/UserProvider.dart';
 
-// ✅ 추가: 멘토 상세 Provider + Page
+// ✅ 멘토 상세 Provider + Page
 import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:nail/Pages/Manager/page/MentorDetailPage.dart';
 
@@ -107,7 +107,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
         break;
       case MentorSort.fastGraduate:
         list.sort(
-          (a, b) => cmpNum(
+              (a, b) => cmpNum(
             a.avgGraduateDays ?? (1 << 30),
             b.avgGraduateDays ?? (1 << 30),
           ),
@@ -124,45 +124,44 @@ class _MentorManageTabState extends State<MentorManageTab> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder:
-          (_) => SortBottomSheet<MentorSort>(
-            title: '정렬 선택',
-            current: _sort,
-            options: const [
-              SortOption(
-                value: MentorSort.recentHire,
-                label: '최근 등록순',
-                icon: Icons.history_toggle_off,
-              ),
-              SortOption(
-                value: MentorSort.name,
-                label: '가나다순',
-                icon: Icons.sort_by_alpha,
-              ),
-              SortOption(
-                value: MentorSort.menteeDesc,
-                label: '멘티수 많은순',
-                icon: Icons.trending_up,
-              ),
-              SortOption(
-                value: MentorSort.menteeAsc,
-                label: '멘티수 적은순',
-                icon: Icons.trending_down,
-              ),
-              SortOption(
-                value: MentorSort.fastGraduate,
-                label: '평균 교육 기간 짧은순',
-                icon: Icons.speed_rounded,
-              ),
-            ],
+      builder: (_) => SortBottomSheet<MentorSort>(
+        title: '정렬 선택',
+        current: _sort,
+        options: const [
+          SortOption(
+            value: MentorSort.recentHire,
+            label: '최근 등록순',
+            icon: Icons.history_toggle_off,
           ),
+          SortOption(
+            value: MentorSort.name,
+            label: '가나다순',
+            icon: Icons.sort_by_alpha,
+          ),
+          SortOption(
+            value: MentorSort.menteeDesc,
+            label: '멘티수 많은순',
+            icon: Icons.trending_up,
+          ),
+          SortOption(
+            value: MentorSort.menteeAsc,
+            label: '멘티수 적은순',
+            icon: Icons.trending_down,
+          ),
+          SortOption(
+            value: MentorSort.fastGraduate,
+            label: '평균 교육 기간 짧은순',
+            icon: Icons.speed_rounded,
+          ),
+        ],
+      ),
     );
     if (result != null && mounted) setState(() => _sort = result);
   }
 
   Future<void> _addMentor() async {
     final existing =
-        _mentors.map((m) => m.accessCode).where((s) => s.isNotEmpty).toSet();
+    _mentors.map((m) => m.accessCode).where((s) => s.isNotEmpty).toSet();
     final res = await Navigator.of(context).push<MentorEditResult>(
       MaterialPageRoute(
         builder: (_) => MentorEditPage(existingCodes: existing),
@@ -170,9 +169,8 @@ class _MentorManageTabState extends State<MentorManageTab> {
     );
     if (res?.mentor != null) {
       setState(() => _mentors.add(res!.mentor!));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('멘토가 추가되었습니다')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('멘토가 추가되었습니다')));
     }
   }
 
@@ -198,9 +196,8 @@ class _MentorManageTabState extends State<MentorManageTab> {
     if (ret == true) {
       await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('멘토가 삭제되었습니다')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('멘토가 삭제되었습니다')));
       }
       return;
     }
@@ -214,19 +211,17 @@ class _MentorManageTabState extends State<MentorManageTab> {
       return;
     }
 
-    // ret == null → 변화 없음
+    // ret == null → 멘티 배정 등 변경이 있었을 수 있으므로 목록 갱신
+    await _load();
   }
-
-
 
   // (기존) 편집 페이지 — 필요 시 유지
   Future<void> _openEdit(Mentor m) async {
-    final existing =
-        _mentors
-            .where((x) => x.id != m.id)
-            .map((x) => x.accessCode)
-            .where((s) => s.isNotEmpty)
-            .toSet();
+    final existing = _mentors
+        .where((x) => x.id != m.id)
+        .map((x) => x.accessCode)
+        .where((s) => s.isNotEmpty)
+        .toSet();
     final res = await Navigator.of(context).push<MentorEditResult>(
       MaterialPageRoute(
         builder: (_) => MentorEditPage(initial: m, existingCodes: existing),
@@ -235,17 +230,15 @@ class _MentorManageTabState extends State<MentorManageTab> {
     if (res == null) return;
     if (res.deleted) {
       setState(() => _mentors.removeWhere((x) => x.id == m.id));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('멘토가 삭제되었습니다')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('멘토가 삭제되었습니다')));
       return;
     }
     if (res.mentor != null) {
       final idx = _mentors.indexWhere((x) => x.id == m.id);
       if (idx != -1) setState(() => _mentors[idx] = res.mentor!);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('저장되었습니다')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('저장되었습니다')));
     }
   }
 
@@ -257,6 +250,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
     if (_error != null && _mentors.isEmpty) {
       return Scaffold(
         backgroundColor: Colors.white,
@@ -295,81 +289,129 @@ class _MentorManageTabState extends State<MentorManageTab> {
       body: RefreshIndicator(
         onRefresh: _load,
         color: UiTokens.primaryBlue,
-        child: SingleChildScrollView(
+        // 당길 때 인디케이터 위치/감각 약간 개선
+        displacement: 36,
+        child: CustomScrollView(
+          // ✅ 핵심: 단일 스크롤러 + AlwaysScrollable (리스트가 짧아도 당겨짐)
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // KPI
-              _buildKpiGrid(context),
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                      (ctx, index) {
+                    // 섹션 구성:
+                    // 0: KPI
+                    // 1: spacer
+                    // 2: header(멘토 목록 + 정렬)
+                    // 3.. : empty or list items
+                    // 마지막: tail spacer (pull 시 아래 잘림 체감 완화)
+                    const headerCount = 3;
 
-              const SizedBox(height: 8),
+                    final bool isEmpty = list.isEmpty;
+                    final int contentCount =
+                    isEmpty ? 1 : (list.length * 2 - 1); // 타일+구분자
+                    const int tailCount = 1;
 
-              // 목록 헤더 + 정렬
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                child: Row(
-                  children: [
-                    const Text(
-                      '멘토 목록',
-                      style: TextStyle(
-                        color: UiTokens.title,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: _showSortSheet,
-                      icon: const Icon(
-                        Icons.filter_list_rounded,
-                        color: UiTokens.actionIcon,
-                        size: 18,
-                      ),
-                      label: Text(
-                        _sortLabel(_sort),
-                        style: const TextStyle(
-                          color: UiTokens.actionIcon,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 6,
-                        ),
-                        minimumSize: const Size(0, 0),
-                        foregroundColor: UiTokens.actionIcon,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                    final int totalCount = headerCount + contentCount + tailCount;
 
-              // 멘토 목록
-              if (list.isEmpty)
-                _buildEmptyState()
-              else
-                ListView.separated(
-                  itemCount: list.length,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) {
-                    final m = list[i];
+                    // ✅ 맨 마지막 Tail Spacer
+                    if (index == totalCount - 1) {
+                      return const SizedBox(height: 120);
+                    }
+
+                    if (index == 0) {
+                      return _buildKpiGrid(ctx);
+                    }
+                    if (index == 1) {
+                      return const SizedBox(height: 8);
+                    }
+                    if (index == 2) {
+                      return _buildListHeader();
+                    }
+
+                    final int contentIndex = index - headerCount;
+
+                    if (isEmpty) {
+                      // contentCount == 1 이므로 contentIndex는 0만 들어옴
+                      return _buildEmptyState();
+                    }
+
+                    // 리스트: 짝수=타일, 홀수=간격
+                    if (contentIndex.isOdd) {
+                      return const SizedBox(height: 10);
+                    }
+
+                    final int itemIndex = contentIndex ~/ 2;
+                    final m = list[itemIndex];
+
                     return GestureDetector(
                       onTap: () => _openDetail(m), // ✅ 상세로 이동 (A안)
                       onLongPress: () => _openEdit(m), // (옵션) 롱프레스 시 편집
                       child: MentorTile(mentor: m),
                     );
                   },
+                  // 전체 아이템 개수 지정
+                  childCount: () {
+                    const headerCount = 3;
+                    final bool isEmpty = list.isEmpty;
+                    final int contentCount =
+                    isEmpty ? 1 : (list.length * 2 - 1);
+                    const int tailCount = 1;
+                    return headerCount + contentCount + tailCount;
+                  }(),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
+      ),
+      // 필요하면 다시 띄우세요 (현재는 기존 코드에 없어서 주석)
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: _addMentor,
+      //   backgroundColor: UiTokens.primaryBlue,
+      //   child: const Icon(Icons.add),
+      // ),
+    );
+  }
+
+  Widget _buildListHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Row(
+        children: [
+          const Text(
+            '멘토 목록',
+            style: TextStyle(
+              color: UiTokens.title,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const Spacer(),
+          TextButton.icon(
+            onPressed: _showSortSheet,
+            icon: const Icon(
+              Icons.filter_list_rounded,
+              color: UiTokens.actionIcon,
+              size: 18,
+            ),
+            label: Text(
+              _sortLabel(_sort),
+              style: const TextStyle(
+                color: UiTokens.actionIcon,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              minimumSize: const Size(0, 0),
+              foregroundColor: UiTokens.actionIcon,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -418,8 +460,10 @@ class _MentorManageTabState extends State<MentorManageTab> {
         // 화면 폭에 따라 칼럼 수 조정
         final int crossAxisCount = width >= 900 ? 4 : (width >= 600 ? 3 : 2);
 
-        // 접근성(텍스트 배율)에 따라 타일 높이 보정
-        final textScale = MediaQuery.textScaleFactorOf(ctx).clamp(1.0, 1.6);
+        // ✅ 최신 API: TextScaler 기반 (textScaleFactor deprecated 회피)
+        final scaler = MediaQuery.textScalerOf(ctx);
+        final textScale = scaler.scale(1.0).clamp(1.0, 1.6);
+
         const baseTileHeight = 140.0;
         final tileHeight = baseTileHeight * textScale;
 
@@ -478,5 +522,4 @@ class _MentorManageTabState extends State<MentorManageTab> {
       },
     );
   }
-
 }
