@@ -191,7 +191,11 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      MyTodoView(key: _todoKey, embedded: true), // 투두
+      MyTodoView(
+        key: _todoKey,
+        embedded: true,
+        onBadgeChanged: _refreshTodoBadge, // TODO 상태 변경 시 배지 업데이트
+      ), // 투두
       MenteeJournalPage(                       // 일일 일지
         embedded: true,
         onBadgeChanged: (needDot) {

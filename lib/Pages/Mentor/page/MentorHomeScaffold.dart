@@ -175,7 +175,11 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
 
     // 페이지 구성: 받은TODO / TODO 현황 / 일일 일지 / 채팅 / 대시보드
     final pages = <Widget>[
-      MyTodoView(key: _todoKey, embedded: true),
+      MyTodoView(
+        key: _todoKey,
+        embedded: true,
+        onBadgeChanged: _refreshTodoBadge, // TODO 상태 변경 시 배지 업데이트
+      ),
       MentorTodoGroupsView(key: _groupsKey, embedded: true),
       MentorJournalPage(
         embedded: true,

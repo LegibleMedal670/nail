@@ -63,7 +63,8 @@ class MyTodoPage extends StatelessWidget {
 /// 임베디드/단독 모두에서 재사용 가능한 TODO 본문 뷰
 class MyTodoView extends StatefulWidget {
   final bool embedded; // true면 AppBar 외부에서 포함되는 탭 본문 용도
-  const MyTodoView({super.key, required this.embedded});
+  final VoidCallback? onBadgeChanged; // TODO 상태 변경 시 배지 업데이트용 콜백
+  const MyTodoView({super.key, required this.embedded, this.onBadgeChanged});
 
   @override
   State<MyTodoView> createState() => MyTodoViewState();
@@ -129,6 +130,8 @@ class MyTodoViewState extends State<MyTodoView> {
         groupId: groupId,
       );
       await _load();
+      // 배지 업데이트 (확인 처리 자체는 미완료 카운트에 영향 없지만, 일관성을 위해 호출)
+      widget.onBadgeChanged?.call();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -261,12 +264,17 @@ class MyTodoViewState extends State<MyTodoView> {
                                   final result = await Navigator.push<Map<String, dynamic>>(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => MyTodoDetailPage(todoData: m),
+                                      builder: (_) => MyTodoDetailPage(
+                                        todoData: m,
+                                        onBadgeChanged: widget.onBadgeChanged,
+                                      ),
                                     ),
                                   );
                                   // 상세 페이지에서 돌아오면 목록 새로고침
                                   if (mounted) {
                                     _load();
+                                    // 상세 페이지에서 상태 변경이 있었을 수 있으므로 배지 업데이트
+                                    widget.onBadgeChanged?.call();
                                   }
                                 },
                                 style: OutlinedButton.styleFrom(

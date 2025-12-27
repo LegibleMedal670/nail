@@ -10,8 +10,9 @@ import 'package:nail/Providers/UserProvider.dart';
 /// - 완료하기/완료 취소 버튼
 class MyTodoDetailPage extends StatefulWidget {
   final Map<String, dynamic> todoData;
+  final VoidCallback? onBadgeChanged; // TODO 상태 변경 시 배지 업데이트용 콜백
 
-  const MyTodoDetailPage({super.key, required this.todoData});
+  const MyTodoDetailPage({super.key, required this.todoData, this.onBadgeChanged});
 
   @override
   State<MyTodoDetailPage> createState() => _MyTodoDetailPageState();
@@ -69,6 +70,8 @@ class _MyTodoDetailPageState extends State<MyTodoDetailPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(toDone ? '완료 처리되었습니다.' : '완료가 취소되었습니다.')),
       );
+      // 배지 업데이트 (미완료 카운트가 변경될 수 있음)
+      widget.onBadgeChanged?.call();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -91,6 +94,8 @@ class _MyTodoDetailPageState extends State<MyTodoDetailPage> {
       setState(() {
         _data['ack_at'] = DateTime.now().toIso8601String();
       });
+      // 배지 업데이트 (확인 처리 자체는 미완료 카운트에 영향 없지만, 일관성을 위해 호출)
+      widget.onBadgeChanged?.call();
     } catch (_) {
       // 확인 실패는 무시 (다음에 다시 시도)
     }
