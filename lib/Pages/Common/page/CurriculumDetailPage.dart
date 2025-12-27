@@ -161,6 +161,15 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
   /// - 우선 서버에서 가져온 값(_vp)
   /// - 없으면 부모에서 내려준 데모용 CurriculumProgress
   double get _watchedRatio => _vp?.watchedRatio ?? _pr.watchedRatio;
+  
+  /// 영상 시청 완료 여부:
+  /// - 서버에서 가져온 isCompleted 우선 사용
+  /// - 없거나 false면 watchedRatio >= 0.95 또는 videoCompleted 사용
+  bool get _isVideoCompleted {
+    if (_vp != null && _vp!.isCompleted) return true;
+    if (_watchedRatio >= 0.95) return true;
+    return _pr.videoCompleted;
+  }
 
   Future<void> _loadMenteeProgress() async {
     if (!_isMentee) return;
@@ -174,7 +183,19 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       );
 
       if (!mounted) return;
-      setState(() => _vp = res);
+      
+      // 진행도가 변경되었는지 확인 (이전 값과 비교)
+      final oldRatio = _vp?.watchedRatio ?? _pr.watchedRatio;
+      final newRatio = res.watchedRatio;
+      final hasChanged = (oldRatio != newRatio) || (_vp?.isCompleted != res.isCompleted);
+      
+      setState(() {
+        _vp = res;
+        // 진행도가 변경되었으면 플래그 설정
+        if (hasChanged) {
+          _progressChanged = true;
+        }
+      });
     } catch (e) {
       // 실패는 무시(네트워크 일시 이슈 등)
       if (kDebugMode) {
@@ -407,7 +428,14 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
     if (!mounted) return;
     // ✅ 플레이어에서 보고 돌아오면 진행률 다시 로드
+    // _loadMenteeProgress() 내부에서 _progressChanged를 설정하지만,
+    // 영상 시청으로 인한 변경임을 명시적으로 표시
     await _loadMenteeProgress();
+    // 추가로 진행도 변경 플래그 설정 (중복 방지 로직은 _loadMenteeProgress 내부에 있음)
+    if (!mounted) return;
+    setState(() {
+      _progressChanged = true;
+    });
   }
 
   // ===== 매핑 유틸 =====
@@ -1491,7 +1519,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                   ),
                                 ),
 
-                              if (_videoUrl != null && _isMentee && _watchedRatio == 1)
+                              if (_videoUrl != null && _isMentee && _isVideoCompleted)
                                 Positioned(
                                   right: 10, bottom: 10,
                                   child: Container(
@@ -1652,16 +1680,49 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
                                       // 3) 결과페이지 '닫기'로 돌아오면 디테일/메인 갱신 트리거는 이전 지시대로
                                       if (submitted == true) {
-                                        // (필요 시) 서버 최신 재확인
-                                        try {
-                                          final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
-                                          final fresh = map[moduleCode];
-                                          if (fresh != null && mounted) {
-                                            setState(() => _prOverride = fresh);
+                                        // 서버 최신 재확인 (재시도 로직 포함)
+                                        bool success = false;
+                                        int retryCount = 0;
+                                        const maxRetries = 3;
+                                        
+                                        while (!success && retryCount < maxRetries && mounted) {
+                                          try {
+                                            final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
+                                            final fresh = map[moduleCode];
+                                            if (fresh != null && mounted) {
+                                              setState(() {
+                                                _prOverride = fresh;
+                                                _progressChanged = true;
+                                              });
+                                              success = true;
+                                            } else {
+                                              // 데이터가 아직 반영되지 않았을 수 있음, 잠시 대기 후 재시도
+                                              retryCount++;
+                                              if (retryCount < maxRetries) {
+                                                await Future.delayed(const Duration(milliseconds: 500));
+                                              }
+                                            }
+                                          } catch (e) {
+                                            retryCount++;
+                                            if (kDebugMode) {
+                                              print('시험 진행도 갱신 실패 (재시도 $retryCount/$maxRetries): $e');
+                                            }
+                                            if (retryCount < maxRetries) {
+                                              await Future.delayed(const Duration(milliseconds: 500));
+                                            }
                                           }
-                                        } catch (_) {}
+                                        }
+                                        
+                                        // 비디오 진행도도 갱신
                                         await _loadMenteeProgress();
-                                        _progressChanged = true;
+                                        
+                                        // 최종적으로 진행도 변경 플래그 설정
+                                        if (mounted) {
+                                          setState(() {
+                                            _progressChanged = true;
+                                          });
+                                        }
+                                        
                                         // if (mounted) {
                                         //   ScaffoldMessenger.of(context).showSnackBar(
                                         //     const SnackBar(content: Text('시험 결과가 반영되었습니다.')),
