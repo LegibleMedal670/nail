@@ -620,7 +620,7 @@ class _MenteeJournalDetailPageState extends State<_MenteeJournalDetailPage> {
           _loading
               ? const Center(child: CircularProgressIndicator())
               : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 42),
                 reverse: true,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemCount: _messages.length,
