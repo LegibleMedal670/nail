@@ -45,14 +45,33 @@ class _MediaGridPageState extends State<MediaGridPage> {
       );
       final List<_MediaItem> items = [];
       for (final r in rows) {
-        final sp = (r['storage_path'] ?? '').toString();
-        if (sp.isEmpty) continue;
-        final url = await _storage.getOrCreateSignedUrlChat(sp);
-        items.add(_MediaItem(
-          storagePath: sp,
-          signedUrl: url,
-          senderNick: (r['sender_nick'] ?? '').toString(),
-        ));
+        // 묶어서 보낸 사진의 경우 urls 배열이 있으면 모든 경로를 처리
+        final urls = r['urls'];
+        final senderNick = (r['sender_nick'] ?? '').toString();
+        
+        if (urls is List && urls.isNotEmpty) {
+          // urls 배열이 있으면 모든 경로를 처리
+          for (final urlPath in urls) {
+            final sp = urlPath?.toString() ?? '';
+            if (sp.isEmpty) continue;
+            final url = await _storage.getOrCreateSignedUrlChat(sp);
+            items.add(_MediaItem(
+              storagePath: sp,
+              signedUrl: url,
+              senderNick: senderNick,
+            ));
+          }
+        } else {
+          // urls 배열이 없으면 기존 방식대로 storage_path 사용
+          final sp = (r['storage_path'] ?? '').toString();
+          if (sp.isEmpty) continue;
+          final url = await _storage.getOrCreateSignedUrlChat(sp);
+          items.add(_MediaItem(
+            storagePath: sp,
+            signedUrl: url,
+            senderNick: senderNick,
+          ));
+        }
       }
       setState(() => _items = items);
     } catch (e) {
