@@ -45,7 +45,8 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   }
 
   // 진행도 불러오기 (게이지/뱃지용 스냅샷 + 상세 맵)
-  Future<void> _loadProgress() async {
+  // retryOnEmpty: true일 경우, 데이터 반영 대기 후 재시도 (시험 제출 직후 등)
+  Future<void> _loadProgress({bool retryOnEmpty = false}) async {
     final user = context.read<UserProvider>();
     // UserProvider에 노출된 loginKey 사용 (프로젝트 구조에 맞춰 노출되어 있음)
     final String loginKey = (user.current?.loginKey ?? '').toString();
@@ -57,6 +58,11 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     });
 
     try {
+      // 재시도 시에는 약간의 지연을 두고 호출 (DB 커밋 대기)
+      if (retryOnEmpty) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+      
       final snap = await CourseProgressService.getCompletionSnapshot(loginKey: loginKey);
       final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
 
@@ -80,10 +86,11 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   }
 
   // 커리큘럼 새로고침(목록 새로고침 후 진행도도 재조회)
-  Future<void> _refreshAll() async {
+  // retryOnEmpty: 시험/영상 완료 직후에는 재시도 모드 활성화
+  Future<void> _refreshAll({bool retryOnEmpty = false}) async {
     final curri = context.read<CurriculumProvider>();
     await curri.refresh(force: true);
-    await _loadProgress();
+    await _loadProgress(retryOnEmpty: retryOnEmpty);
   }
 
   // ======= 진행률 계산 유틸 (게이지/뱃지) =======
@@ -397,7 +404,8 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
 
                         // 디테일에서 진행도 변화가 있었다면(true), 즉시 최신화
                         if (changed == true) {
-                          await _refreshAll(); // 내부에서 provider.refresh(force: true) + _loadProgress()
+                          // 시험/영상 완료 직후이므로 재시도 모드 활성화
+                          await _refreshAll(retryOnEmpty: true);
                         }
                       },
                     ),

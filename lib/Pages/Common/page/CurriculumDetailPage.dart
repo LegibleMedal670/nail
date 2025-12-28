@@ -187,7 +187,17 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       // 진행도가 변경되었는지 확인 (이전 값과 비교)
       final oldRatio = _vp?.watchedRatio ?? _pr.watchedRatio;
       final newRatio = res.watchedRatio;
-      final hasChanged = (oldRatio != newRatio) || (_vp?.isCompleted != res.isCompleted);
+      final oldCompleted = _vp?.isCompleted ?? _pr.videoCompleted;
+      final newCompleted = res.isCompleted;
+      
+      // _pr(부모에서 전달된 진행도)와도 비교하여 변경 감지
+      final prRatio = _pr.watchedRatio;
+      final prCompleted = _pr.videoCompleted;
+      
+      final hasChanged = (oldRatio != newRatio) || 
+                        (oldCompleted != newCompleted) ||
+                        (prRatio != newRatio) ||
+                        (prCompleted != newCompleted);
       
       setState(() {
         _vp = res;
@@ -428,10 +438,10 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     );
     if (!mounted) return;
     // ✅ 플레이어에서 보고 돌아오면 진행률 다시 로드
-    // _loadMenteeProgress() 내부에서 _progressChanged를 설정하지만,
-    // 영상 시청으로 인한 변경임을 명시적으로 표시
     await _loadMenteeProgress();
-    // 추가로 진행도 변경 플래그 설정 (중복 방지 로직은 _loadMenteeProgress 내부에 있음)
+    // 영상 시청으로 인한 변경임을 명시적으로 표시
+    // _loadMenteeProgress() 내부에서도 _progressChanged를 설정하지만,
+    // 영상 시청은 항상 진행도 변경 가능성이 높으므로 강제 설정
     if (!mounted) return;
     setState(() {
       _progressChanged = true;
@@ -1308,11 +1318,16 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       behavior: HitTestBehavior.translucent,
       onTap: _unfocus,
       child: PopScope(
-        canPop: !_editingGuardActive, // 편집 보호 활성일 때만 막기
+        canPop: false, // 모든 경우 직접 처리
         onPopInvoked: (didPop) async {
-          if (didPop) return;                // 이미 정상 pop되었으면 추가 처리 없음
+          if (didPop) return;
+          
+          // 편집 보호 활성일 때는 확인 다이얼로그
           if (_editingGuardActive) {
-            await _handleBack();             // 편집 중이면 기존 확인 다이얼로그 로직 수행
+            await _handleBack();
+          } else {
+            // 그 외에는 _popSelf() 호출 (멘티 모드에서 _progressChanged 반환 필요)
+            _popSelf();
           }
         },
         child: Scaffold(
@@ -1678,37 +1693,38 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                                         ),
                                       );
 
-                                      // 3) 결과페이지 '닫기'로 돌아오면 디테일/메인 갱신 트리거는 이전 지시대로
+                                      // 3) 결과페이지 '닫기'로 돌아오면 디테일/메인 갱신 트리거
                                       if (submitted == true) {
                                         // 서버 최신 재확인 (재시도 로직 포함)
                                         bool success = false;
                                         int retryCount = 0;
-                                        const maxRetries = 3;
+                                        const maxRetries = 5;
                                         
                                         while (!success && retryCount < maxRetries && mounted) {
+                                          // 첫 시도가 아니면 지연 추가 (DB 커밋 대기)
+                                          if (retryCount > 0) {
+                                            await Future.delayed(const Duration(milliseconds: 400));
+                                          }
+                                          
                                           try {
                                             final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
+                                            final snap = await CourseProgressService.getCompletionSnapshot(loginKey: loginKey);
                                             final fresh = map[moduleCode];
-                                            if (fresh != null && mounted) {
+                                            
+                                            // fresh가 있고, 시험을 통과했으면 성공
+                                            if (fresh != null && fresh.examPassed == true && mounted) {
                                               setState(() {
                                                 _prOverride = fresh;
                                                 _progressChanged = true;
                                               });
                                               success = true;
                                             } else {
-                                              // 데이터가 아직 반영되지 않았을 수 있음, 잠시 대기 후 재시도
                                               retryCount++;
-                                              if (retryCount < maxRetries) {
-                                                await Future.delayed(const Duration(milliseconds: 500));
-                                              }
                                             }
                                           } catch (e) {
                                             retryCount++;
                                             if (kDebugMode) {
-                                              print('시험 진행도 갱신 실패 (재시도 $retryCount/$maxRetries): $e');
-                                            }
-                                            if (retryCount < maxRetries) {
-                                              await Future.delayed(const Duration(milliseconds: 500));
+                                              print('시험 진행도 갱신 오류 (재시도 $retryCount/$maxRetries): $e');
                                             }
                                           }
                                         }
