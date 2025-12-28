@@ -1,11 +1,16 @@
 // lib/Pages/Mentee/page/PracticeDetailPage.dart
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:nail/Pages/Common/page/SignatureConfirmPage.dart';
+import 'package:nail/Pages/Common/page/SignaturePage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/StorageService.dart';
+import 'package:provider/provider.dart';
 
 class PracticeDetailPage extends StatefulWidget {
   final String setCode; // set code (text)
@@ -42,6 +47,9 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
 
   // 방금 제출한 로컬 이미지(서버 재조회 전에도 계속 보여주기)
   List<XFile> _lastSubmittedLocal = const [];
+
+  // ✅ 멘티 서명 완료 여부 (프로토타입: 로컬 상태만)
+  bool _menteeSigned = false;
 
   @override
   void initState() {
@@ -106,6 +114,59 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       setState(() => _localPicks.addAll(imgs));
     } catch (e) {
       _showSnack('사진 선택 실패: $e');
+    }
+  }
+
+  // ===== 멘티 확인 서명 =====
+  Future<void> _openMenteeSignature() async {
+    if (_menteeSigned) return; // 이미 서명 완료
+
+    final user = context.read<UserProvider>().current;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사용자 정보를 불러올 수 없습니다.')),
+      );
+      return;
+    }
+
+    // attempts jsonb에서 최신 시도의 grade, submittedAt 가져오기
+    final attemptsJson = (_detail?['attempts'] as List?) ?? const [];
+    final attempts = attemptsJson.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final latestAttempt = attempts.isNotEmpty ? attempts.first : null;
+
+    final grade = latestAttempt?['grade'] ?? '';
+    final submittedAt = latestAttempt?['submitted_at'] ?? '(날짜 없음)';
+
+    // SignatureConfirmPage로 이동
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => SignatureConfirmPage(
+          type: SignatureType.practiceMentee,
+          data: {
+            'practiceTitle': _detail?['title'] ?? '실습',
+            'name': user.nickname,
+            'phone': user.phone,
+            'grade': grade,
+            'submittedAt': submittedAt,
+          },
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      // 서명 완료 처리
+      setState(() {
+        _menteeSigned = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ 확인 서명이 완료되었습니다!')),
+      );
+
+      // TODO: 서버에 서명 이미지 + 메타데이터 저장
+      // final signature = result['signature'] as Uint8List?;
+      // final timestamp = result['timestamp'] as String?;
     }
   }
 
@@ -309,6 +370,10 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
               attemptNo: attemptNo,
               grade: grade,
               feedback: feedback,
+              isSigned: _menteeSigned,
+              onSignature: statusLabel == '검토 완료' && !_menteeSigned
+                  ? _openMenteeSignature
+                  : null,
             ),
 
             const SizedBox(height: 16),
@@ -413,12 +478,16 @@ class _StatusCard extends StatelessWidget {
   final int? attemptNo;
   final String grade;       // 'high'|'mid'|'low' or ''
   final String feedback;
+  final bool isSigned;
+  final VoidCallback? onSignature;
 
   const _StatusCard({
     required this.statusLabel,
     required this.attemptNo,
     required this.grade,
     required this.feedback,
+    this.isSigned = false,
+    this.onSignature,
   });
 
   @override
@@ -489,6 +558,34 @@ class _StatusCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+          ],
+
+          // 서명 버튼 (검토 완료 시에만 표시)
+          if (showGrade) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: onSignature,
+                style: FilledButton.styleFrom(
+                  backgroundColor: isSigned
+                      ? Colors.green[600]
+                      : UiTokens.primaryBlue,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                icon: Icon(
+                  isSigned ? Icons.check_circle : Icons.edit,
+                  size: 20,
+                ),
+                label: Text(
+                  isSigned ? '확인 완료' : '확인 서명하기',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
             ),
           ],
         ],

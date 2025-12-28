@@ -1,5 +1,8 @@
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:nail/Pages/Common/page/SignatureConfirmPage.dart';
+import 'package:nail/Pages/Common/page/SignaturePage.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -139,9 +142,40 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  // ===== 서명 페이지로 이동 =====
+  Future<void> _openSignature() async {
     if (_isReviewed) { _showSnack('검토 완료된 항목은 수정할 수 없어요'); return; }
     if (_gradeKor == null) { _showSnack('등급을 선택해주세요'); return; }
+
+    final mp = context.read<MentorProvider>();
+    final menteeName = _attempt?['mentee_nickname'] ?? '멘티';
+    final practiceTitle = _attempt?['set_title'] ?? '실습';
+
+    // SignatureConfirmPage로 이동
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => SignatureConfirmPage(
+          type: SignatureType.practiceMentor,
+          data: {
+            'practiceTitle': practiceTitle,
+            'menteeName': menteeName,
+            'name': mp.mentorName ?? '멘토',
+            'phone': '(멘토 전화번호)', // TODO: 멘토 전화번호 가져오기
+            'grade': _gradeKor,
+            'feedback': _fbCtrl.text,
+          },
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      // 서명 완료 후 저장
+      await _saveAfterSignature(result['signature'] as Uint8List?);
+    }
+  }
+
+  Future<void> _saveAfterSignature(Uint8List? signature) async {
     setState(() => _saving = true);
     try {
       final mp = context.read<MentorProvider>();
@@ -152,10 +186,15 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
         feedback: _fbCtrl.text,
       );
 
+      // TODO: 서명 이미지 저장 (signature 파라미터 사용)
+
       // ✅ 저장 직후 전역 상태 한 방 갱신 (KPI/큐/멘티/히스토리)
       await mp.refreshAllAfterReview();
 
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        _showSnack('✅ 서명이 완료되었습니다!');
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       print(e);
       _showSnack('저장 실패: $e');
@@ -216,18 +255,22 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
             padding: EdgeInsets.fromLTRB(12, 8, 12, bottomPad),
             child: SizedBox(
               height: 48,
-              child: FilledButton(
-                onPressed: canEdit ? (_saving ? null : _save) : () { if (mounted) Navigator.pop(context); },
+              child: FilledButton.icon(
+                onPressed: canEdit ? (_saving ? null : _openSignature) : () { if (mounted) Navigator.pop(context); },
                 style: FilledButton.styleFrom(
                   backgroundColor: canEdit ? UiTokens.primaryBlue : const Color(0xFFE2E8F0),
                   foregroundColor: canEdit ? Colors.white : UiTokens.title,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: canEdit
+                icon: canEdit
                     ? (_saving
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('저장', style: TextStyle(fontWeight: FontWeight.w800)))
-                    : const Text('닫기', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.edit, size: 20))
+                    : const Icon(Icons.close, size: 20),
+                label: Text(
+                  canEdit ? (_saving ? '처리 중...' : '서명하고 제출') : '닫기',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
           ),

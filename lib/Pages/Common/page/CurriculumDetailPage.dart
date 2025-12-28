@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Pages/Common/model/ExamModel.dart';
+import 'package:nail/Pages/Common/page/SignatureConfirmPage.dart';
+import 'package:nail/Pages/Common/page/SignaturePage.dart';
 import 'package:nail/Pages/Common/page/VideoPlayerPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/widgets/SectionTitle.dart';
@@ -156,6 +158,9 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   // 멘티 진행률(서버에서 직접 조회한 결과)
   VideoProgressResult? _vp;
+
+  // ✅ 서명 완료 여부 (프로토타입: 로컬 상태만)
+  bool _signed = false;
 
   /// 화면에서 사용할 시청 비율:
   /// - 우선 서버에서 가져온 값(_vp)
@@ -1308,6 +1313,54 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }
   }
 
+  // ===== 서명 페이지로 이동 =====
+  Future<void> _openSignature() async {
+    if (_signed) return; // 이미 서명 완료
+    if (!_isVideoCompleted || !_pr.examPassed) return; // 조건 미충족
+
+    final user = context.read<UserProvider>().current;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사용자 정보를 불러올 수 없습니다.')),
+      );
+      return;
+    }
+
+    // SignatureConfirmPage로 이동
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => SignatureConfirmPage(
+          type: SignatureType.theory,
+          data: {
+            'moduleName': _item.title,
+            'name': user.nickname,
+            'phone': user.phone,
+            'videoCompleted': _isVideoCompleted,
+            'examScore': _pr.bestScore ?? 0,
+            'examPassed': _pr.examPassed,
+          },
+        ),
+      ),
+    );
+
+    if (result != null && mounted) {
+      // 서명 완료 처리
+      setState(() {
+        _signed = true;
+        _progressChanged = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('✅ 서명이 완료되었습니다!')),
+      );
+
+      // TODO: 서버에 서명 이미지 + 메타데이터 저장
+      // final signature = result['signature'] as Uint8List?;
+      // final timestamp = result['timestamp'] as String?;
+    }
+  }
+
   // ===== 뷰 =====
   @override
   Widget build(BuildContext context) {
@@ -1812,16 +1865,33 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     child: FilledButton(
                       onPressed: _isAdminEdit
                           ? (_dirty && !_saving ? _saveAllEdits : null)
-                          : (_videoUrl != null) ? _openPlayer : null,
+                          : (_signed
+                              ? null // 서명 완료 시 비활성화
+                              : (_isVideoCompleted && _pr.examPassed
+                                  ? _openSignature // 영상 완료 + 시험 통과 시 활성화
+                                  : null)), // 조건 미충족 시 비활성화
                       style: FilledButton.styleFrom(
-                        backgroundColor: UiTokens.primaryBlue,
+                        backgroundColor: _signed 
+                            ? Colors.grey 
+                            : (_isVideoCompleted && _pr.examPassed 
+                                ? UiTokens.primaryBlue 
+                                : Colors.grey),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: Text(
-                        _isAdminEdit
-                            ? (_saving ? '저장 중...' : (_dirty ? '저장하기' : '변경 없음'))
-                            : _watchedRatio <= 0 ? '시청하기' : (_watchedRatio < 1 ? '이어보기' : '다시보기'),
-                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (_signed) ...[
+                            const Icon(Icons.check_circle, size: 20),
+                            const SizedBox(width: 8),
+                          ],
+                          Text(
+                            _isAdminEdit
+                                ? (_saving ? '저장 중...' : (_dirty ? '저장하기' : '변경 없음'))
+                                : (_signed ? '서명 완료' : '서명하기'),
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                        ],
                       ),
                     ),
                   ),

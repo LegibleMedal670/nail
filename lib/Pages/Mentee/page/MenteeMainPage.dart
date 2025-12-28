@@ -1,6 +1,7 @@
 // lib/Pages/Mentee/page/MenteeMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
+import 'package:nail/Pages/Common/page/CompletionPage.dart';
 import 'package:nail/Pages/Common/page/CurriculumDetailPage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
@@ -34,6 +35,9 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   Map<String, CurriculumProgress> _progressById = {}; // 모듈코드 -> 진행객체
   bool _progLoading = false;
   bool _progError = false;
+
+  // ✅ 서명 완료 상태 (프로토타입: 로컬 상태만)
+  final Set<String> _signed = <String>{};
 
   @override
   void initState() {
@@ -91,6 +95,24 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     final curri = context.read<CurriculumProvider>();
     await curri.refresh(force: true);
     await _loadProgress(retryOnEmpty: retryOnEmpty);
+  }
+
+  // ======= 수료 가능 여부 체크 =======
+  bool _canCompleteEducation(List<CurriculumItem> items) {
+    if (items.isEmpty) return false;
+
+    // 프로토타입: 모든 이론 교육이 서명 완료되었는지 확인
+    for (final item in items) {
+      // 시험이 필요한 모듈만 체크 (이론 교육)
+      if (item.requiresExam) {
+        if (!_signed.contains(item.id)) {
+          return false; // 하나라도 서명되지 않았으면 불가
+        }
+      }
+    }
+
+    // TODO: 실습 교육 완료 여부도 체크 필요
+    return true;
   }
 
   // ======= 진행률 계산 유틸 (게이지/뱃지) =======
@@ -387,38 +409,140 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                       passed: false,
                     );
 
+                // 잠금 체크: 이전 모듈이 서명되지 않았으면 잠금
+                final bool isLocked = i > 0 && !_signed.contains(list[i - 1].id);
+                final bool isSigned = _signed.contains(item.id);
+
                 return Stack(
                   children: [
-                    CurriculumTile(
-                      item: item,
-                      onTap: () async {
-                        final changed = await Navigator.of(context).push<bool>(
-                          MaterialPageRoute(
-                            builder: (_) => CurriculumDetailPage(
-                              item: item,
-                              mode: CurriculumViewMode.mentee,
-                              progress: prog, // 실제 진행 객체 전달
-                            ),
-                          ),
-                        );
+                    Opacity(
+                      opacity: isLocked ? 0.5 : 1.0,
+                      child: CurriculumTile(
+                        item: item,
+                        onTap: isLocked
+                            ? () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('이전 교육의 서명을 완료해주세요.'),
+                                  ),
+                                );
+                              }
+                            : () async {
+                                final changed =
+                                    await Navigator.of(context).push<bool>(
+                                  MaterialPageRoute(
+                                    builder: (_) => CurriculumDetailPage(
+                                      item: item,
+                                      mode: CurriculumViewMode.mentee,
+                                      progress: prog, // 실제 진행 객체 전달
+                                    ),
+                                  ),
+                                );
 
-                        // 디테일에서 진행도 변화가 있었다면(true), 즉시 최신화
-                        if (changed == true) {
-                          // 시험/영상 완료 직후이므로 재시도 모드 활성화
-                          await _refreshAll(retryOnEmpty: true);
-                        }
-                      },
+                                // 디테일에서 진행도 변화가 있었다면(true), 즉시 최신화
+                                if (changed == true) {
+                                  // 시험/영상 완료 직후이므로 재시도 모드 활성화
+                                  await _refreshAll(retryOnEmpty: true);
+                                }
+                              },
+                      ),
                     ),
-                    if (state != Progress.notStarted)
+
+                    // 잠금 아이콘 (오른쪽 중앙)
+                    if (isLocked)
+                      Positioned(
+                        right: 16,
+                        top: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: Icon(
+                            Icons.lock,
+                            color: Colors.grey[600],
+                            size: 26,
+                          ),
+                        ),
+                      ),
+
+                    // 진행 뱃지 (오른쪽 상단)
+                    if (state != Progress.notStarted && !isLocked)
                       Positioned(
                         top: 10,
                         right: 10,
                         child: _progressBadge(state),
                       ),
+
+                    // 서명 완료 펜 아이콘 (오른쪽 상단, 진행 뱃지 옆)
+                    if (isSigned && !isLocked)
+                      Positioned(
+                        top: 10,
+                        right: state != Progress.notStarted ? 50 : 10,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.green[500],
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.edit,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                        ),
+                      ),
                   ],
                 );
               },
             ),
+
+            // ===== 교육 수료하기 버튼 =====
+            if (_canCompleteEducation(items))
+              Padding(
+                padding: const EdgeInsets.only(top: 24),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      final user = context.read<UserProvider>().current;
+                      if (user == null) return;
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => CompletionPage(
+                            menteeId: user.id,
+                            menteeName: user.nickname,
+                            theoryCount: items.where((i) => i.requiresExam).length,
+                            practiceCount: 0, // TODO: 실습 개수 가져오기
+                            totalHours: 0, // TODO: 총 교육 시간 계산
+                          ),
+                        ),
+                      );
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green[600],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.school, size: 24),
+                    label: const Text(
+                      '교육 수료하기',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
