@@ -80,14 +80,18 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
           : (keysRaw.isNotEmpty ? await _signAll(keysRaw) : const <String>[]);
 
       // 이전 시도
-      final menteeId = '${row['mentee_id']}';
-      final setId    = '${row['set_id']}';
-      final prevList = await api.mentorListPrevAttempts(
-        menteeId: menteeId,
-        setId: setId,
-        excludeAttemptId: widget.attemptId,
-        limit: 10,
-      );
+      final menteeId = row['mentee_id'];
+      final setId    = row['set_id'];
+      
+      // ✅ null 체크: UUID가 없으면 이전 시도 조회 스킵
+      final prevList = (menteeId != null && setId != null)
+          ? await api.mentorListPrevAttempts(
+              menteeId: menteeId.toString(),
+              setId: setId.toString(),
+              excludeAttemptId: widget.attemptId,
+              limit: 10,
+            )
+          : <Map<String, dynamic>>[];
       final prevSigned = <Map<String, dynamic>>[];
       for (final e in prevList) {
         final pUrls = (e['image_urls'] as List?) ?? const [];
@@ -153,6 +157,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
 
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
+      print(e);
       _showSnack('저장 실패: $e');
     } finally {
       if (mounted) setState(() => _saving = false);

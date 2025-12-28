@@ -83,7 +83,10 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     try {
       SupabaseService.instance.loginKey = loginKey;
       final rows =
-          await SupabaseService.instance.mentorListDailyJournals(date: null, statusFilter: 'pending');
+          await SupabaseService.instance.mentorListDailyJournals(
+            date: DateTime.now(),  // ✅ 오늘 날짜만 조회
+            statusFilter: 'pending'
+          );
       if (!mounted) return;
       setState(() => _journalPendingCount = rows.length);
     } catch (_) {
@@ -171,7 +174,8 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
   @override
   Widget build(BuildContext context) {
     final up = context.watch<UserProvider>();
-    final loginKey = up.current?.loginKey ?? '';
+    final user = up.current;
+    final loginKey = user?.loginKey ?? '';
 
     // 페이지 구성: 받은TODO / TODO 현황 / 일일 일지 / 채팅 / 대시보드
     final pages = <Widget>[
@@ -191,9 +195,15 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
 
     final titles = ['받은TODO', 'TODO 현황', '일일 일지', '채팅', '대시보드'];
 
+    // ✅ UserProvider에서 사용자 정보 가져오기
     // 스캐폴드 전체를 MentorProvider로 감싸 AppBar/탭/라우팅 전역에서 접근 가능하게 함
     return ChangeNotifierProvider(
-      create: (_) => MentorProvider(mentorLoginKey: loginKey)..ensureLoaded(),
+      create: (_) => MentorProvider(
+        mentorLoginKey: loginKey,
+        mentorName: user?.nickname,
+        mentorPhotoUrl: user?.photoUrl,
+        mentorHiredAt: user?.joinedAt,
+      )..ensureLoaded(),
       child: Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(

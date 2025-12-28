@@ -58,6 +58,9 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
         widget.onPendingChanged!();
       }
     } catch (e) {
+
+      print(e);
+
       setState(() {
         _error = '$e';
       });
@@ -144,7 +147,7 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
 
   Future<void> _openDetail(Map<String, dynamic> row) async {
     final journalId = (row['journal_id'] ?? row['id']).toString();
-    final menteeName = (row['mentee_name'] ?? '멘티').toString();
+    final menteeName = (row['mentee_nickname'] ?? '멘티').toString(); // ✅ mentee_name → mentee_nickname
     final menteeId = (row['mentee_id'] ?? '').toString();
     final date = _parseDate(row['date']);
 
@@ -252,22 +255,22 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
                   builder: (context) {
                     final r = _items[i];
                     final menteeName =
-                        (r['mentee_name'] ?? '멘티').toString();
-                    final status = (r['status'] ?? 'pending').toString();
+                        (r['mentee_nickname'] ?? '멘티').toString(); // ✅ mentee_name → mentee_nickname
+                    
+                    // ✅ RPC의 is_pending (마지막 메시지가 멘티인지)를 사용
+                    final bool isPending = r['is_pending'] == true;
+                    final String status = isPending ? 'pending' : 'replied';
 
-                    // 미제출 상태면 제출 시각은 '—'로 표기
-                    final String submittedAt = status == 'not_submitted'
-                        ? '—'
-                        : _formatSubmittedAt(
-                            r['last_message_at'],
-                            r['date'],
-                          );
-                    final isNotSubmitted = status == 'not_submitted';
+                    final String submittedAt = _formatSubmittedAt(
+                        r['submitted_at'],  // ✅ last_message_at → submitted_at
+                        r['date'],
+                      );
+                    
                     return _JournalListTile(
                       menteeName: menteeName,
                       submittedAt: submittedAt,
                       status: status,
-                      onTap: isNotSubmitted ? null : () => _openDetail(r),
+                      onTap: () => _openDetail(r),
                     );
                   },
                 ),
