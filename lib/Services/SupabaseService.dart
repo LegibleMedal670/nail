@@ -1,6 +1,7 @@
 // SupabaseService.dart
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
@@ -799,13 +800,25 @@ class SupabaseService {
     });
 
     if (res == null) return 0.0;
-    // RPC는 row 또는 rows로 올 수 있음 → 통일 처리
-    final row = (res is List && res.isNotEmpty) ? res.first : res;
-    if (row is! Map) return 0.0;
-
-    final r = row['ratio'];
-    if (r is num) return r.toDouble();
-    return double.tryParse(r?.toString() ?? '0') ?? 0.0;
+    
+    // RPC가 numeric을 직접 반환하는 경우
+    if (res is num) return res.toDouble();
+    if (res is String) return double.tryParse(res) ?? 0.0;
+    
+    // List로 올 경우 (Supabase가 단일 값도 배열로 감쌀 수 있음)
+    if (res is List && res.isNotEmpty) {
+      final first = res.first;
+      if (first is num) return first.toDouble();
+      if (first is String) return double.tryParse(first) ?? 0.0;
+      // Map 형태로 올 경우
+      if (first is Map) {
+        final val = first.values.first;
+        if (val is num) return val.toDouble();
+        if (val is String) return double.tryParse(val) ?? 0.0;
+      }
+    }
+    
+    return 0.0;
   }
 
   Future<List<Map<String, dynamic>>> menteeListLatestAttemptsBySet() async {
