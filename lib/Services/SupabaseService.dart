@@ -958,7 +958,7 @@ class SupabaseService {
     return _rpcList('mentor_list_daily_journals', {
       'p_firebase_uid': key,
       'p_date': date?.toIso8601String().substring(0, 10),
-      'p_status_filter': statusFilter,
+      'p_status': statusFilter, // ✅ p_status_filter → p_status
     });
   }
 
