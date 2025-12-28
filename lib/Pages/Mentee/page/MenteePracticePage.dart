@@ -81,7 +81,10 @@ class _View extends StatelessWidget {
               onOpen: () async {
                 final changed = await Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => PracticeDetailPage(setId: p.currentSet!['id'])),
+                  MaterialPageRoute(builder: (_) => PracticeDetailPage(
+                    setCode: p.currentSet!['code'],
+                    setId: p.currentSet!['id'],
+                  )),
                 );
                 if (changed == true && context.mounted) {
                   await context.read<PracticeProvider>().refreshAll();
@@ -132,7 +135,10 @@ class _View extends StatelessWidget {
                     onTap: () async {
                       final changed = await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => PracticeDetailPage(setId: s['id'])),
+                        MaterialPageRoute(builder: (_) => PracticeDetailPage(
+                          setCode: s['code'],
+                          setId: s['id'],
+                        )),
                       );
                       if (changed == true && context.mounted) {
                         await context.read<PracticeProvider>().refreshAll();
@@ -199,13 +205,18 @@ class _PracticeTileWithBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final api = SupabaseService.instance;
     return FutureBuilder<Map<String, dynamic>?>(
-      future: api.menteePracticeSetDetail(setId: setId, limit: 1, offset: 0),
+      future: api.menteePracticeSetDetail(code: code),
       builder: (ctx, snap) {
         String? label; String? grade;
         if (snap.hasData && snap.data != null) {
-          final st = snap.data!['current_status'] as String?;
-          grade = snap.data!['current_grade'] as String?;
-          label = SupabaseService.instance.practiceStatusLabel(st) == '시도 없음' ? null : SupabaseService.instance.practiceStatusLabel(st) ;
+          // RPC 응답에서 attempts jsonb 파싱
+          final attemptsJson = (snap.data!['attempts'] as List?) ?? const [];
+          if (attemptsJson.isNotEmpty) {
+            final latestAttempt = Map<String, dynamic>.from(attemptsJson.first as Map);
+            final st = latestAttempt['status'] as String?;
+            grade = latestAttempt['grade'] as String?;
+            label = SupabaseService.instance.practiceStatusLabel(st) == '시도 없음' ? null : SupabaseService.instance.practiceStatusLabel(st);
+          }
         }
         return Stack(
           children: [
@@ -218,7 +229,7 @@ class _PracticeTileWithBadge extends StatelessWidget {
             if (label != null && label.isNotEmpty)
               Positioned(
                 top: 10, right: 10,
-                child: _practiceBadge(label: label!, grade: grade),
+                child: _practiceBadge(label: label, grade: grade),
               ),
           ],
         );

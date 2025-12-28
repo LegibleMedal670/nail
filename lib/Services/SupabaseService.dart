@@ -721,17 +721,18 @@ class SupabaseService {
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
 
-  // B) 세트 상세(+히스토리 페이징)
+  // B) 세트 상세 (code 기반, attempts는 jsonb로 반환됨)
   Future<Map<String, dynamic>?> menteePracticeSetDetail({
-    required String setId,
-    int limit = 20,
-    int offset = 0,
+    required String code,
   }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing. Please ensure Firebase authentication is complete.');
+    }
+    
     final res = await _sb.rpc('mentee_practice_set_detail', params: {
-      'p_set_id': setId,
-      'p_limit': limit,
-      'p_offset': offset,
-      'p_firebase_uid': loginKey,
+      'p_code': code,
+      'p_firebase_uid': key,
     });
     if (res == null) return null;
     final row = (res is List && res.isNotEmpty) ? res.first : res;
@@ -740,9 +741,14 @@ class SupabaseService {
 
   // C) 시작/이어하기
   Future<Map<String, dynamic>?> menteeStartOrContinue({required String setId}) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing. Please ensure Firebase authentication is complete.');
+    }
+    
     final res = await _sb.rpc('mentee_start_or_continue', params: {
+      'p_login_key': key,
       'p_set_id': setId,
-      'p_firebase_uid': loginKey,
     });
     if (res == null) return null;
     final row = (res is List && res.isNotEmpty) ? res.first : res;
@@ -754,10 +760,15 @@ class SupabaseService {
     required String attemptId,
     required List<String> imagePaths,
   }) async {
+    final key = loginKey;
+    if (key == null || key.isEmpty) {
+      throw Exception('loginKey is missing. Please ensure Firebase authentication is complete.');
+    }
+    
     final res = await _sb.rpc('mentee_submit_attempt', params: {
+      'p_login_key': key,
       'p_attempt_id': attemptId,
       'p_image_paths': imagePaths,
-      'p_firebase_uid': loginKey,
     });
     if (res == null) return null;
     final row = (res is List && res.isNotEmpty) ? res.first : res;

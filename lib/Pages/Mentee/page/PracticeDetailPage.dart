@@ -8,8 +8,13 @@ import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/StorageService.dart';
 
 class PracticeDetailPage extends StatefulWidget {
-  final String setId; // set_id(uuid)
-  const PracticeDetailPage({super.key, required this.setId});
+  final String setCode; // set code (text)
+  final String setId;   // set id (uuid) - for attempt operations
+  const PracticeDetailPage({
+    super.key, 
+    required this.setCode,
+    required this.setId,
+  });
 
   @override
   State<PracticeDetailPage> createState() => _PracticeDetailPageState();
@@ -63,18 +68,23 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     setState(() { _loading = true; _error = null; });
     try {
       final d = await _api.menteePracticeSetDetail(
-        setId: widget.setId, limit: 30, offset: 0,
+        code: widget.setCode,
       );
 
 
       // 참고 이미지
-      final refRaw = (d?['set_reference_imgs'] as List?) ?? const [];
+      final refRaw = (d?['reference_images'] as List?) ?? const [];
       final refUrls = await _signAll(refRaw);
 
-      // ✅ 서버 제출 이미지 (urls 우선, 없으면 paths → 서명URL)
-      final curUrls = (d?['current_image_urls'] as List?) ?? const [];
-      final curPaths = (d?['current_image_paths'] as List?) ?? const [];
-      final submittedUrls = curUrls.isNotEmpty ? curUrls.cast<String>() : await _signAll(curPaths);
+      // ✅ attempts jsonb 파싱
+      final attemptsJson = (d?['attempts'] as List?) ?? const [];
+      final attempts = attemptsJson.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      
+      // 최신 시도의 이미지 (첫 번째 시도가 최신)
+      final curPaths = attempts.isNotEmpty 
+          ? ((attempts.first['image_paths'] as List?) ?? const [])
+          : const [];
+      final submittedUrls = await _signAll(curPaths);
 
       setState(() {
         _detail = d;
@@ -90,7 +100,8 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
   // ===== 사진 추가(로컬만 유지) =====
   Future<void> _addPhotos() async {
     try {
-      final imgs = await _picker.pickMultiImage(imageQuality: 90);
+      // imageQuality를 60으로 낮춰서 파일 크기 감소
+      final imgs = await _picker.pickMultiImage(imageQuality: 60);
       if (imgs == null || imgs.isEmpty) return;
       setState(() => _localPicks.addAll(imgs));
     } catch (e) {
@@ -105,21 +116,24 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     try {
       setState(() => _submitting = true);
 
-      // 1) 진행중 시도 있으면 그대로, 없으면 새 시도 생성(pending)
+      // 1) 진행중 시도 있으면 그대로, 없으면 새 시도 생성(draft)
       final attempt = await _api.menteeStartOrContinue(setId: widget.setId);
       final attemptId = '${attempt?['attempt_id'] ?? ''}';
       if (attemptId.isEmpty) throw Exception('attempt 생성 실패');
 
-      // 2) 스토리지 업로드 → 객체 키 배열
+      // 2) 스토리지 업로드 → 객체 키 배열 (병렬 업로드로 속도 개선)
       final storage = StorageService();
-      final keys = <String>[];
-      for (final x in _localPicks) {
-        final key = await storage.uploadPracticeAttemptImageFile(
+      
+      // 병렬 업로드
+      final uploadFutures = _localPicks.map((x) => 
+        storage.uploadPracticeAttemptImageFile(
           file: File(x.path),
           attemptId: attemptId,
-        );
-        keys.add(key);
-      }
+        )
+      ).toList();
+      
+      final keys = await Future.wait(uploadFutures);
+      
       if (keys.isEmpty) throw Exception('이미지 업로드 실패');
 
       // 3) 제출 RPC
@@ -134,6 +148,9 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       await _load(); // 상태/뱃지(검토 대기) 반영
       _showSnack('제출 완료! 멘토 검토를 기다려 주세요.');
     } catch (e) {
+
+      print(e);
+
       _showSnack('제출 실패: $e');
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -199,12 +216,19 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     }
 
     final d = _detail ?? const {};
-    final title = (d['set_title'] as String?) ?? '실습';
-    final instructions = (d['set_instructions'] as String?) ?? '';
-    final statusLabel = SupabaseService.instance.practiceStatusLabel(d['current_status'] as String?);
-    final grade = (d['current_grade'] as String?) ?? '';
-    final feedback = (d['current_feedback'] as String?) ?? '';
-    final attemptNo = (d['current_attempt_no'] as num?)?.toInt();
+    final title = (d['title'] as String?) ?? '실습';
+    final instructions = (d['instructions'] as String?) ?? '';
+    
+    // attempts에서 최신 시도 정보 추출
+    final attemptsJson = (d['attempts'] as List?) ?? const [];
+    final latestAttempt = attemptsJson.isNotEmpty 
+        ? Map<String, dynamic>.from(attemptsJson.first as Map) 
+        : <String, dynamic>{};
+    
+    final statusLabel = SupabaseService.instance.practiceStatusLabel(latestAttempt['status'] as String?);
+    final grade = (latestAttempt['grade'] as String?) ?? '';
+    final feedback = (latestAttempt['feedback'] as String?) ?? '';
+    final attemptNo = (latestAttempt['attempt_no'] as num?)?.toInt();
 
     // 제출 이미지 섹션 우선순위: 로컬 선택 > 방금 제출본(로컬 복사) > 서버 제출 URL
     final localForView = _localPicks.isNotEmpty ? _localPicks : _lastSubmittedLocal;
