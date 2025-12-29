@@ -8,6 +8,7 @@ import 'package:nail/Pages/Common/page/SignatureConfirmPage.dart';
 import 'package:nail/Pages/Common/page/SignaturePage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Services/SignatureService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/StorageService.dart';
 import 'package:provider/provider.dart';
@@ -94,10 +95,36 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
           : const [];
       final submittedUrls = await _signAll(curPaths);
 
+      // 서명 상태 확인 (최신 시도가 있고, 상태가 'reviewed'인 경우)
+      bool menteeSigned = false;
+      if (attempts.isNotEmpty) {
+        final latestAttempt = attempts.first;
+        final attemptId = latestAttempt['id'] as String?;
+        final status = latestAttempt['status'] as String?;
+        
+        // 멘토가 평가 완료(reviewed)한 경우에만 서명 상태 확인
+        if (attemptId != null && status == 'reviewed') {
+          try {
+            final user = context.read<UserProvider>().current;
+            if (user != null && user.loginKey != null) {
+              final signedAttempts = await SignatureService.instance.getSignedPracticeAttempts(
+                loginKey: user.loginKey!,
+              );
+              // 멘티 서명 여부 확인
+              menteeSigned = signedAttempts[attemptId]?['mentee_signed'] == true;
+              debugPrint('[PracticeDetailPage] Attempt $attemptId mentee signed: $menteeSigned');
+            }
+          } catch (e) {
+            debugPrint('[PracticeDetailPage] Failed to check signature status: $e');
+          }
+        }
+      }
+
       setState(() {
         _detail = d;
         _refImages = refUrls;
         _serverSubmittedUrls = submittedUrls;
+        _menteeSigned = menteeSigned;
         _loading = false;
       });
     } catch (e) {
@@ -155,18 +182,76 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     );
 
     if (result != null && mounted) {
-      // 서명 완료 처리
-      setState(() {
-        _menteeSigned = true;
-      });
+      // 서명 이미지 가져오기
+      final signature = result['signature'] as Uint8List?;
+      if (signature == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ 서명 이미지를 가져올 수 없습니다.')),
+        );
+        return;
+      }
 
+      // 서버에 서명 저장
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ 확인 서명이 완료되었습니다!')),
+        const SnackBar(content: Text('서명을 저장하는 중...')),
       );
 
-      // TODO: 서버에 서명 이미지 + 메타데이터 저장
-      // final signature = result['signature'] as Uint8List?;
-      // final timestamp = result['timestamp'] as String?;
+      try {
+        // attemptId 가져오기
+        final attemptId = _detail?['attempts']?[0]?['id'] as String?;
+        if (attemptId == null) {
+          throw Exception('attemptId not found');
+        }
+
+        debugPrint('[PracticeDetailPage] Saving mentee signature for attempt: $attemptId');
+        await SignatureService.instance.signPracticeAttempt(
+          loginKey: user.loginKey ?? user.firebaseUid ?? '',
+          attemptId: attemptId,
+          isMentor: false,
+          signatureImage: signature,
+          phoneNumber: user.phone ?? '',
+        );
+        debugPrint('[PracticeDetailPage] Mentee signature saved successfully');
+
+        if (!mounted) return;
+
+        setState(() {
+          _menteeSigned = true;
+          _dirty = true; // 목록 새로고침 필요
+        });
+
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ 확인 서명이 완료되었습니다!')),
+        );
+      } catch (e, stackTrace) {
+        debugPrint('[PracticeDetailPage] Failed to save signature: $e');
+        debugPrint('[PracticeDetailPage] Stack trace: $stackTrace');
+
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+        String errorMsg = '서명 저장 실패';
+        final errorStr = e.toString();
+
+        if (errorStr.contains('already signed')) {
+          errorMsg = '❌ 이미 서명이 완료되었습니다.';
+        } else if (errorStr.contains('mentor must sign first')) {
+          errorMsg = '❌ 멘토가 먼저 서명해야 합니다.';
+        } else if (errorStr.contains('not authorized')) {
+          errorMsg = '❌ 권한이 없습니다.';
+        } else {
+          errorMsg = '❌ 서명 저장 실패: $e';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 

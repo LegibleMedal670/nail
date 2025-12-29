@@ -11,6 +11,7 @@ import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/CourseProgressService.dart';
+import 'package:nail/Services/SignatureService.dart';
 import 'package:provider/provider.dart';
 
 enum LessonFilter { all, incomplete }
@@ -69,6 +70,11 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
       
       final snap = await CourseProgressService.getCompletionSnapshot(loginKey: loginKey);
       final map = await CourseProgressService.listCurriculumProgress(loginKey: loginKey);
+      
+      // 서명 완료된 이론 모듈 조회
+      final signedModules = await SignatureService.instance.getSignedTheoryModules(
+        loginKey: loginKey,
+      );
 
       setState(() {
         _completed
@@ -78,9 +84,16 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
           ..clear()
           ..addAll(snap.partial);
         _progressById = map;
+        _signed
+          ..clear()
+          ..addAll(signedModules);
         _progLoading = false;
       });
-    } catch (_) {
+      
+      debugPrint('[MenteeMainPage] Progress loaded: ${_completed.length} completed, ${_signed.length} signed');
+    } catch (e) {
+      debugPrint('[MenteeMainPage] Failed to load progress: $e');
+      if (!mounted) return;
       if (!mounted) return;
       setState(() {
         _progError = true;

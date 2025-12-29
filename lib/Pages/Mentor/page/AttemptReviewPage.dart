@@ -3,10 +3,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/SignatureConfirmPage.dart';
 import 'package:nail/Pages/Common/page/SignaturePage.dart';
+import 'package:nail/Services/SignatureService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Providers/MentorProvider.dart';
+import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/StorageService.dart';
 
 class AttemptReviewPage extends StatefulWidget {
@@ -151,6 +153,13 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
     final menteeName = _attempt?['mentee_nickname'] ?? '멘티';
     final practiceTitle = _attempt?['set_title'] ?? '실습';
 
+    // 사용자 정보 가져오기
+    final user = context.read<UserProvider>().current;
+    if (user == null) {
+      _showSnack('❌ 사용자 정보를 불러올 수 없습니다.');
+      return;
+    }
+
     // SignatureConfirmPage로 이동
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -160,8 +169,8 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
           data: {
             'practiceTitle': practiceTitle,
             'menteeName': menteeName,
-            'name': mp.mentorName ?? '멘토',
-            'phone': '(멘토 전화번호)', // TODO: 멘토 전화번호 가져오기
+            'name': mp.mentorName ?? user.nickname ?? '멘토',
+            'phone': user.phone ?? '',
             'grade': _gradeKor,
             'feedback': _fbCtrl.text,
           },
@@ -171,33 +180,69 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
 
     if (result != null && mounted) {
       // 서명 완료 후 저장
-      await _saveAfterSignature(result['signature'] as Uint8List?);
+      await _saveAfterSignature(
+        result['signature'] as Uint8List?, 
+        user.loginKey ?? user.firebaseUid ?? '', 
+        user.phone ?? '',
+      );
     }
   }
 
-  Future<void> _saveAfterSignature(Uint8List? signature) async {
+  Future<void> _saveAfterSignature(Uint8List? signature, String loginKey, String phoneNumber) async {
+    if (signature == null) {
+      _showSnack('❌ 서명 이미지를 가져올 수 없습니다.');
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final mp = context.read<MentorProvider>();
 
+      // 1. 평가 저장 (grade + feedback)
       await mp.reviewAttempt(
         attemptId: widget.attemptId,
         gradeKor: _gradeKor!,
         feedback: _fbCtrl.text,
       );
 
-      // TODO: 서명 이미지 저장 (signature 파라미터 사용)
+      // 2. 서명 저장
+      debugPrint('[AttemptReviewPage] Saving mentor signature for attempt: ${widget.attemptId}');
+      await SignatureService.instance.signPracticeAttempt(
+        loginKey: loginKey,
+        attemptId: widget.attemptId,
+        isMentor: true,
+        signatureImage: signature,
+        phoneNumber: phoneNumber,
+      );
+      debugPrint('[AttemptReviewPage] Mentor signature saved successfully');
 
-      // ✅ 저장 직후 전역 상태 한 방 갱신 (KPI/큐/멘티/히스토리)
+      // 3. 전역 상태 갱신 (KPI/큐/멘티/히스토리)
       await mp.refreshAllAfterReview();
 
       if (mounted) {
-        _showSnack('✅ 서명이 완료되었습니다!');
+        _showSnack('✅ 평가 및 서명이 완료되었습니다!');
         Navigator.pop(context, true);
       }
-    } catch (e) {
-      print(e);
-      _showSnack('저장 실패: $e');
+    } catch (e, stackTrace) {
+      debugPrint('[AttemptReviewPage] Failed to save signature: $e');
+      debugPrint('[AttemptReviewPage] Stack trace: $stackTrace');
+      
+      if (mounted) {
+        String errorMsg = '평가 저장 실패';
+        final errorStr = e.toString();
+        
+        if (errorStr.contains('already signed')) {
+          errorMsg = '❌ 이미 서명이 완료된 실습입니다.';
+        } else if (errorStr.contains('not authorized')) {
+          errorMsg = '❌ 권한이 없습니다.';
+        } else if (errorStr.contains('mentor must sign first')) {
+          errorMsg = '❌ 멘토가 먼저 서명해야 합니다.';
+        } else {
+          errorMsg = '❌ 평가 저장 실패: $e';
+        }
+        
+        _showSnack(errorMsg);
+      }
     } finally {
       if (mounted) setState(() => _saving = false);
     }
