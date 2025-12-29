@@ -2,109 +2,61 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/SignatureConfirmPage.dart';
 import 'package:nail/Pages/Common/page/SignaturePage.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
-import 'package:nail/Providers/CurriculumProvider.dart';
-import 'package:nail/Providers/PracticeProvider.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/SignatureService.dart';
 import 'package:provider/provider.dart';
 
-/// 교육 수료 신청 페이지 (멘티용)
-/// - 모든 이론 + 실습 완료 후 수료 신청 가능
-/// - 서명 -> 멘토 승인 대기
-class CompletionPage extends StatefulWidget {
+/// 멘토용 수료 승인 페이지
+/// - 멘티의 수료 신청을 확인하고 승인 서명
+class CompletionApprovalPage extends StatefulWidget {
+  final String menteeId;
+  final String menteeName;
+  final int theoryCount;
+  final int practiceCount;
 
-  String mentorName;
-  String startedDate;
-  String today;
-
-  CompletionPage({super.key, required this.mentorName, required this.startedDate, required this.today});
+  const CompletionApprovalPage({
+    super.key,
+    required this.menteeId,
+    required this.menteeName,
+    required this.theoryCount,
+    required this.practiceCount,
+  });
 
   @override
-  State<CompletionPage> createState() => _CompletionPageState();
+  State<CompletionApprovalPage> createState() => _CompletionApprovalPageState();
 }
 
-class _CompletionPageState extends State<CompletionPage> {
-  int _theoryCount = 0;
-  int _practiceCount = 0;
+class _CompletionApprovalPageState extends State<CompletionApprovalPage> {
   bool _loading = true;
   bool _submitting = false;
-
-  String _menteeName = '';
-  String _menteePhone = '';
-  String _menteeId = '';
-
-  // 서명 상태
-  bool _menteeSigned = false;
-  bool _mentorSigned = false;
+  
   DateTime? _menteeSignedAt;
-  DateTime? _mentorSignedAt;
+  bool _mentorSigned = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
-    });
+    _loadData();
   }
 
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      // 사용자 정보
-      final user = context.read<UserProvider>().current;
-      _menteeName = user?.nickname ?? '멘티';
-      _menteePhone = user?.phone ?? '';
-      _menteeId = user?.id ?? '';
-      final loginKey = user?.loginKey ?? '';
-
-      // 이론 교육 개수
-      final curriculumProvider = context.read<CurriculumProvider>();
-      _theoryCount = curriculumProvider.items.length;
-
-      // 실습 교육 개수
-      final practiceProvider = context.read<PracticeProvider>();
-      await practiceProvider.refreshAll(loginKey: loginKey);
-      _practiceCount = practiceProvider.sets.length;
-
-      // 수료 서명 상태 조회
-      if (loginKey.isNotEmpty) {
-        final signatureStatus = await SignatureService.instance.getCompletionSignatureStatus(
-          loginKey: loginKey,
-        );
-        
-        if (signatureStatus != null && mounted) {
-          _menteeSigned = signatureStatus['mentee_signed'] ?? false;
-          _mentorSigned = signatureStatus['mentor_signed'] ?? false;
-          _menteeSignedAt = _parseDateTime(signatureStatus['mentee_signed_at']);
-          _mentorSignedAt = _parseDateTime(signatureStatus['mentor_signed_at']);
-        }
-      }
-
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      // 서명 상태 조회 (서버 RPC 필요)
+      // 현재는 시연을 위해 기본값 사용
+      setState(() {
+        _menteeSignedAt = DateTime.now(); // TODO: 서버에서 가져오기
+        _loading = false;
+      });
     } catch (e) {
-      debugPrint('[CompletionPage] Failed to load data: $e');
+      debugPrint('[CompletionApprovalPage] Failed to load data: $e');
       if (mounted) {
         setState(() => _loading = false);
       }
     }
   }
 
-  DateTime? _parseDateTime(dynamic value) {
-    if (value == null) return null;
-    if (value is DateTime) return value;
-    if (value is String) {
-      try {
-        return DateTime.parse(value);
-      } catch (_) {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  Future<void> _submitCompletionRequest() async {
+  Future<void> _approveCompletion() async {
     if (_submitting) return;
 
     final user = context.read<UserProvider>().current;
@@ -118,15 +70,14 @@ class _CompletionPageState extends State<CompletionPage> {
       context,
       MaterialPageRoute(
         builder: (ctx) => SignatureConfirmPage(
-          type: SignatureType.completionMentee,
+          type: SignatureType.completionMentor,
           data: {
-            'name': _menteeName,
-            'phone': _menteePhone,
-            'theoryCount': _theoryCount,
-            'practiceCount': _practiceCount,
-            'mentorName': widget.mentorName,
-            'startedDate': widget.startedDate,
-            'today': widget.today,
+            'menteeName': widget.menteeName,
+            'name': user.nickname ?? user.mentorName ?? '멘토',
+            'phone': user.phone,
+            'theoryCount': widget.theoryCount,
+            'practiceCount': widget.practiceCount,
+            'approvalDate': DateTime.now().toString().substring(0, 10),
           },
         ),
       ),
@@ -142,31 +93,24 @@ class _CompletionPageState extends State<CompletionPage> {
       
       await SignatureService.instance.signCompletion(
         loginKey: user.loginKey,
-        menteeId: _menteeId,
-        isMentor: false,
+        menteeId: widget.menteeId,
+        isMentor: true,
         signatureImage: signatureImage,
-        phoneNumber: _menteePhone,
+        phoneNumber: user.phone ?? '',
       );
 
       if (!mounted) return;
       
-      _showSnack('✅ 수료 서명이 완료되었습니다!');
-      
-      // 상태 갱신
-      await _loadData();
-      
-      if (!mounted) return;
-      
-      setState(() => _submitting = false);
+      _showSnack('✅ 수료가 승인되었습니다!');
       
       // 페이지 닫기 (변경사항 있음을 알림)
       Navigator.pop(context, true);
     } catch (e) {
-      debugPrint('[CompletionPage] Failed to submit completion: $e');
+      debugPrint('[CompletionApprovalPage] Failed to approve completion: $e');
       if (!mounted) return;
       
       setState(() => _submitting = false);
-      _showSnack('수료 서명 실패: $e');
+      _showSnack('수료 승인 실패: $e');
     }
   }
 
@@ -180,7 +124,7 @@ class _CompletionPageState extends State<CompletionPage> {
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
         title: const Text(
-          '교육 수료',
+          '교육 수료 승인',
           style: TextStyle(
             color: UiTokens.title,
             fontWeight: FontWeight.w700,
@@ -216,7 +160,7 @@ class _CompletionPageState extends State<CompletionPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            '모든 교육을 완료하셨습니다.\n수료 서명을 진행해주세요.',
+                            '멘티가 모든 교육을 완료하고 수료 신청을 했습니다.\n승인 서명을 진행해주세요.',
                             style: TextStyle(
                               fontSize: 15,
                               color: Colors.blue[900],
@@ -248,12 +192,12 @@ class _CompletionPageState extends State<CompletionPage> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.green[50],
+                                color: Colors.orange[50],
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(
-                                Icons.school,
-                                color: Colors.green[700],
+                                Icons.person,
+                                color: Colors.orange[700],
                                 size: 32,
                               ),
                             ),
@@ -263,7 +207,7 @@ class _CompletionPageState extends State<CompletionPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    '수료 현황',
+                                    '교육생 정보',
                                     style: TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.bold,
@@ -272,7 +216,7 @@ class _CompletionPageState extends State<CompletionPage> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    _menteeName,
+                                    widget.menteeName,
                                     style: TextStyle(
                                       fontSize: 16,
                                       color: UiTokens.title.withOpacity(0.6),
@@ -290,86 +234,35 @@ class _CompletionPageState extends State<CompletionPage> {
                         _InfoRow(
                           icon: Icons.video_library,
                           label: '이론 교육',
-                          value: '$_theoryCount개 완료',
+                          value: '${widget.theoryCount}개 완료',
                         ),
                         const SizedBox(height: 12),
                         _InfoRow(
                           icon: Icons.assignment,
                           label: '실습 교육',
-                          value: '$_practiceCount개 완료',
+                          value: '${widget.practiceCount}개 완료',
                         ),
+                        if (_menteeSignedAt != null) ...[
+                          const SizedBox(height: 12),
+                          _InfoRow(
+                            icon: Icons.edit,
+                            label: '멘티 서명',
+                            value: _formatDateTime(_menteeSignedAt),
+                          ),
+                        ],
                       ],
                     ),
                   ),
 
                   const SizedBox(height: 24),
 
-                  // 서명 상태 표시
-                  if (_menteeSigned)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: _mentorSigned ? Colors.green[50] : Colors.orange[50],
-                        border: Border.all(
-                          color: _mentorSigned ? Colors.green[300]! : Colors.orange[300]!,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                _mentorSigned ? Icons.check_circle : Icons.hourglass_bottom,
-                                color: _mentorSigned ? Colors.green[700] : Colors.orange[700],
-                                size: 28,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  _mentorSigned ? '수료 승인 완료' : '멘토 승인 대기 중',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: _mentorSigned ? Colors.green[900] : Colors.orange[900],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            '멘티 서명: ${_formatDateTime(_menteeSignedAt)}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          if (_mentorSigned && _mentorSignedAt != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              '멘토 승인: ${_formatDateTime(_mentorSignedAt)}',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[700],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                  if (!_menteeSigned) ...[
-                    // 서명 버튼
-                    const SizedBox(height: 8),
+                  // 승인 버튼
+                  if (!_mentorSigned)
                     SizedBox(
                       width: double.infinity,
                       height: 56,
                       child: FilledButton.icon(
-                        onPressed: _submitting ? null : _submitCompletionRequest,
+                        onPressed: _submitting ? null : _approveCompletion,
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF059669),
                           shape: RoundedRectangleBorder(
@@ -385,9 +278,9 @@ class _CompletionPageState extends State<CompletionPage> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : const Icon(Icons.edit, size: 20),
+                            : const Icon(Icons.check_circle, size: 20),
                         label: Text(
-                          _submitting ? '처리 중...' : '수료 서명하기',
+                          _submitting ? '처리 중...' : '수료 승인 서명하기',
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
@@ -395,7 +288,6 @@ class _CompletionPageState extends State<CompletionPage> {
                         ),
                       ),
                     ),
-                  ],
                 ],
               ),
             ),

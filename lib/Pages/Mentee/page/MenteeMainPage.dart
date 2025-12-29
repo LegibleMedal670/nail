@@ -8,6 +8,7 @@ import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Pages/Common/widgets/CurriculumTile.dart';
 import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
+import 'package:nail/Providers/PracticeProvider.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Services/CourseProgressService.dart';
@@ -110,23 +111,6 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     await _loadProgress(retryOnEmpty: retryOnEmpty);
   }
 
-  // ======= 수료 가능 여부 체크 =======
-  bool _canCompleteEducation(List<CurriculumItem> items) {
-    if (items.isEmpty) return false;
-
-    // 프로토타입: 모든 이론 교육이 서명 완료되었는지 확인
-    for (final item in items) {
-      // 시험이 필요한 모듈만 체크 (이론 교육)
-      if (item.requiresExam) {
-        if (!_signed.contains(item.id)) {
-          return false; // 하나라도 서명되지 않았으면 불가
-        }
-      }
-    }
-
-    // TODO: 실습 교육 완료 여부도 체크 필요
-    return true;
-  }
 
   // ======= 진행률 계산 유틸 (게이지/뱃지) =======
   double _progressForAll(List<CurriculumItem> items) {
@@ -194,6 +178,36 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('이어 학습: W${target.week}. ${target.title}')),
     );
+  }
+
+  /// ✅ 수료 가능 여부 확인
+  /// - 모든 이론 교육 서명 완료
+  /// - 실습 교육 서명 완료 여부는 서버에서 최종 확인
+  bool _canComplete(List<CurriculumItem> items, BuildContext context) {
+    // 모든 이론 교육 서명 완료 확인
+    if (items.isEmpty) return false;
+    return items.every((item) => _signed.contains(item.id));
+  }
+
+  /// ✅ 수료하기 페이지로 이동
+  Future<void> _openCompletion(String mentorName, String startedDate) async {
+
+    String today = _fmtDate(DateTime.now());
+
+    final changed = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CompletionPage(
+          mentorName: mentorName,
+          startedDate: startedDate,
+          today: today,
+        ),
+      ),
+    );
+
+    if (changed == true && mounted) {
+      _loadProgress();
+    }
   }
 
   @override
@@ -350,20 +364,29 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
 
             const SizedBox(height: 12),
 
-            // ===== 이어하기 버튼 =====
+            // ===== 수료하기 / 이어보기 버튼 =====
             SizedBox(
               width: double.infinity,
               height: 48,
-              child: FilledButton(
-                onPressed: () => _continueLearning(items),
-                style: FilledButton.styleFrom(
-                  backgroundColor: UiTokens.primaryBlue,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text(
-                  _nextIncomplete(items) == null ? '복습하기' : '이어보기',
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
+              child: Builder(
+                builder: (context) {
+                  final canComplete = _canComplete(items, context);
+
+                  return FilledButton.icon(
+                    onPressed: canComplete ? ()=> _openCompletion(mentorName, started) : null, // ✅ 조건 불충족 시 비활성화
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669), // ✅ 활성 시 초록
+                      disabledBackgroundColor: const Color(0xFFE2E8F0), // ✅ 비활성 배경
+                      disabledForegroundColor: const Color(0xFF94A3B8), // ✅ 비활성 아이콘/텍스트
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.workspace_premium_rounded, size: 20),
+                    label: const Text(
+                      '교육 수료하기',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  );
+                },
               ),
             ),
 
@@ -514,48 +537,6 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
               },
             ),
 
-            // ===== 교육 수료하기 버튼 =====
-            if (_canCompleteEducation(items))
-              Padding(
-                padding: const EdgeInsets.only(top: 24),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: FilledButton.icon(
-                    onPressed: () {
-                      final user = context.read<UserProvider>().current;
-                      if (user == null) return;
-
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CompletionPage(
-                            menteeId: user.id,
-                            menteeName: user.nickname,
-                            theoryCount: items.where((i) => i.requiresExam).length,
-                            practiceCount: 0, // TODO: 실습 개수 가져오기
-                            totalHours: 0, // TODO: 총 교육 시간 계산
-                          ),
-                        ),
-                      );
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.green[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    icon: const Icon(Icons.school, size: 24),
-                    label: const Text(
-                      '교육 수료하기',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

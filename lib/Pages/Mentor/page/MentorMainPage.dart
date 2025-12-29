@@ -1,6 +1,7 @@
 // lib/Pages/Mentor/page/MentorMainPage.dart
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
+import 'package:nail/Pages/Mentor/page/CompletionApprovalPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorMenteeDetailPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
@@ -487,7 +488,44 @@ class _QueueTab extends StatelessWidget {
             physics: const NeverScrollableScrollPhysics(),
             itemBuilder: (ctx, i) {
               final it = p.queueItems[i];
+              final String queueType = it['queue_type'] ?? 'practice';
               final bool isWaiting = p.queueStatus == 'submitted';
+
+              // ✅ 수료 승인 대기 항목인 경우
+              if (queueType == 'completion') {
+                return _CompletionQueueCard(
+                  menteeName: '${it['mentee_name'] ?? ''}',
+                  menteeId: '${it['mentee_id'] ?? ''}',
+                  theoryCount: (it['theory_count'] as num?)?.toInt() ?? 0,
+                  practiceCount: (it['practice_count'] as num?)?.toInt() ?? 0,
+                  submittedAt: it['mentee_signed_at'],
+                  onOpen: () async {
+                    final mentorProvider = ctx.read<MentorProvider>();
+
+                    final refreshed = await Navigator.push<bool>(
+                      ctx,
+                      MaterialPageRoute(
+                        builder: (_) => CompletionApprovalPage(
+                          menteeId: '${it['mentee_id']}',
+                          menteeName: '${it['mentee_name'] ?? ''}',
+                          theoryCount: (it['theory_count'] as num?)?.toInt() ?? 0,
+                          practiceCount: (it['practice_count'] as num?)?.toInt() ?? 0,
+                        ),
+                      ),
+                    );
+
+                    if (ctx.mounted && (refreshed ?? false)) {
+                      // ✅ 승인 성공 시 전부 갱신
+                      await mentorProvider.refreshKpi();
+                      await mentorProvider.refreshQueue(status: p.queueStatus);
+                      await mentorProvider.refreshMentees(onlyPending: mentorProvider.onlyPendingMentees);
+                      await mentorProvider.refreshHistory();
+                    }
+                  },
+                );
+              }
+
+              // ✅ 실습 평가 대기 항목인 경우
               final dynamic date = isWaiting ? it['submitted_at'] : it['reviewed_at'];
               final String dateLabel = isWaiting ? '제출일' : '검토일';
               final String? rating = isWaiting ? null : (it['rating'] as String?);
@@ -967,6 +1005,88 @@ class _Empty extends StatelessWidget {
           message,
           style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700),
         ),
+      ),
+    );
+  }
+}
+
+class _CompletionQueueCard extends StatelessWidget {
+  final String menteeName;
+  final String menteeId;
+  final int theoryCount;
+  final int practiceCount;
+  final dynamic submittedAt;
+  final VoidCallback onOpen;
+
+  const _CompletionQueueCard({
+    required this.menteeName,
+    required this.menteeId,
+    required this.theoryCount,
+    required this.practiceCount,
+    required this.submittedAt,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dateText = _fmtDateOnly(submittedAt);
+
+    return GestureDetector(
+      onTap: onOpen,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.orange[300]!),
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [UiTokens.cardShadow],
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Row(children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.workspace_premium_rounded, color: Colors.orange[700]),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('$menteeName • 수료 승인',
+                  style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text('신청일: $dateText',
+                      style: TextStyle(
+                        color: UiTokens.title.withOpacity(0.6),
+                        fontWeight: FontWeight.w700,
+                      )),
+                ],
+              ),
+            ]),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.orange[50],
+              border: Border.all(color: Colors.orange[300]!),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.pending_actions, size: 14, color: Colors.orange[700]),
+                const SizedBox(width: 4),
+                Text('승인 대기',
+                    style: TextStyle(
+                        color: Colors.orange[700], fontWeight: FontWeight.w800, fontSize: 12)),
+              ],
+            ),
+          ),
+        ]),
       ),
     );
   }

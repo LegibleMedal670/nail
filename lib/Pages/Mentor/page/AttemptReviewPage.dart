@@ -160,6 +160,20 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
       return;
     }
 
+    // ✅ 평가 등급 변환: '상'/'중'/'하' → 'high'/'mid'/'low'
+    String? gradeEng;
+    switch (_gradeKor) {
+      case '상':
+        gradeEng = 'high';
+        break;
+      case '중':
+        gradeEng = 'mid';
+        break;
+      case '하':
+        gradeEng = 'low';
+        break;
+    }
+
     // SignatureConfirmPage로 이동
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -171,7 +185,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
             'menteeName': menteeName,
             'name': mp.mentorName ?? user.nickname ?? '멘토',
             'phone': user.phone ?? '',
-            'grade': _gradeKor,
+            'grade': gradeEng, // ✅ 영문 grade 전달
             'feedback': _fbCtrl.text,
           },
         ),

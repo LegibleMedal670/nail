@@ -56,17 +56,20 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
       case SignatureType.practiceMentee:
         return [
           MapEntry('실습 과정', widget.data['practiceTitle'] ?? '-'),
+          MapEntry('담당 멘토', widget.data['mentorName'] ?? '-'), // ✅ 멘토 이름 추가
           MapEntry('이름', widget.data['name'] ?? '-'),
           MapEntry('연락처', _maskPhone(widget.data['phone'])),
-          MapEntry('담당 멘토', widget.data['mentorName'] ?? '-'), // ✅ 멘토 이름 추가
           MapEntry('멘토 평가', _gradeLabel(widget.data['grade'])),
         ];
       case SignatureType.completionMentee:
         return [
           MapEntry('이름', widget.data['name'] ?? '-'),
+          MapEntry('담당 멘토', widget.data['mentorName'] ?? '-'), // ✅ 멘토 이름 추가
           MapEntry('연락처', _maskPhone(widget.data['phone'])),
           MapEntry('이론 교육', '${widget.data['theoryCount']}개 완료'),
           MapEntry('실습 교육', '${widget.data['practiceCount']}개 완료'),
+          MapEntry('교육 시작일', '${widget.data['startedDate']}'),
+          MapEntry('교육 종료일', '${widget.data['today']}'),
         ];
       case SignatureType.completionMentor:
         return [
@@ -314,7 +317,7 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
                   ),
                   const SizedBox(height: 12),
                   ...[
-                    '본 서명은 이론 교육(영상 시청 및 시험) 완료 확인을 의미합니다.',
+                    '본 서명은 교육(영상 시청, 시험 및 실습) 완료 확인을 의미합니다.',
                     '서명 완료 후에는 수정/취소가 제한될 수 있습니다.',
                     '서명 정보는 분쟁 대응을 위해 일정 기간 보관됩니다.',
                   ].map(

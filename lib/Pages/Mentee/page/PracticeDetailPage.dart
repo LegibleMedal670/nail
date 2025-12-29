@@ -164,6 +164,9 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     final grade = latestAttempt?['grade'] ?? '';
     final submittedAt = latestAttempt?['submitted_at'] ?? '(날짜 없음)';
 
+    // ✅ 멘토 이름 가져오기
+    final mentorName = user.mentorName ?? '담당 멘토';
+
     // SignatureConfirmPage로 이동
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
@@ -176,6 +179,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
             'phone': user.phone,
             'grade': grade,
             'submittedAt': submittedAt,
+            'mentorName': mentorName, // ✅ 멘토 이름 추가
           },
         ),
       ),

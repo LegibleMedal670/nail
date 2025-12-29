@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:nail/Services/SignatureService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 class MentorKpi {
@@ -32,7 +33,7 @@ class MentorService {
   }
 
   // ===== 큐 목록 =====
-  // status == 'submitted' → 대기 큐, 'reviewed' → 최근 완료를 간단히 7일치 조회
+  // status == 'submitted' → 대기 큐 (실습 평가 + 수료 승인), 'reviewed' → 최근 완료를 간단히 7일치 조회
   Future<List<Map<String, dynamic>>> listQueue({
     required String loginKey,
     String status = 'submitted',
@@ -40,7 +41,24 @@ class MentorService {
     int offset = 0,
   }) async {
     if (status == 'submitted') {
-      return _api.mentorListPendingQueue(limit: limit, offset: offset);
+      // ✅ 실습 평가 대기 + 수료 승인 대기를 함께 가져옴
+      final practiceQueue = await _api.mentorListPendingQueue(limit: limit, offset: offset);
+      final completionQueue = await SignatureService.instance.getCompletionPendingList(
+        mentorLoginKey: loginKey,
+      );
+      
+      // ✅ completion 항목에 type 필드 추가 (UI에서 구분용)
+      final completionWithType = completionQueue.map((item) {
+        return {...item, 'queue_type': 'completion'};
+      }).toList();
+      
+      // ✅ practice 항목에도 type 필드 추가
+      final practiceWithType = practiceQueue.map((item) {
+        return {...item, 'queue_type': 'practice'};
+      }).toList();
+      
+      // ✅ 합치기 (수료 승인을 먼저 표시)
+      return [...completionWithType, ...practiceWithType];
     } else {
       // 탭 호환을 위해 reviewed 요청이 오면 최근 7일 완료 목록을 반환
       return _api.mentorListHistory(lastNDays: 7, limit: limit, offset: offset);

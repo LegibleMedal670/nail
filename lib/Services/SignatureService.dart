@@ -325,5 +325,118 @@ class SignatureService {
       return {};
     }
   }
+
+  /// 수료 서명 (멘티 or 멘토)
+  Future<String> signCompletion({
+    required String loginKey,
+    required String menteeId,
+    required bool isMentor,
+    required Uint8List signatureImage,
+    required String phoneNumber,
+  }) async {
+    try {
+      debugPrint('[SignatureService] Starting signCompletion for mentee: $menteeId (${isMentor ? 'mentor' : 'mentee'})');
+
+      // 1. 이미지 업로드
+      final type = isMentor ? 'completion_mentor' : 'completion_mentee';
+      debugPrint('[SignatureService] Uploading signature image...');
+      final imageUrl = await uploadSignatureImage(
+        imageBytes: signatureImage,
+        type: type,
+        userId: loginKey,
+      );
+      debugPrint('[SignatureService] Image uploaded: $imageUrl');
+
+      // 2. 메타데이터 수집
+      debugPrint('[SignatureService] Collecting metadata...');
+      final metadata = await collectMetadata(
+        signatureImage: signatureImage,
+        phoneNumber: phoneNumber,
+      );
+      debugPrint('[SignatureService] Metadata collected. Hash: ${metadata.hashValue.substring(0, 16)}...');
+
+      // 3. RPC 호출
+      debugPrint('[SignatureService] Calling sign_completion RPC...');
+      final result = await _sb.rpc(
+        'sign_completion',
+        params: {
+          'p_firebase_uid': loginKey,
+          'p_mentee_id': menteeId,
+          'p_is_mentor': isMentor,
+          'p_signature_url': imageUrl,
+          'p_hash_value': metadata.hashValue,
+          'p_phone_number': phoneNumber,
+          'p_device_info': metadata.toDeviceInfoJson(),
+        },
+      );
+
+      debugPrint('[SignatureService] RPC result type: ${result.runtimeType}, value: $result');
+
+      // RPC 결과 파싱 (UUID 반환)
+      String signatureId;
+      if (result is String) {
+        signatureId = result;
+      } else if (result is List && result.isNotEmpty) {
+        signatureId = result.first.toString();
+      } else if (result is Map && result.containsKey('id')) {
+        signatureId = result['id'].toString();
+      } else {
+        signatureId = result.toString();
+      }
+
+      debugPrint('[SignatureService] Completion signed: $signatureId (${isMentor ? 'mentor' : 'mentee'})');
+      return signatureId;
+    } catch (e, stackTrace) {
+      debugPrint('[SignatureService] signCompletion failed: $e');
+      debugPrint('[SignatureService] Stack trace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// 수료 서명 상태 조회 (멘티용)
+  Future<Map<String, dynamic>?> getCompletionSignatureStatus({
+    required String loginKey,
+  }) async {
+    try {
+      final result = await _sb.rpc(
+        'get_completion_signature_status',
+        params: {'p_firebase_uid': loginKey},
+      );
+
+      if (result == null) return null;
+      
+      if (result is Map) {
+        return {
+          'mentee_signed': result['mentee_signed'] == true,
+          'mentor_signed': result['mentor_signed'] == true,
+          'mentee_signed_at': result['mentee_signed_at'],
+          'mentor_signed_at': result['mentor_signed_at'],
+        };
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('[SignatureService] getCompletionSignatureStatus failed: $e');
+      return null;
+    }
+  }
+
+  /// 멘토용: 수료 승인 대기 목록 조회
+  Future<List<Map<String, dynamic>>> getCompletionPendingList({
+    required String mentorLoginKey,
+  }) async {
+    try {
+      final result = await _sb.rpc(
+        'mentor_list_completion_pending',
+        params: {'p_firebase_uid': mentorLoginKey},
+      );
+
+      final List<dynamic> rows = result is List ? result : [result];
+      return rows.where((r) => r != null).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    } catch (e) {
+      debugPrint('[SignatureService] getCompletionPendingList failed: $e');
+      return [];
+    }
+  }
 }
 

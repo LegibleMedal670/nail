@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:nail/Providers/AdminProgressProvider.dart';
+import 'package:nail/Providers/PracticeProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -44,6 +45,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()..hydrate()),
         ChangeNotifierProvider(create: (_) => CurriculumProvider()..ensureLoaded()),
+        ChangeNotifierProvider(create: (_) => PracticeProvider()),
         ChangeNotifierProvider(create: (_) => AdminProgressProvider()),
       ],
       child: const MyApp(),

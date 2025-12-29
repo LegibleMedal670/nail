@@ -130,21 +130,26 @@ class _SignaturePageState extends State<SignaturePage> {
       case SignatureType.practiceMentee:
         final submittedAtRaw = widget.data['submittedAt']?.toString() ?? '';
         final submittedAtFormatted = _formatDateTime(submittedAtRaw);
+        final mentorName = widget.data['mentorName']?.toString() ?? '(담당 멘토)';
         return [
           '실습 과정: ${widget.data['practiceTitle'] ?? '(실습명 없음)'}',
           '멘티 이름: $name',
           '연락처: $phone',
+          '담당 멘토: $mentorName', // ✅ 멘토 이름 추가
           '멘토 평가: ${_gradeLabel(widget.data['grade'])}',
           '제출 일시: $submittedAtFormatted',
         ];
 
       case SignatureType.completionMentee:
+        final mentorName = widget.data['mentorName']?.toString() ?? '(담당 멘토)';
         return [
           '교육생 이름: $name',
-          '연락처: $phone', // ✅ 여기서도 동일하게 포맷 적용
+          '연락처: $phone',
+          '담당 멘토: $mentorName',
           '이론 교육: ${widget.data['theoryCount'] ?? 0}개 완료',
           '실습 교육: ${widget.data['practiceCount'] ?? 0}개 완료',
-          '총 교육 시간: ${widget.data['totalHours'] ?? 0}시간',
+          '교육 시작일: ${widget.data['startedDate']}',
+          '교육 종료일: ${widget.data['today']}'
         ];
 
       case SignatureType.completionMentor:
@@ -424,7 +429,7 @@ class _SignaturePageState extends State<SignaturePage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 10),
                               Text(
                                 _getTitle(),
                                 style: TextStyle(
