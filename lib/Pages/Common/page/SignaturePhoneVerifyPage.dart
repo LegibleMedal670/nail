@@ -30,8 +30,8 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
   @override
   void initState() {
     super.initState();
-    // 전화번호 자동 입력
-    _phoneController.text = widget.expectedPhone;
+    // ✅ 전화번호 자동 입력(자동 주입에도 포맷 적용)
+    _phoneController.text = PhoneNumberUtils.format(widget.expectedPhone);
   }
 
   @override
@@ -232,6 +232,7 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
           keyboardType: TextInputType.number,
           enabled: !_isLoading,
           inputFormatters: [
+            // ✅ 숫자만 + 길이 제한(11) + 하이픈 포맷
             FilteringTextInputFormatter.digitsOnly,
             LengthLimitingTextInputFormatter(11),
             _PhoneNumberFormatter(),
@@ -245,7 +246,8 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
             ),
             filled: true,
             fillColor: const Color(0xFFF5F7FA),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -256,7 +258,8 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: UiTokens.primaryBlue, width: 1.5),
+              borderSide:
+              const BorderSide(color: UiTokens.primaryBlue, width: 1.5),
             ),
           ),
           style: const TextStyle(
@@ -273,7 +276,8 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: (_isLoading || !_isPhoneValid) ? null : _sendVerificationCode,
+            onPressed:
+            (_isLoading || !_isPhoneValid) ? null : _sendVerificationCode,
             style: ElevatedButton.styleFrom(
               backgroundColor: UiTokens.primaryBlue,
               disabledBackgroundColor: const Color(0xFFE2E8F0),
@@ -284,21 +288,23 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
             ),
             child: _isLoading
                 ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.5,
-                    ),
-                  )
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.5,
+              ),
+            )
                 : Text(
-                    '인증번호 받기',
-                    style: TextStyle(
-                      color: _isPhoneValid ? Colors.white : const Color(0xFF94A3B8),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
+              '인증번호 받기',
+              style: TextStyle(
+                color: _isPhoneValid
+                    ? Colors.white
+                    : const Color(0xFF94A3B8),
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
           ),
         ),
       ],
@@ -328,7 +334,7 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
           maxLength: 6,
           enabled: !_isLoading,
           autofocus: true,
-          inputFormatters: [
+          inputFormatters:  [
             FilteringTextInputFormatter.digitsOnly,
           ],
           onChanged: (_) => setState(() {}),
@@ -342,7 +348,8 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
             ),
             filled: true,
             fillColor: const Color(0xFFF5F7FA),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: BorderSide.none,
@@ -353,7 +360,8 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: UiTokens.primaryBlue, width: 1.5),
+              borderSide:
+              const BorderSide(color: UiTokens.primaryBlue, width: 1.5),
             ),
           ),
           style: const TextStyle(
@@ -370,7 +378,9 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: (_isLoading || _codeController.text.length != 6) ? null : _verifyCode,
+            onPressed: (_isLoading || _codeController.text.length != 6)
+                ? null
+                : _verifyCode,
             style: ElevatedButton.styleFrom(
               backgroundColor: UiTokens.primaryBlue,
               disabledBackgroundColor: const Color(0xFFE2E8F0),
@@ -381,23 +391,23 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
             ),
             child: _isLoading
                 ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.5,
-                    ),
-                  )
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.5,
+              ),
+            )
                 : Text(
-                    '확인',
-                    style: TextStyle(
-                      color: _codeController.text.length == 6
-                          ? Colors.white
-                          : const Color(0xFF94A3B8),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
+              '확인',
+              style: TextStyle(
+                color: _codeController.text.length == 6
+                    ? Colors.white
+                    : const Color(0xFF94A3B8),
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -421,28 +431,38 @@ class _SignaturePhoneVerifyPageState extends State<SignaturePhoneVerifyPage> {
   }
 }
 
-/// 전화번호 자동 포맷터 (010-0000-0000)
-class _PhoneNumberFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final text = newValue.text.replaceAll('-', '');
+/// ✅ 포매터 로직을 함수로 재사용하기 위한 유틸
+class PhoneNumberUtils {
+  /// 입력값에서 숫자만 뽑아 010-0000-0000 형태로 변환
+  static String format(String input) {
+    final digits = input.replaceAll(RegExp(r'\D'), '');
     final buffer = StringBuffer();
 
-    for (int i = 0; i < text.length; i++) {
-      buffer.write(text[i]);
-      if ((i == 2 || i == 6) && i != text.length - 1) {
+    for (int i = 0; i < digits.length; i++) {
+      buffer.write(digits[i]);
+      if ((i == 2 || i == 6) && i != digits.length - 1) {
         buffer.write('-');
       }
     }
 
-    final string = buffer.toString();
-    return TextEditingValue(
-      text: string,
-      selection: TextSelection.collapsed(offset: string.length),
-    );
+    return buffer.toString();
   }
 }
 
+/// 전화번호 자동 포맷터 (010-0000-0000)
+class _PhoneNumberFormatter extends TextInputFormatter {
+  const _PhoneNumberFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue,
+      TextEditingValue newValue,
+      ) {
+    final formatted = PhoneNumberUtils.format(newValue.text);
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}

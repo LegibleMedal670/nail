@@ -38,7 +38,7 @@ class _SignaturePageState extends State<SignaturePage> {
     _controller = SignatureController(
       penStrokeWidth: 2.5,
       penColor: Colors.black,
-      exportBackgroundColor: Colors.transparent, // 투명 배경으로 변경
+      exportBackgroundColor: Colors.transparent, // 투명 배경
     );
     _controller.addListener(() {
       setState(() {
@@ -68,16 +68,45 @@ class _SignaturePageState extends State<SignaturePage> {
     }
   }
 
+  /// ✅ 연락처 표시용 포맷(010-0000-0000)
+  /// - 입력이 '01022222222' / '010-2222-2222' / '+82 10 2222 2222' 등이어도 대응
+  /// - 숫자만 추출 후 11자리면 010-0000-0000로 변환
+  String _formatPhone(String? input) {
+    if (input == null || input.trim().isEmpty) return '(전화번호 없음)';
+
+    final digits = input.replaceAll(RegExp(r'\D'), '');
+
+    // +82로 들어오는 케이스(+8210xxxxxxxx) → 010xxxxxxxx 변환
+    String normalized = digits;
+    if (normalized.startsWith('82') && normalized.length >= 12) {
+      // 82 + 10xxxxxxxx → 010xxxxxxxx
+      final rest = normalized.substring(2);
+      if (rest.startsWith('10') && rest.length == 10) {
+        normalized = '0$rest';
+      }
+    }
+
+    // 010xxxxxxxx (11자리) 기준 포맷
+    if (normalized.length == 11) {
+      return '${normalized.substring(0, 3)}-'
+          '${normalized.substring(3, 7)}-'
+          '${normalized.substring(7)}';
+    }
+
+    // 그 외는 원본 유지
+    return input;
+  }
+
   List<String> _getContentLines() {
     final name = widget.data['name'] ?? '(이름 없음)';
-    final phone = widget.data['phone'] ?? '(전화번호 없음)';
+    final phone = _formatPhone(widget.data['phone']?.toString());
 
     switch (widget.type) {
       case SignatureType.theory:
         return [
           '과정: ${widget.data['moduleName'] ?? '(과정명 없음)'}',
           '이름: $name',
-          '연락처: $phone',
+          '연락처: $phone', // ✅ 여기서 하이픈 포맷된 값이 출력됨
           '영상 시청: ${widget.data['videoCompleted'] == true ? '완료' : '미완료'}',
           '시험 점수: ${widget.data['examScore'] ?? 0}점',
           '시험 결과: ${widget.data['examPassed'] == true ? '합격' : '불합격'}',
@@ -96,7 +125,7 @@ class _SignaturePageState extends State<SignaturePage> {
         return [
           '실습 과정: ${widget.data['practiceTitle'] ?? '(실습명 없음)'}',
           '멘티 이름: $name',
-          '연락처: $phone',
+          '연락처: $phone', // ✅ 여기서도 동일하게 포맷 적용
           '멘토 평가: ${_gradeLabel(widget.data['grade'])}',
           '제출 일시: ${widget.data['submittedAt'] ?? '(날짜 없음)'}',
         ];
@@ -104,7 +133,7 @@ class _SignaturePageState extends State<SignaturePage> {
       case SignatureType.completionMentee:
         return [
           '교육생 이름: $name',
-          '연락처: $phone',
+          '연락처: $phone', // ✅ 여기서도 동일하게 포맷 적용
           '이론 교육: ${widget.data['theoryCount'] ?? 0}개 완료',
           '실습 교육: ${widget.data['practiceCount'] ?? 0}개 완료',
           '총 교육 시간: ${widget.data['totalHours'] ?? 0}시간',
@@ -138,7 +167,6 @@ class _SignaturePageState extends State<SignaturePage> {
     _controller.clear();
   }
 
-  /// 서명 확인 다이얼로그 (프로젝트 스타일)
   Future<bool> _showSignatureConfirmDialog(BuildContext context) async {
     const Color accent = UiTokens.primaryBlue;
     const Color badgeBg = Color(0xFFEAF3FF);
@@ -155,7 +183,6 @@ class _SignaturePageState extends State<SignaturePage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 상단 아이콘 배지
               Container(
                 width: 56,
                 height: 56,
@@ -163,8 +190,6 @@ class _SignaturePageState extends State<SignaturePage> {
                 child: const Icon(Icons.edit_note_rounded, size: 30, color: accent),
               ),
               const SizedBox(height: 14),
-
-              // 제목
               const Text(
                 '서명을 완료하시겠습니까?',
                 textAlign: TextAlign.center,
@@ -176,8 +201,6 @@ class _SignaturePageState extends State<SignaturePage> {
                 ),
               ),
               const SizedBox(height: 8),
-
-              // 메시지
               Text(
                 '서명 후에는 수정할 수 없으며,\n법적 효력을 가집니다.',
                 textAlign: TextAlign.center,
@@ -189,8 +212,6 @@ class _SignaturePageState extends State<SignaturePage> {
                 ),
               ),
               const SizedBox(height: 16),
-
-              // 액션 버튼
               Row(
                 children: [
                   Expanded(
@@ -251,22 +272,19 @@ class _SignaturePageState extends State<SignaturePage> {
       return;
     }
 
-    // 확인 다이얼로그 (프로젝트 스타일)
     final confirmed = await _showSignatureConfirmDialog(context);
     if (confirmed != true) return;
 
     try {
-      // RepaintBoundary를 사용하여 전체 캔버스(배경 + 서명) 캡처
-      final RenderRepaintBoundary boundary = _canvasKey.currentContext!
-          .findRenderObject() as RenderRepaintBoundary;
+      final RenderRepaintBoundary boundary =
+      _canvasKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       final ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      await image.toByteData(format: ui.ImageByteFormat.png);
       final Uint8List? signature = byteData?.buffer.asUint8List();
 
       if (signature == null || !mounted) return;
 
-      // 결과 반환 (서명 이미지 + 메타데이터)
       Navigator.pop(context, {
         'signature': signature,
         'timestamp': DateTime.now().toIso8601String(),
@@ -289,17 +307,27 @@ class _SignaturePageState extends State<SignaturePage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(_getTitle()),
+        title: Text(
+          _getTitle(),
+          style: const TextStyle(
+            color: UiTokens.title,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+          tooltip: '뒤로가기',
+          onPressed: () => Navigator.maybePop(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 안내 문구
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -308,36 +336,28 @@ class _SignaturePageState extends State<SignaturePage> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline,
-                    color: Colors.blue[700],
-                    size: 20,
-                  ),
+                  Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '아래 영역에 서명해주세요',
                       style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                        fontSize: 15,
+                        color: Colors.blue[900],
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   TextButton(
                     onPressed: _clear,
                     style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.refresh,
-                          size: 16,
-                          color: Colors.blue[700],
-                        ),
+                        Icon(Icons.refresh, size: 16, color: Colors.blue[700]),
                         const SizedBox(width: 4),
                         Text(
                           '초기화',
@@ -353,10 +373,7 @@ class _SignaturePageState extends State<SignaturePage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // 서명 캔버스 (배경에 정보 표시)
             RepaintBoundary(
               key: _canvasKey,
               child: Container(
@@ -376,7 +393,6 @@ class _SignaturePageState extends State<SignaturePage> {
                   borderRadius: BorderRadius.circular(12),
                   child: Stack(
                     children: [
-                      // 배경 정보 (연하게 표시)
                       Positioned.fill(
                         child: Container(
                           color: Colors.white,
@@ -384,52 +400,49 @@ class _SignaturePageState extends State<SignaturePage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // 제목
+                              const SizedBox(height: 20),
                               Text(
                                 _getTitle(),
                                 style: TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 17,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.blue[300],
+                                  color: Colors.blue[900],
                                   letterSpacing: -0.5,
                                 ),
                               ),
-                              const SizedBox(height: 20),
-                              // 내용
+                              const SizedBox(height: 15),
                               ..._getContentLines().map(
-                                (line) => Padding(
+                                    (line) => Padding(
                                   padding: const EdgeInsets.only(bottom: 6),
                                   child: Text(
                                     line,
-                                    style: TextStyle(
-                                      fontSize: 13,
+                                    style: const TextStyle(
+                                      fontSize: 14,
                                       fontWeight: FontWeight.w500,
-                                      color: Colors.grey[400],
+                                      color: UiTokens.title,
                                       height: 1.5,
                                     ),
                                   ),
                                 ),
                               ),
-                              const Spacer(),
-                              // 서명란 표시
+                              const SizedBox(height: 80),
                               Container(
                                 width: double.infinity,
                                 height: 1,
-                                color: Colors.grey[300],
+                                color: UiTokens.title,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
+                              const SizedBox(height: 8),
+                              const Text(
                                 '서명 구역 (위 라인에 서명해주세요)',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: Colors.grey[400],
+                                  color: UiTokens.title,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      // 서명 레이어 (투명 배경)
                       SizedBox(
                         height: 400,
                         child: Signature(
@@ -442,30 +455,29 @@ class _SignaturePageState extends State<SignaturePage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 16),
-
-            // 법적 효력 안내
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: Colors.amber[50],
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                '서명 정보는 암호화되어 안전하게 보관됩니다\n'
-                '서명은 검정색으로 또렷하게 작성해주세요.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.amber[900],
-                  height: 1.4,
-                ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber[900], size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    '서명 정보는 암호화되어 안전하게 보관됩니다',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.amber[900],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // 하단 버튼
             FilledButton(
               onPressed: _isEmpty ? null : _confirm,
               style: FilledButton.styleFrom(
@@ -473,6 +485,7 @@ class _SignaturePageState extends State<SignaturePage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
+                backgroundColor: UiTokens.primaryBlue,
               ),
               child: const Text(
                 '서명 완료',
@@ -482,9 +495,7 @@ class _SignaturePageState extends State<SignaturePage> {
                 ),
               ),
             ),
-
             const SizedBox(height: 12),
-
             OutlinedButton(
               onPressed: () => Navigator.pop(context),
               style: OutlinedButton.styleFrom(
@@ -507,4 +518,3 @@ class _SignaturePageState extends State<SignaturePage> {
     );
   }
 }
-

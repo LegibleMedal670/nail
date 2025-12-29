@@ -143,10 +143,18 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: Text(_getTitle()),
+        title: Text(_getTitle(), style: TextStyle(
+          color: UiTokens.title,
+          fontWeight: FontWeight.w700,
+        ),),
         centerTitle: true,
         backgroundColor: Colors.white,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: UiTokens.title),
+          tooltip: '뒤로가기',
+          onPressed: () => Navigator.maybePop(context),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -168,9 +176,9 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '서명 전에 아래 내용을 확인해주세요',
+                      '서명 전 아래 내용을 확인해주세요',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 15,
                         color: Colors.blue[900],
                         fontWeight: FontWeight.w600,
                       ),
@@ -196,7 +204,7 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.grey[50],
+                      // color: Colors.grey[50],
                       borderRadius: const BorderRadius.vertical(
                         top: Radius.circular(16),
                       ),
@@ -215,7 +223,7 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
                             size: 20,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 16),
                         const Text(
                           '요약 정보',
                           style: TextStyle(
@@ -243,8 +251,8 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
                                     item.key,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey[700],
-                                      fontWeight: FontWeight.w500,
+                                      color: UiTokens.title,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
                                 ),
