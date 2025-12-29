@@ -58,6 +58,7 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
           MapEntry('실습 과정', widget.data['practiceTitle'] ?? '-'),
           MapEntry('이름', widget.data['name'] ?? '-'),
           MapEntry('연락처', _maskPhone(widget.data['phone'])),
+          MapEntry('담당 멘토', widget.data['mentorName'] ?? '-'), // ✅ 멘토 이름 추가
           MapEntry('멘토 평가', _gradeLabel(widget.data['grade'])),
         ];
       case SignatureType.completionMentee:
