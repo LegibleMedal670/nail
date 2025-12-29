@@ -481,34 +481,34 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                       Positioned(
                         top: 10,
                         right: 10,
-                        child: _progressBadge(state),
+                        child: _progressBadge(state, isSigned),
                       ),
 
                     // 서명 완료 펜 아이콘 (오른쪽 상단, 진행 뱃지 옆)
-                    if (isSigned && !isLocked)
-                      Positioned(
-                        top: 10,
-                        right: state != Progress.notStarted ? 50 : 10,
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: Colors.green[500],
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.edit,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
+                    // if (isSigned && !isLocked)
+                    //   Positioned(
+                    //     top: 10,
+                    //     right: state != Progress.notStarted ? 50 : 10,
+                    //     child: Container(
+                    //       padding: const EdgeInsets.all(6),
+                    //       decoration: BoxDecoration(
+                    //         color: Colors.green[500],
+                    //         shape: BoxShape.circle,
+                    //         boxShadow: [
+                    //           BoxShadow(
+                    //             color: Colors.black.withOpacity(0.1),
+                    //             blurRadius: 4,
+                    //             offset: const Offset(0, 2),
+                    //           ),
+                    //         ],
+                    //       ),
+                    //       child: const Icon(
+                    //         Icons.edit,
+                    //         color: Colors.white,
+                    //         size: 16,
+                    //       ),
+                    //     ),
+                    //   ),
                   ],
                 );
               },
@@ -599,7 +599,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
     );
   }
 
-  Widget _progressBadge(Progress state) {
+  Widget _progressBadge(Progress state, bool isSigned) {
     final bool done = (state == Progress.done);
     final Color bg = done ? const Color(0xFFECFDF5) : const Color(0xFFEFF6FF);
     final Color border = done ? const Color(0xFFA7F3D0) : const Color(0xFFBFDBFE);
@@ -615,9 +615,9 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(done ? Icons.check_circle_rounded : Icons.timelapse, size: 16, color: fg),
+          Icon(done ? isSigned ? Icons.edit :Icons.check_circle_rounded : Icons.timelapse, size: 16, color: fg),
           const SizedBox(width: 6),
-          Text(done ? '완료' : '수강중', style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
+          Text(done ? isSigned ? '서명완료' :'완료'  : '수강중', style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
         ],
       ),
     );
