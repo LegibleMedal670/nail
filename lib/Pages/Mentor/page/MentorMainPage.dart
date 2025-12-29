@@ -493,6 +493,19 @@ class _QueueTab extends StatelessWidget {
 
               // ✅ 수료 승인 대기 항목인 경우
               if (queueType == 'completion') {
+                // mentee_signed_at 파싱
+                DateTime? menteeSignedAt;
+                final signedAtValue = it['mentee_signed_at'];
+                if (signedAtValue != null) {
+                  if (signedAtValue is DateTime) {
+                    menteeSignedAt = signedAtValue;
+                  } else if (signedAtValue is String) {
+                    try {
+                      menteeSignedAt = DateTime.parse(signedAtValue);
+                    } catch (_) {}
+                  }
+                }
+
                 return _CompletionQueueCard(
                   menteeName: '${it['mentee_name'] ?? ''}',
                   menteeId: '${it['mentee_id'] ?? ''}',
@@ -510,6 +523,7 @@ class _QueueTab extends StatelessWidget {
                           menteeName: '${it['mentee_name'] ?? ''}',
                           theoryCount: (it['theory_count'] as num?)?.toInt() ?? 0,
                           practiceCount: (it['practice_count'] as num?)?.toInt() ?? 0,
+                          menteeSignedAt: menteeSignedAt,
                         ),
                       ),
                     );

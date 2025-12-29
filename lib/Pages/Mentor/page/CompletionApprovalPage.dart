@@ -13,6 +13,7 @@ class CompletionApprovalPage extends StatefulWidget {
   final String menteeName;
   final int theoryCount;
   final int practiceCount;
+  final DateTime? menteeSignedAt;
 
   const CompletionApprovalPage({
     super.key,
@@ -20,6 +21,7 @@ class CompletionApprovalPage extends StatefulWidget {
     required this.menteeName,
     required this.theoryCount,
     required this.practiceCount,
+    this.menteeSignedAt,
   });
 
   @override
@@ -42,12 +44,12 @@ class _CompletionApprovalPageState extends State<CompletionApprovalPage> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      // 서명 상태 조회 (서버 RPC 필요)
-      // 현재는 시연을 위해 기본값 사용
-      setState(() {
-        _menteeSignedAt = DateTime.now(); // TODO: 서버에서 가져오기
-        _loading = false;
-      });
+      // ✅ 전달받은 멘티 서명 시점 사용
+      _menteeSignedAt = widget.menteeSignedAt;
+      
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     } catch (e) {
       debugPrint('[CompletionApprovalPage] Failed to load data: $e');
       if (mounted) {
