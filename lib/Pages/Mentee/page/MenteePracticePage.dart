@@ -370,17 +370,20 @@ class _PracticeTileWithBadge extends StatelessWidget {
           ),
         ),
         // 잠금 아이콘 오버레이
-        Positioned.fill(
+        Positioned(
+          right: 16,
+          top: 0,
+          bottom: 0,
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.05),
+              // color: Colors.black.withOpacity(0.05),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Center(
+            child: Center(
               child: Icon(
-                Icons.lock_outline_rounded,
-                size: 32,
-                color: Colors.grey,
+                Icons.lock,
+                size: 26,
+                color: Colors.grey[600],
               ),
             ),
           ),
@@ -424,8 +427,15 @@ class _PracticeTileWithBadge extends StatelessWidget {
                     final menteeSigned = signData?['mentee_signed'] == true;
                     
                     // 멘토는 서명했지만 멘티가 아직 안 한 경우
-                    if (mentorSigned && !menteeSigned) {
+                    if (mentorSigned && menteeSigned) {
+                      // 멘토+멘티 모두 서명 완료
+                      label = '서명 완료';
+                    } else if (mentorSigned && !menteeSigned) {
+                      // 멘토만 서명 → 멘티 서명 대기
                       label = '서명 대기';
+                    } else {
+                      // 그 외(아직 멘토도 서명 안 함 등) → 기본값 유지(검토 완료)
+                      // label은 기존 '검토 완료' 그대로 두면 됨
                     }
                   }
                   
@@ -472,38 +482,49 @@ class _PracticeTileWithBadge extends StatelessWidget {
   Widget _practiceBadge({required String label, String? grade}) {
     late Color bg, bd, fg; late IconData icon;
     switch (label) {
-      case '검토 대기': 
-        bg = const Color(0xFFFFF7ED); 
-        bd = const Color(0xFFFCCFB3); 
-        fg = const Color(0xFFEA580C); 
-        icon = Icons.upload_rounded; 
+      case '검토 대기':
+        bg = const Color(0xFFFFF7ED);
+        bd = const Color(0xFFFCCFB3);
+        fg = const Color(0xFFEA580C);
+        icon = Icons.upload_rounded;
         break;
-      case '검토 중':   
-        bg = const Color(0xFFFFF7ED); 
-        bd = const Color(0xFFFCCFB3); 
-        fg = const Color(0xFFEA580C); 
-        icon = Icons.hourglass_bottom_rounded; 
+      case '검토 중':
+        bg = const Color(0xFFFFF7ED);
+        bd = const Color(0xFFFCCFB3);
+        fg = const Color(0xFFEA580C);
+        icon = Icons.hourglass_bottom_rounded;
         break;
-      case '검토 완료': 
-        bg = const Color(0xFFECFDF5); 
-        bd = const Color(0xFFB7F3DB); 
-        fg = const Color(0xFF059669); 
-        icon = Icons.verified_rounded; 
+      case '검토 완료':
+        bg = const Color(0xFFECFDF5);
+        bd = const Color(0xFFB7F3DB);
+        fg = const Color(0xFF059669);
+        icon = Icons.verified_rounded;
         break;
+
+    // ✅ 추가: 서명 완료 뱃지 스타일
+      case '서명 완료':
+        bg = const Color(0xFFECFDF5);
+        bd = const Color(0xFFB7F3DB);
+        fg = const Color(0xFF059669);
+        icon = Icons.edit;
+        break;
+
       case '서명 대기':
-        bg = const Color(0xFFFEF3C7); 
-        bd = const Color(0xFFFDE68A); 
-        fg = const Color(0xFFD97706); 
+        bg = const Color(0xFFFEF3C7);
+        bd = const Color(0xFFFDE68A);
+        fg = const Color(0xFFD97706);
         icon = Icons.edit_note_rounded;
         break;
-      default:         
-        bg = const Color(0xFFEFF6FF); 
-        bd = const Color(0xFFDBEAFE); 
-        fg = const Color(0xFF2563EB); 
-        icon = Icons.edit_note_rounded; 
+      default:
+        bg = const Color(0xFFEFF6FF);
+        bd = const Color(0xFFDBEAFE);
+        fg = const Color(0xFF2563EB);
+        icon = Icons.edit_note_rounded;
         break;
     }
-    final text = (label == '검토 완료' && (grade == 'high' || grade == 'mid' || grade == 'low'))
+
+    final text = ((label == '검토 완료' || label == '서명 완료') &&
+        (grade == 'high' || grade == 'mid' || grade == 'low'))
         ? '$label · ${grade == 'high' ? '상' : grade == 'mid' ? '중' : '하'}'
         : label;
 
@@ -515,8 +536,7 @@ class _PracticeTileWithBadge extends StatelessWidget {
         Text(text, style: TextStyle(color: fg, fontWeight: FontWeight.w800)),
       ]),
     );
-  }
-}
+  }}
 
 // ===== 아래 프로필/현재카드/Empty는 기존 그대로 =====
 
