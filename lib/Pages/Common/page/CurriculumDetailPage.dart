@@ -22,6 +22,7 @@ import 'package:nail/Providers/CurriculumProvider.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/CourseProgressService.dart';
 import 'package:nail/Services/ExamService.dart';
+import 'package:nail/Services/SignatureService.dart';
 import 'package:nail/Services/StorageService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/VideoProgressService.dart';
@@ -176,6 +177,14 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     return _pr.videoCompleted;
   }
 
+  /// 서명 가능 여부 (영상/시험이 없는 모듈도 고려)
+  bool get _canSign {
+    if (_signed) return false; // 이미 서명 완료
+    final videoOk = !_item.hasVideo || _isVideoCompleted;
+    final examOk = !_item.requiresExam || _pr.examPassed;
+    return videoOk && examOk;
+  }
+
   Future<void> _loadMenteeProgress() async {
     if (!_isMentee) return;
     try {
@@ -219,6 +228,29 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }
   }
 
+  /// 서명 여부 확인 (페이지 진입 시 또는 서명 후)
+  Future<void> _checkSignatureStatus() async {
+    if (!_isMentee) return;
+    try {
+      final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
+      if (loginKey.isEmpty) return;
+
+      final signedModules = await SignatureService.instance.getSignedTheoryModules(
+        loginKey: loginKey,
+      );
+
+      if (!mounted) return;
+      
+      setState(() {
+        _signed = signedModules.contains(_item.id);
+      });
+
+      debugPrint('[CurriculumDetailPage] Module ${_item.id} signature status: $_signed');
+    } catch (e) {
+      debugPrint('[CurriculumDetailPage] Failed to check signature status: $e');
+    }
+  }
+
   Map<String, int> _countByType(List<ExamQuestion> qs) {
     int mcq = 0, sa = 0, ord = 0;
     for (final q in qs) {
@@ -241,7 +273,10 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     _loadExamMeta();
 
     // ✅ 멘티 모드면 서버에서 진행률 로드(이어보기 퍼센트 반영)
-    if (_isMentee) _loadMenteeProgress();
+    if (_isMentee) {
+      _loadMenteeProgress();
+      _checkSignatureStatus(); // 서명 여부 체크
+    }
   }
 
 
@@ -1315,8 +1350,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
   // ===== 서명 페이지로 이동 =====
   Future<void> _openSignature() async {
-    if (_signed) return; // 이미 서명 완료
-    if (!_isVideoCompleted || !_pr.examPassed) return; // 조건 미충족
+    // 서명 가능 여부는 _canSign getter에서 이미 체크됨
+    if (!_canSign) {
+      debugPrint('[CurriculumDetailPage] Cannot sign - conditions not met');
+      return;
+    }
 
     final user = context.read<UserProvider>().current;
     if (user == null) {
@@ -1346,18 +1384,80 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
 
     if (result != null && mounted) {
       // 서명 완료 처리
-      setState(() {
-        _signed = true;
-        _progressChanged = true;
-      });
+      final signature = result['signature'] as Uint8List?;
+      if (signature == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ 서명 이미지를 가져올 수 없습니다.')),
+        );
+        return;
+      }
 
+      // 서버에 서명 저장
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ 서명이 완료되었습니다!')),
+        const SnackBar(content: Text('서명을 저장하는 중...')),
       );
 
-      // TODO: 서버에 서명 이미지 + 메타데이터 저장
-      // final signature = result['signature'] as Uint8List?;
-      // final timestamp = result['timestamp'] as String?;
+      try {
+        debugPrint('[CurriculumDetailPage] Signing theory module: ${_item.id}');
+        debugPrint('[CurriculumDetailPage] User: loginKey=${user.loginKey}, phone=${user.phone}');
+
+        final signatureId = await SignatureService.instance.signTheoryModule(
+          loginKey: user.loginKey ?? user.firebaseUid ?? '',
+          moduleCode: _item.id,
+          signatureImage: signature,
+          phoneNumber: user.phone ?? '',
+        );
+
+        debugPrint('[CurriculumDetailPage] Signature saved: $signatureId');
+
+        if (!mounted) return;
+
+        setState(() {
+          _signed = true;
+          _progressChanged = true;
+        });
+
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ 서명이 완료되었습니다!')),
+        );
+      } catch (e, stackTrace) {
+        debugPrint('[CurriculumDetailPage] Signature failed: $e');
+        debugPrint('[CurriculumDetailPage] Stack trace: $stackTrace');
+
+        if (!mounted) return;
+        
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        
+        // 에러 메시지 파싱
+        String errorMsg = '서명 저장 실패';
+        final errorStr = e.toString();
+        
+        if (errorStr.contains('module not completed')) {
+          errorMsg = '❌ 모듈을 아직 완료하지 않았습니다.';
+        } else if (errorStr.contains('already signed')) {
+          errorMsg = '❌ 이미 서명이 완료된 모듈입니다.';
+          // 중복 서명 시도 시 서명 상태 재확인
+          await _checkSignatureStatus();
+        } else if (errorStr.contains('duplicate key') || errorStr.contains('unique constraint')) {
+          errorMsg = '❌ 이미 서명이 완료된 모듈입니다.';
+          // 중복 서명 시도 시 서명 상태 재확인
+          await _checkSignatureStatus();
+        } else if (errorStr.contains('user not found')) {
+          errorMsg = '❌ 사용자 정보를 찾을 수 없습니다.';
+        } else if (errorStr.contains('StorageException')) {
+          errorMsg = '❌ 서명 이미지 업로드 실패. 네트워크를 확인해주세요.';
+        } else {
+          errorMsg = '❌ 서명 저장 실패: ${e.toString()}';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -1865,15 +1965,11 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
                     child: FilledButton(
                       onPressed: _isAdminEdit
                           ? (_dirty && !_saving ? _saveAllEdits : null)
-                          : (_signed
-                              ? null // 서명 완료 시 비활성화
-                              : (_isVideoCompleted && _pr.examPassed
-                                  ? _openSignature // 영상 완료 + 시험 통과 시 활성화
-                                  : null)), // 조건 미충족 시 비활성화
+                          : (_canSign ? _openSignature : null),
                       style: FilledButton.styleFrom(
                         backgroundColor: _signed 
                             ? Colors.grey 
-                            : (_isVideoCompleted && _pr.examPassed 
+                            : (_canSign 
                                 ? UiTokens.primaryBlue 
                                 : Colors.grey),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

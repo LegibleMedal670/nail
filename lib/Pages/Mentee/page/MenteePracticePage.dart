@@ -1,5 +1,6 @@
 // lib/Pages/Mentee/page/MenteePracticePage.dart
 import 'package:flutter/material.dart';
+import 'package:nail/Services/SignatureService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
@@ -25,9 +26,33 @@ class MenteePracticePage extends StatelessWidget {
   }
 }
 
-class _View extends StatelessWidget {
+class _View extends StatefulWidget {
   final bool embedded;
   const _View({required this.embedded});
+
+  @override
+  State<_View> createState() => _ViewState();
+}
+
+class _ViewState extends State<_View> {
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 첫 로드 시 loginKey와 함께 refreshAll 호출
+    if (!_initialized) {
+      _initialized = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final user = context.read<UserProvider>().current;
+        if (user?.loginKey != null) {
+          context.read<PracticeProvider>().refreshAll(
+            loginKey: user!.loginKey,
+          );
+        }
+      });
+    }
+  }
 
   Future<void> _showFilterSheet(BuildContext context) async {
     final p = context.read<PracticeProvider>();
@@ -61,7 +86,9 @@ class _View extends StatelessWidget {
 
     final content = RefreshIndicator(
       color: UiTokens.primaryBlue,
-      onRefresh: () => context.read<PracticeProvider>().refreshAll(),
+      onRefresh: () => context.read<PracticeProvider>().refreshAll(
+        loginKey: user.current?.loginKey,
+      ),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
         children: [
@@ -78,6 +105,7 @@ class _View extends StatelessWidget {
             _CurrentAttemptCard(
               set: p.currentSet!,
               attempt: p.currentAttempt!,
+              cardType: p.currentCardType,
               onOpen: () async {
                 final changed = await Navigator.push(
                   context,
@@ -87,7 +115,9 @@ class _View extends StatelessWidget {
                   )),
                 );
                 if (changed == true && context.mounted) {
-                  await context.read<PracticeProvider>().refreshAll();
+                  await context.read<PracticeProvider>().refreshAll(
+                    loginKey: user.current?.loginKey,
+                  );
                 }
               },
             ),
@@ -121,29 +151,11 @@ class _View extends StatelessWidget {
           else if (p.filteredSets.isEmpty)
               const _Empty(message: '실습 세트가 없습니다.')
             else
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: p.filteredSets.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
-                itemBuilder: (_, i) {
-                  final s = p.filteredSets[i];
-                  return _PracticeTileWithBadge(
-                    setId: s['id'],
-                    title: s['title'] ?? '',
-                    code: s['code'] ?? '',
-                    onTap: () async {
-                      final changed = await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => PracticeDetailPage(
-                          setCode: s['code'],
-                          setId: s['id'],
-                        )),
-                      );
-                      if (changed == true && context.mounted) {
-                        await context.read<PracticeProvider>().refreshAll();
-                      }
-                    },
+              _PracticeListWithLocking(
+                filteredSets: p.filteredSets,
+                onRefresh: () async {
+                  await context.read<PracticeProvider>().refreshAll(
+                    loginKey: user.current?.loginKey,
                   );
                 },
               ),
@@ -151,7 +163,7 @@ class _View extends StatelessWidget {
       ),
     );
 
-    if (embedded) return content;
+    if (widget.embedded) return content;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -188,26 +200,202 @@ class _View extends StatelessWidget {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
 
+// ===== 실습 목록 (잠금 로직 포함) =====
+class _PracticeListWithLocking extends StatelessWidget {
+  final List<Map<String, dynamic>> filteredSets;
+  final VoidCallback onRefresh;
+  
+  const _PracticeListWithLocking({
+    required this.filteredSets,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<UserProvider>().current;
+    
+    if (user?.loginKey == null) {
+      return const SizedBox.shrink();
+    }
+
+    return FutureBuilder<Map<String, Map<String, dynamic>>>(
+      future: SignatureService.instance.getSignedPracticeAttempts(
+        loginKey: user!.loginKey!,
+      ),
+      builder: (ctx, signSnap) {
+        // 각 실습의 서명 완료 여부를 저장
+        final Set<String> completedSets = {};
+        
+        if (signSnap.hasData) {
+          final signData = signSnap.data!;
+          // attemptId별 서명 상태를 code별로 매핑해야 하는데, 여기서는 attemptId만 있음
+          // 따라서 별도로 처리해야 함 (복잡함)
+          // 대신, 각 타일에서 개별적으로 확인하도록 수정
+        }
+        
+        return ListView.separated(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: filteredSets.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) {
+            final s = filteredSets[i];
+            final setCode = s['code'] ?? '';
+            
+            // 이전 실습이 있는지 확인
+            final hasPrev = i > 0;
+            final prevSetCode = hasPrev ? filteredSets[i - 1]['code'] ?? '' : '';
+            
+            return _PracticeTileWithBadge(
+              setId: s['id'],
+              title: s['title'] ?? '',
+              code: setCode,
+              index: i,
+              prevSetCode: prevSetCode,
+              hasPrev: hasPrev,
+              onTap: () async {
+                final changed = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => PracticeDetailPage(
+                    setCode: s['code'],
+                    setId: s['id'],
+                  )),
+                );
+                if (changed == true && context.mounted) {
+                  onRefresh();
+                }
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
 // ===== 상태 뱃지 복구용 타일(서버에서 최신 상태 1회 조회) =====
 class _PracticeTileWithBadge extends StatelessWidget {
   final String setId;
   final String title;
   final String code;
+  final int index;
+  final String prevSetCode;
+  final bool hasPrev;
   final VoidCallback onTap;
+  
   const _PracticeTileWithBadge({
     required this.setId,
     required this.title,
     required this.code,
+    required this.index,
+    required this.prevSetCode,
+    required this.hasPrev,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final api = SupabaseService.instance;
+    final user = context.watch<UserProvider>().current;
+    
+    // 이전 실습의 서명 완료 여부를 확인
+    if (hasPrev && user?.loginKey != null) {
+      return FutureBuilder<Map<String, dynamic>?>(
+        future: api.menteePracticeSetDetail(code: prevSetCode),
+        builder: (ctx, prevSnap) {
+          bool prevSigned = false;
+          
+          if (prevSnap.hasData && prevSnap.data != null) {
+            final prevAttemptsJson = (prevSnap.data!['attempts'] as List?) ?? const [];
+            if (prevAttemptsJson.isNotEmpty) {
+              final prevAttempt = Map<String, dynamic>.from(prevAttemptsJson.first as Map);
+              final prevAttemptId = prevAttempt['id'] as String?;
+              final prevStatus = prevAttempt['status'] as String?;
+              
+              // 이전 실습이 검토 완료 상태인 경우에만 서명 확인
+              if (prevStatus == 'reviewed' && prevAttemptId != null) {
+                return FutureBuilder<Map<String, Map<String, dynamic>>>(
+                  future: SignatureService.instance.getSignedPracticeAttempts(
+                    loginKey: user!.loginKey!,
+                  ),
+                  builder: (ctx, prevSignSnap) {
+                    if (prevSignSnap.hasData) {
+                      final prevSignData = prevSignSnap.data?[prevAttemptId];
+                      final prevMentorSigned = prevSignData?['mentor_signed'] == true;
+                      final prevMenteeSigned = prevSignData?['mentee_signed'] == true;
+                      
+                      // 멘토와 멘티 둘 다 서명 완료
+                      prevSigned = prevMentorSigned && prevMenteeSigned;
+                    }
+                    
+                    // 이전 실습이 서명 완료되지 않았다면 잠금
+                    if (!prevSigned) {
+                      return _buildLockedTile();
+                    }
+                    
+                    // 잠금 해제된 경우 일반 타일 표시
+                    return _buildNormalTile(context, api, user);
+                  },
+                );
+              } else if (prevStatus != 'reviewed') {
+                // 이전 실습이 아직 검토 완료되지 않았다면 잠금
+                return _buildLockedTile();
+              }
+            } else {
+              // 이전 실습이 아직 시도되지 않았다면 잠금
+              return _buildLockedTile();
+            }
+          }
+          
+          // 이전 실습 데이터를 불러오는 중
+          return _buildNormalTile(context, api, user);
+        },
+      );
+    }
+    
+    // 첫 번째 실습이거나 이전 확인이 필요 없는 경우
+    return _buildNormalTile(context, api, user);
+  }
+  
+  Widget _buildLockedTile() {
+    return Stack(
+      children: [
+        Opacity(
+          opacity: 0.5,
+          child: CurriculumTile.practice(
+            title: title,
+            summary: code,
+            badges: const ['실습'],
+            onTap: () {}, // 잠금 상태에서는 클릭 불가
+          ),
+        ),
+        // 잠금 아이콘 오버레이
+        Positioned.fill(
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Center(
+              child: Icon(
+                Icons.lock_outline_rounded,
+                size: 32,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+  
+  Widget _buildNormalTile(BuildContext context, SupabaseService api, dynamic user) {
     return FutureBuilder<Map<String, dynamic>?>(
       future: api.menteePracticeSetDetail(code: code),
       builder: (ctx, snap) {
-        String? label; String? grade;
+        String? label; 
+        String? grade;
+        
         if (snap.hasData && snap.data != null) {
           // RPC 응답에서 attempts jsonb 파싱
           final attemptsJson = (snap.data!['attempts'] as List?) ?? const [];
@@ -215,9 +403,53 @@ class _PracticeTileWithBadge extends StatelessWidget {
             final latestAttempt = Map<String, dynamic>.from(attemptsJson.first as Map);
             final st = latestAttempt['status'] as String?;
             grade = latestAttempt['grade'] as String?;
-            label = SupabaseService.instance.practiceStatusLabel(st) == '시도 없음' ? null : SupabaseService.instance.practiceStatusLabel(st);
+            final attemptId = latestAttempt['id'] as String?;
+            
+            // 기본 상태 레이블
+            label = SupabaseService.instance.practiceStatusLabel(st) == '시도 없음' 
+                ? null 
+                : SupabaseService.instance.practiceStatusLabel(st);
+            
+            // 서명 상태 확인 (검토 완료 상태이고 attemptId가 있는 경우)
+            if (st == 'reviewed' && attemptId != null && user?.loginKey != null) {
+              // 동기적으로 서명 상태를 확인하기 위해 추가 FutureBuilder 사용
+              return FutureBuilder<Map<String, Map<String, dynamic>>>(
+                future: SignatureService.instance.getSignedPracticeAttempts(
+                  loginKey: user!.loginKey!,
+                ),
+                builder: (ctx, signSnap) {
+                  if (signSnap.hasData) {
+                    final signData = signSnap.data?[attemptId];
+                    final mentorSigned = signData?['mentor_signed'] == true;
+                    final menteeSigned = signData?['mentee_signed'] == true;
+                    
+                    // 멘토는 서명했지만 멘티가 아직 안 한 경우
+                    if (mentorSigned && !menteeSigned) {
+                      label = '서명 대기';
+                    }
+                  }
+                  
+                  return Stack(
+                    children: [
+                      CurriculumTile.practice(
+                        title: title,
+                        summary: code,
+                        badges: const ['실습'],
+                        onTap: onTap,
+                      ),
+                      if (label != null && label!.isNotEmpty)
+                        Positioned(
+                          top: 10, right: 10,
+                          child: _practiceBadge(label: label!, grade: grade),
+                        ),
+                    ],
+                  );
+                },
+              );
+            }
           }
         }
+        
         return Stack(
           children: [
             CurriculumTile.practice(
@@ -240,10 +472,36 @@ class _PracticeTileWithBadge extends StatelessWidget {
   Widget _practiceBadge({required String label, String? grade}) {
     late Color bg, bd, fg; late IconData icon;
     switch (label) {
-      case '검토 대기': bg = const Color(0xFFFFF7ED); bd = const Color(0xFFFCCFB3); fg = const Color(0xFFEA580C); icon = Icons.upload_rounded; break;
-      case '검토 중':   bg = const Color(0xFFFFF7ED); bd = const Color(0xFFFCCFB3); fg = const Color(0xFFEA580C); icon = Icons.hourglass_bottom_rounded; break;
-      case '검토 완료': bg = const Color(0xFFECFDF5); bd = const Color(0xFFB7F3DB); fg = const Color(0xFF059669); icon = Icons.verified_rounded; break;
-      default:         bg = const Color(0xFFEFF6FF); bd = const Color(0xFFDBEAFE); fg = const Color(0xFF2563EB); icon = Icons.edit_note_rounded; break;
+      case '검토 대기': 
+        bg = const Color(0xFFFFF7ED); 
+        bd = const Color(0xFFFCCFB3); 
+        fg = const Color(0xFFEA580C); 
+        icon = Icons.upload_rounded; 
+        break;
+      case '검토 중':   
+        bg = const Color(0xFFFFF7ED); 
+        bd = const Color(0xFFFCCFB3); 
+        fg = const Color(0xFFEA580C); 
+        icon = Icons.hourglass_bottom_rounded; 
+        break;
+      case '검토 완료': 
+        bg = const Color(0xFFECFDF5); 
+        bd = const Color(0xFFB7F3DB); 
+        fg = const Color(0xFF059669); 
+        icon = Icons.verified_rounded; 
+        break;
+      case '서명 대기':
+        bg = const Color(0xFFFEF3C7); 
+        bd = const Color(0xFFFDE68A); 
+        fg = const Color(0xFFD97706); 
+        icon = Icons.edit_note_rounded;
+        break;
+      default:         
+        bg = const Color(0xFFEFF6FF); 
+        bd = const Color(0xFFDBEAFE); 
+        fg = const Color(0xFF2563EB); 
+        icon = Icons.edit_note_rounded; 
+        break;
     }
     final text = (label == '검토 완료' && (grade == 'high' || grade == 'mid' || grade == 'low'))
         ? '$label · ${grade == 'high' ? '상' : grade == 'mid' ? '중' : '하'}'
@@ -320,11 +578,22 @@ class _CurrentAttemptCard extends StatelessWidget {
   final Map<String, dynamic> set;
   final Map<String, dynamic> attempt;
   final VoidCallback onOpen;
-  const _CurrentAttemptCard({required this.set, required this.attempt, required this.onOpen});
+  final String? cardType; // 'pending' or 'signature_needed'
+  
+  const _CurrentAttemptCard({
+    required this.set, 
+    required this.attempt, 
+    required this.onOpen,
+    this.cardType,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final status = SupabaseService.instance.practiceStatusLabel(attempt['status']);
+    // cardType이 'signature_needed'이면 "서명 대기" 표시
+    final status = cardType == 'signature_needed' 
+        ? '서명 대기' 
+        : SupabaseService.instance.practiceStatusLabel(attempt['status']);
+    
     return Container(
       decoration: BoxDecoration(color: Colors.white, border: Border.all(color: UiTokens.cardBorder), borderRadius: BorderRadius.circular(18), boxShadow: [UiTokens.cardShadow]),
       padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
@@ -354,10 +623,36 @@ class _CurrentAttemptCard extends StatelessWidget {
   Widget _badge(String label) {
     Color bg, bd, fg; IconData icon;
     switch (label) {
-      case '검토 대기': bg = const Color(0xFFFFF7ED); bd = const Color(0xFFFCCFB3); fg = const Color(0xFFEA580C); icon = Icons.upload_rounded; break;
-      case '검토 중':   bg = const Color(0xFFFFF7ED); bd = const Color(0xFFFCCFB3); fg = const Color(0xFFEA580C); icon = Icons.hourglass_bottom_rounded; break;
-      case '검토 완료': bg = const Color(0xFFECFDF5); bd = const Color(0xFFB7F3DB); fg = const Color(0xFF059669); icon = Icons.verified_rounded; break;
-      default:         bg = const Color(0xFFEFF6FF); bd = const Color(0xFFDBEAFE); fg = const Color(0xFF2563EB); icon = Icons.edit_note_rounded; break;
+      case '검토 대기': 
+        bg = const Color(0xFFFFF7ED); 
+        bd = const Color(0xFFFCCFB3); 
+        fg = const Color(0xFFEA580C); 
+        icon = Icons.upload_rounded; 
+        break;
+      case '검토 중':   
+        bg = const Color(0xFFFFF7ED); 
+        bd = const Color(0xFFFCCFB3); 
+        fg = const Color(0xFFEA580C); 
+        icon = Icons.hourglass_bottom_rounded; 
+        break;
+      case '검토 완료': 
+        bg = const Color(0xFFECFDF5); 
+        bd = const Color(0xFFB7F3DB); 
+        fg = const Color(0xFF059669); 
+        icon = Icons.verified_rounded; 
+        break;
+      case '서명 대기':
+        bg = const Color(0xFFFEF3C7); 
+        bd = const Color(0xFFFDE68A); 
+        fg = const Color(0xFFD97706); 
+        icon = Icons.edit_note_rounded;
+        break;
+      default:         
+        bg = const Color(0xFFEFF6FF); 
+        bd = const Color(0xFFDBEAFE); 
+        fg = const Color(0xFF2563EB); 
+        icon = Icons.edit_note_rounded; 
+        break;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

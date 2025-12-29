@@ -113,21 +113,29 @@ class _SignaturePageState extends State<SignaturePage> {
         ];
 
       case SignatureType.practiceMentor:
+        final feedback = widget.data['feedback']?.toString() ?? '';
+        final feedbackPreview = feedback.isEmpty 
+            ? '없음' 
+            : feedback.length > 20 
+                ? '${feedback.substring(0, 20)}...' 
+                : feedback;
         return [
           '실습 과정: ${widget.data['practiceTitle'] ?? '(실습명 없음)'}',
           '멘티 이름: ${widget.data['menteeName'] ?? '(이름 없음)'}',
           '멘토 이름: $name',
           '평가 등급: ${_gradeLabel(widget.data['grade'])}',
-          '검토 의견: ${widget.data['feedback']?.toString().substring(0, 20) ?? '없음'}...',
+          '검토 의견: $feedbackPreview',
         ];
 
       case SignatureType.practiceMentee:
+        final submittedAtRaw = widget.data['submittedAt']?.toString() ?? '';
+        final submittedAtFormatted = _formatDateTime(submittedAtRaw);
         return [
           '실습 과정: ${widget.data['practiceTitle'] ?? '(실습명 없음)'}',
           '멘티 이름: $name',
-          '연락처: $phone', // ✅ 여기서도 동일하게 포맷 적용
+          '연락처: $phone',
           '멘토 평가: ${_gradeLabel(widget.data['grade'])}',
-          '제출 일시: ${widget.data['submittedAt'] ?? '(날짜 없음)'}',
+          '제출 일시: $submittedAtFormatted',
         ];
 
       case SignatureType.completionMentee:
@@ -160,6 +168,19 @@ class _SignaturePageState extends State<SignaturePage> {
         return '하';
       default:
         return '미평가';
+    }
+  }
+
+  /// ✅ DateTime 포맷 (ISO 8601 → 읽기 쉬운 형식)
+  /// 예: "2025-12-28T12:55:15.859471+00:00" → "2025년 12월 28일 12:55"
+  String _formatDateTime(String? input) {
+    if (input == null || input.trim().isEmpty) return '(날짜 없음)';
+
+    try {
+      final dt = DateTime.parse(input).toLocal();
+      return '${dt.year}년 ${dt.month}월 ${dt.day}일 ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return input; // 파싱 실패 시 원본 반환
     }
   }
 
@@ -291,6 +312,9 @@ class _SignaturePageState extends State<SignaturePage> {
         'type': widget.type.name,
       });
     } catch (e) {
+
+      print(e);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
