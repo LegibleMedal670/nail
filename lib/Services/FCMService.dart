@@ -151,21 +151,53 @@ class FCMService {
 
     try {
       switch (type) {
-        // ===== 별도 페이지 열기 (2개) =====
+        // ===== 채팅: 채팅 목록 탭 → 채팅방 (2단계 네비게이션) =====
         
         case 'chat':
-          // 채팅방으로 이동
           final roomName = allData['roomName'] as String? ?? '채팅';
-          Navigator.push(
+          
+          // 1단계: 역할별 채팅 목록 탭으로 이동
+          Widget homeWithChatTab;
+          switch (role) {
+            case 'admin':
+              homeWithChatTab = const ManagerMainPage(initialIndex: 3); // 채팅 탭
+              break;
+            case 'mentor':
+              homeWithChatTab = const MentorHomeScaffold(initialIndex: 3); // 채팅 탭
+              break;
+            case 'mentee':
+              homeWithChatTab = const MenteeHomeScaffold(initialIndex: 2); // 채팅 탭
+              break;
+            default:
+              debugPrint('[FCM] Unknown role for chat navigation: $role');
+              return;
+          }
+          
+          // 백 스택 초기화하고 채팅 탭으로 이동
+          Navigator.pushAndRemoveUntil(
             context,
-            MaterialPageRoute(
-              builder: (_) => ChatRoomPage(
-                roomId: targetId,
-                roomName: roomName,
-              ),
-            ),
+            MaterialPageRoute(builder: (_) => homeWithChatTab),
+            (route) => false,
           );
+          
+          // 2단계: 잠시 후 채팅방 열기 (채팅 목록이 렌더링된 후)
+          Future.delayed(const Duration(milliseconds: 300), () {
+            final newContext = navigatorKey.currentContext;
+            if (newContext != null) {
+              Navigator.push(
+                newContext,
+                MaterialPageRoute(
+                  builder: (_) => ChatRoomPage(
+                    roomId: targetId,
+                    roomName: roomName,
+                  ),
+                ),
+              );
+            }
+          });
           break;
+
+        // ===== 별도 페이지 열기 (관리자 전용) =====
 
         case 'new_user_signup':
         case 'role_approval_request':
