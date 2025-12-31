@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Services/CacheService.dart';
 import 'package:nail/Services/FirebaseAuthService.dart';
 import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Services/FCMService.dart';
 
 /// 런타임 사용자 세션 모델 (UI가 구독)
 class UserAccount {
@@ -177,6 +178,11 @@ class UserProvider extends ChangeNotifier {
       
       // SupabaseService에 키 설정 (레거시 호환)
       _syncSupabaseServiceKeys();
+
+      // FCM 초기화 (백그라운드에서 실행)
+      FCMService.instance.initialize(firebaseUid: fbUid).catchError((e) {
+        debugPrint('[UserProvider] FCM initialization failed: $e');
+      });
     } catch (e) {
       debugPrint('[UserProvider] hydrate error: $e');
       _current = null;
@@ -226,6 +232,11 @@ class UserProvider extends ChangeNotifier {
 
       // 4. 캐시에 Firebase UID 저장 (다음 앱 시작 시 복원용)
       await _cache.saveFirebaseUid(firebaseUid);
+
+      // 5. FCM 초기화 (백그라운드에서 실행)
+      FCMService.instance.initialize(firebaseUid: firebaseUid).catchError((e) {
+        debugPrint('[UserProvider] FCM initialization failed: $e');
+      });
 
       return (user: _current, isNewUser: isNewUser);
     } catch (e) {
@@ -279,7 +290,14 @@ class UserProvider extends ChangeNotifier {
 
   /// 로그아웃: Firebase + Supabase + 캐시 정리
   Future<void> signOut() async {
+    final uid = _current?.firebaseUid;
+    
     try {
+      // FCM 토큰 제거
+      if (uid != null) {
+        await FCMService.instance.removeToken(firebaseUid: uid);
+      }
+      
       await _firebaseAuth.signOut();
       await _sb.auth.signOut();
       await _cache.clear();

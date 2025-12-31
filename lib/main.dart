@@ -5,16 +5,30 @@ import 'package:nail/Providers/PracticeProvider.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'env/env.dart';
 import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Providers/CurriculumProvider.dart';
+import 'package:nail/Services/FCMService.dart';
+
+/// FCM 백그라운드 메시지 핸들러
+/// 앱이 백그라운드 또는 종료 상태일 때 알림을 수신하면 호출됨
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  // Firebase 초기화 (백그라운드 컨텍스트)
+  await Firebase.initializeApp();
+  await firebaseMessagingBackgroundHandler(message);
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Firebase 초기화
   await Firebase.initializeApp();
+
+  // FCM 백그라운드 메시지 핸들러 등록
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   await Supabase.initialize(
     url: Env.supabaseURL,
