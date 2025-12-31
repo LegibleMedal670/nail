@@ -19,14 +19,15 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Providers/MentorProvider.dart';
 
 class MentorHomeScaffold extends StatefulWidget {
-  const MentorHomeScaffold({super.key});
+  final int initialIndex;
+  const MentorHomeScaffold({super.key, this.initialIndex = 0});
 
   @override
   State<MentorHomeScaffold> createState() => _MentorHomeScaffoldState();
 }
 
 class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
   // 채팅 배지
   int _chatUnread = 0;
@@ -42,6 +43,8 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
+    
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _ensureChatRealtime();
       await _refreshChatBadge();

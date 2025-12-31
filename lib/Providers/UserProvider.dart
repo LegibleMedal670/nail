@@ -1,6 +1,8 @@
 // lib/Providers/UserProvider.dart
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:nail/Services/CacheService.dart';
 import 'package:nail/Services/FirebaseAuthService.dart';
 import 'package:nail/Services/SupabaseService.dart';
@@ -83,6 +85,7 @@ class UserProvider extends ChangeNotifier {
 
   UserAccount? _current;
   bool _loading = false;
+  StreamSubscription<firebase_auth.User?>? _authStateSubscription;
 
   // ===== 공개 게터 =====
   UserAccount? get current => _current;
@@ -154,19 +157,24 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1. Firebase 현재 사용자 확인
+      // 1. Firebase 인증 상태 변경 리스너 등록 (최초 1회만)
+      _authStateSubscription ??= firebase_auth.FirebaseAuth.instance
+          .authStateChanges()
+          .listen(_onAuthStateChanged);
+
+      // 2. 현재 Firebase 사용자 확인
       final fbUid = _firebaseAuth.currentUid;
       if (fbUid == null) {
         _current = null;
         return;
       }
 
-      // 2. Supabase 익명 로그인 (Storage RLS용)
+      // 3. Supabase 익명 로그인 (Storage RLS용)
       if (_sb.auth.currentSession == null) {
         await _sb.auth.signInAnonymously();
       }
 
-      // 3. Supabase에서 프로필 조회
+      // 4. Supabase에서 프로필 조회
       final row = await _getProfile(fbUid);
       if (row == null) {
         // Firebase는 로그인됐지만 Supabase에 없음 → 신규 사용자 생성 필요
@@ -189,6 +197,53 @@ class UserProvider extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  /// Firebase 인증 상태 변경 리스너
+  /// - 토큰 갱신 시 자동으로 프로필 동기화
+  /// - 로그아웃 시 세션 정리
+  Future<void> _onAuthStateChanged(firebase_auth.User? user) async {
+    debugPrint('[UserProvider] Auth state changed: ${user?.uid}');
+
+    if (user == null) {
+      // 로그아웃됨
+      if (_current != null) {
+        _current = null;
+        _syncSupabaseServiceKeys();
+        notifyListeners();
+      }
+      return;
+    }
+
+    // 이미 로그인된 사용자와 동일하면 스킵 (불필요한 재로드 방지)
+    if (_current?.firebaseUid == user.uid) {
+      return;
+    }
+
+    // 새로운 사용자 또는 토큰 갱신 → 프로필 다시 로드
+    try {
+      // Supabase 익명 로그인 (Storage RLS용)
+      if (_sb.auth.currentSession == null) {
+        await _sb.auth.signInAnonymously();
+      }
+
+      final row = await _getProfile(user.uid);
+      if (row != null) {
+        _current = _mapRowToAccount(row);
+        _syncSupabaseServiceKeys();
+        
+        // FCM 토큰이 없으면 초기화
+        if (FCMService.instance.currentToken == null) {
+          FCMService.instance.initialize(firebaseUid: user.uid).catchError((e) {
+            debugPrint('[UserProvider] FCM initialization failed: $e');
+          });
+        }
+        
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[UserProvider] _onAuthStateChanged error: $e');
     }
   }
 
@@ -311,6 +366,12 @@ class UserProvider extends ChangeNotifier {
     SupabaseService.instance.adminKey = null;
     SupabaseService.instance.loginKey = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 
   // ===== Private Helpers =====

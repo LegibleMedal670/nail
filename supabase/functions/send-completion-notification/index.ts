@@ -51,7 +51,7 @@ serve(async (req) => {
         body: `${mentee.nickname}님의 수료 승인이 필요합니다.`,
       },
       {
-        type: 'completion_pending',
+        type: 'completion_mentee_signed',
         targetId: record.user_id,
         menteeId: record.user_id,
         menteeName: mentee.nickname,

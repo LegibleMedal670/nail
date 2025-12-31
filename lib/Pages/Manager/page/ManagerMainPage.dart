@@ -18,14 +18,15 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ManagerMainPage extends StatefulWidget {
-  const ManagerMainPage({super.key});
+  final int initialIndex;
+  const ManagerMainPage({super.key, this.initialIndex = 0});
 
   @override
   State<ManagerMainPage> createState() => _ManagerMainPageState();
 }
 
 class _ManagerMainPageState extends State<ManagerMainPage> {
-  int _currentIndex = 0;
+  late int _currentIndex;
   final _svc = ChatService.instance;
   final _sb = Supabase.instance.client;
   int _chatUnread = 0;
@@ -40,6 +41,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
     _loadPendingCount();
   }
 

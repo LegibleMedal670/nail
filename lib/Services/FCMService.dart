@@ -1,6 +1,15 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:nail/main.dart' show navigatorKey;
+import 'package:nail/Providers/UserProvider.dart';
+import 'package:nail/Pages/Chat/page/ChatRoomPage.dart';
+import 'package:nail/Pages/Manager/page/PendingUsersPage.dart';
+import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
+import 'package:nail/Pages/Mentee/page/MenteeHomeScaffold.dart';
+import 'package:nail/Pages/Mentor/page/MentorHomeScaffold.dart';
 
 /// FCM (Firebase Cloud Messaging) 서비스
 /// - 푸시 알림 토큰 관리
@@ -111,49 +120,182 @@ class FCMService {
     debugPrint('[FCM] Notification tapped');
     debugPrint('[FCM] Data: ${message.data}');
 
-    // TODO: 알림 타입에 따라 적절한 페이지로 이동
-    // 예: 
-    // - type: 'chat' → ChatRoomPage
-    // - type: 'practice' → AttemptReviewPage
-    // - type: 'journal' → JournalDetailPage
-    // - type: 'todo' → TodoDetailPage
     final type = message.data['type'] as String?;
     final targetId = message.data['targetId'] as String?;
     
     if (type != null && targetId != null) {
-      _navigateToPage(type, targetId);
+      _navigateToPage(type, targetId, message.data);
     }
   }
 
   /// 알림 타입에 따라 페이지 이동
-  void _navigateToPage(String type, String targetId) {
+  void _navigateToPage(String type, String targetId, Map<String, dynamic> allData) {
     debugPrint('[FCM] Navigate to: $type -> $targetId');
     
-    // TODO: GlobalKey<NavigatorState>를 사용한 네비게이션 구현
-    // 
-    // 알림 타입별 페이지:
-    // - chat: ChatRoomPage(roomId: targetId)
-    // - practice_submitted: AttemptReviewPage(attemptId: targetId)
-    // - practice_reviewed: 실습 상세 페이지
-    // - journal_submitted: MentorJournalDetail(journalId: targetId)
-    // - journal_replied: MenteeJournalPage()
-    // - completion_pending: CompletionApprovalPage(menteeId: targetId)
-    // - new_user: PendingUsersPage()
-    // - role_approved: 홈 화면
-    // - todo_assigned: TodoDetailPage(groupId: targetId)
-    //
-    // 구현 예시:
-    // final context = navigatorKey.currentContext;
-    // if (context != null) {
-    //   switch (type) {
-    //     case 'chat':
-    //       Navigator.push(context, MaterialPageRoute(
-    //         builder: (_) => ChatRoomPage(roomId: targetId)
-    //       ));
-    //       break;
-    //     // ... 나머지 케이스
-    //   }
-    // }
+    // GlobalKey로 context 가져오기
+    final context = navigatorKey.currentContext;
+    if (context == null) {
+      debugPrint('[FCM] Navigator context is null, cannot navigate');
+      return;
+    }
+
+    // UserProvider로 로그인 확인 및 역할 확인
+    final userProvider = context.read<UserProvider>();
+    if (!userProvider.isLoggedIn) {
+      debugPrint('[FCM] User not logged in, ignoring navigation');
+      return;
+    }
+
+    final role = userProvider.role;
+    debugPrint('[FCM] User role: $role');
+
+    try {
+      switch (type) {
+        // ===== 별도 페이지 열기 (2개) =====
+        
+        case 'chat':
+          // 채팅방으로 이동
+          final roomName = allData['roomName'] as String? ?? '채팅';
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatRoomPage(
+                roomId: targetId,
+                roomName: roomName,
+              ),
+            ),
+          );
+          break;
+
+        case 'new_user_signup':
+        case 'role_approval_request':
+          // 관리자 → 가입 대기 페이지
+          if (role == 'admin') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PendingUsersPage()),
+            );
+          }
+          break;
+
+        // ===== 탭으로 이동 + 새로고침 (7개) =====
+
+        case 'practice_submitted':
+        case 'completion_mentee_signed':
+          // 멘토 → 대시보드 탭(4) + 대기 큐 새로고침
+          if (role == 'mentor') {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MentorHomeScaffold(initialIndex: 4),
+              ),
+              (route) => false,
+            );
+          }
+          break;
+
+        case 'practice_reviewed':
+          // 멘티 → 학습 탭(3) + 실습으로 전환
+          if (role == 'mentee') {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MenteeHomeScaffold(
+                  initialIndex: 3,
+                  showPractice: true,
+                ),
+              ),
+              (route) => false,
+            );
+          }
+          break;
+
+        case 'journal_submitted':
+          // 멘토 → 일일 일지 탭(2)
+          if (role == 'mentor') {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MentorHomeScaffold(initialIndex: 2),
+              ),
+              (route) => false,
+            );
+          }
+          break;
+
+        case 'journal_replied':
+          // 멘티 → 일일 일지 탭(1)
+          if (role == 'mentee') {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const MenteeHomeScaffold(initialIndex: 1),
+              ),
+              (route) => false,
+            );
+          }
+          break;
+
+        case 'user_approved':
+          // 사용자 승인 완료 → 역할별 홈 화면
+          switch (role) {
+            case 'admin':
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const ManagerMainPage()),
+                (route) => false,
+              );
+              break;
+            case 'mentor':
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const MentorHomeScaffold()),
+                (route) => false,
+              );
+              break;
+            case 'mentee':
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const MenteeHomeScaffold()),
+                (route) => false,
+              );
+              break;
+          }
+          break;
+
+        case 'todo_assigned':
+          // TODO 배정 → 역할별 투두 탭(0)
+          switch (role) {
+            case 'admin':
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const ManagerMainPage(initialIndex: 0)),
+                (route) => false,
+              );
+              break;
+            case 'mentor':
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const MentorHomeScaffold(initialIndex: 0)),
+                (route) => false,
+              );
+              break;
+            case 'mentee':
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const MenteeHomeScaffold(initialIndex: 0)),
+                (route) => false,
+              );
+              break;
+          }
+          break;
+
+        default:
+          debugPrint('[FCM] Unknown notification type: $type');
+      }
+    } catch (e) {
+      debugPrint('[FCM] Navigation error: $e');
+    }
   }
 }
 

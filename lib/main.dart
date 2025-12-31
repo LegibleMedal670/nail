@@ -67,6 +67,9 @@ Future<void> main() async {
   );
 }
 
+/// GlobalKey for navigation from FCM notifications
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
   @override
@@ -77,6 +80,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'EDU',
       theme: ThemeData(

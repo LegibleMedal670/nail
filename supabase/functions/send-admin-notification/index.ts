@@ -46,7 +46,7 @@ serve(async (req) => {
           body: `${record.nickname || '신규 회원'}님이 가입했습니다. 역할을 승인해주세요.`,
         },
         {
-          type: 'new_user',
+          type: 'new_user_signup',
           targetId: record.id,
           userId: record.id,
           userName: record.nickname || '신규 회원',
@@ -71,7 +71,7 @@ serve(async (req) => {
           body: `${roleText} 권한이 부여되었습니다. 이제 서비스를 이용할 수 있습니다.`,
         },
         {
-          type: 'role_approved',
+          type: 'user_approved',
           targetId: record.id,
           role: record.role,
           roleText,

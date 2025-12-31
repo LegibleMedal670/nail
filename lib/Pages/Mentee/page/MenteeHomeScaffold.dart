@@ -17,14 +17,16 @@ import 'package:nail/Pages/Mentee/page/MenteeJournalPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteeJournalHistoryPage.dart';
 
 class MenteeHomeScaffold extends StatefulWidget {
-  const MenteeHomeScaffold({super.key});
+  final int initialIndex;
+  final bool showPractice; // 학습 탭에서 실습으로 전환
+  const MenteeHomeScaffold({super.key, this.initialIndex = 0, this.showPractice = false});
 
   @override
   State<MenteeHomeScaffold> createState() => _MenteeHomeScaffoldState();
 }
 
 class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
-  int _currentIndex = 0;
+  late int _currentIndex;
 
   bool _initialized = false;      // 첫 진입 1회 처리 (모달 + 배지 로딩)
   int _todoNotDoneCount = 0;      // 미완료 TODO 카운트 배지
@@ -41,6 +43,15 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   @override
   void initState() {
     super.initState();
+    _currentIndex = widget.initialIndex;
+    
+    // 학습 탭에서 실습으로 전환
+    if (widget.showPractice && widget.initialIndex == 3) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _eduIsTheory.value = false; // 실습 탭으로 전환
+      });
+    }
+    
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initTodosOnce();
       await _ensureChatRealtime();
