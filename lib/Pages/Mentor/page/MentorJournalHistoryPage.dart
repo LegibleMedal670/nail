@@ -650,7 +650,7 @@ class _MentorHistoryDetailPageState extends State<_MentorHistoryDetailPage> {
   }
 }
 
-class _MentorHistoryBubble extends StatelessWidget {
+class _MentorHistoryBubble extends StatefulWidget {
   final String author; // 'mentee'|'mentor'
   final String selfRole; // 현재 화면의 사용자 역할
   final String text;
@@ -672,9 +672,60 @@ class _MentorHistoryBubble extends StatelessWidget {
   });
 
   @override
+  State<_MentorHistoryBubble> createState() => _MentorHistoryBubbleState();
+}
+
+class _MentorHistoryBubbleState extends State<_MentorHistoryBubble> {
+  List<String> _photoUrls = [];
+  bool _loadingUrls = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhotoUrls();
+  }
+
+  @override
+  void didUpdateWidget(_MentorHistoryBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.photos != oldWidget.photos) {
+      _loadPhotoUrls();
+    }
+  }
+
+  Future<void> _loadPhotoUrls() async {
+    if (widget.photos.isEmpty) {
+      setState(() {
+        _photoUrls = [];
+        _loadingUrls = false;
+      });
+      return;
+    }
+
+    setState(() => _loadingUrls = true);
+    
+    try {
+      final urls = await Future.wait(
+        widget.photos.map((e) => SupabaseService.instance.getJournalPhotoUrl(e.toString()))
+      );
+      if (mounted) {
+        setState(() {
+          _photoUrls = urls;
+          _loadingUrls = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[MentorJournalHistoryPage] Failed to load photo URLs: $e');
+      if (mounted) {
+        setState(() => _loadingUrls = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bool isMenteeMsg = author == 'mentee';
-    final bool mine = author == selfRole;
+    final bool isMenteeMsg = widget.author == 'mentee';
+    final bool mine = widget.author == widget.selfRole;
     final Color bg =
         isMenteeMsg ? const Color(0xFFEFF6FF) : const Color(0xFFECFDF5);
     final Color border =
@@ -682,19 +733,15 @@ class _MentorHistoryBubble extends StatelessWidget {
     final Color fg =
         isMenteeMsg ? const Color(0xFF2563EB) : const Color(0xFF059669);
 
-    final List<String> photoUrls = photos
-        .map((e) => SupabaseService.instance.getJournalPhotoUrl(e.toString()))
-        .toList(growable: false);
-
     void openGallery(int initialIndex) {
-      if (photoUrls.isEmpty) return;
+      if (_photoUrls.isEmpty) return;
       Navigator.of(context).push(
         PageRouteBuilder(
           barrierColor: Colors.black,
           opaque: false,
           pageBuilder: (_, __, ___) => ChatImageViewer(
-            images: photoUrls,
-            initialIndex: initialIndex.clamp(0, photoUrls.length - 1),
+            images: _photoUrls,
+            initialIndex: initialIndex.clamp(0, _photoUrls.length - 1),
             titles: null,
           ),
           transitionsBuilder: (_, anim, __, child) =>
@@ -725,9 +772,15 @@ class _MentorHistoryBubble extends StatelessWidget {
                   fontSize: 12,
                 ),
               ),
-              if (photoUrls.isNotEmpty) ...[
+              if (widget.photos.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                photoUrls.length == 1
+                _loadingUrls
+                    ? const SizedBox(
+                        width: 200,
+                        height: 140,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    : _photoUrls.length == 1
                     ? GestureDetector(
                         onTap: () => openGallery(0),
                         child: Container(
@@ -738,7 +791,7 @@ class _MentorHistoryBubble extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: const Color(0xFFE2E8F0)),
                             image: DecorationImage(
-                              image: NetworkImage(photoUrls.first),
+                              image: NetworkImage(_photoUrls.first),
                               fit: BoxFit.cover,
                             ),
                           ),
@@ -748,7 +801,7 @@ class _MentorHistoryBubble extends StatelessWidget {
                         spacing: 6,
                         runSpacing: 6,
                         children: List.generate(
-                          photoUrls.length,
+                          _photoUrls.length,
                           (i) => GestureDetector(
                             onTap: () => openGallery(i),
                             child: Container(
@@ -761,7 +814,7 @@ class _MentorHistoryBubble extends StatelessWidget {
                                   color: const Color(0xFFE2E8F0),
                                 ),
                                 image: DecorationImage(
-                                  image: NetworkImage(photoUrls[i]),
+                                  image: NetworkImage(_photoUrls[i]),
                                   fit: BoxFit.cover,
                                 ),
                               ),
@@ -772,7 +825,7 @@ class _MentorHistoryBubble extends StatelessWidget {
               ],
               const SizedBox(height: 6),
               Text(
-                text,
+                widget.text,
                 style: const TextStyle(
                   color: UiTokens.title,
                   fontWeight: FontWeight.w700,
@@ -783,7 +836,7 @@ class _MentorHistoryBubble extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    time,
+                    widget.time,
                     style: const TextStyle(
                       color: Color(0xFF94A3B8),
                       fontSize: 11,
@@ -796,7 +849,7 @@ class _MentorHistoryBubble extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (!mine && confirmed && showConfirm) ...[
+                        if (!mine && widget.confirmed && widget.showConfirm) ...[
                           const Icon(
                             Icons.check_circle,
                             size: 14,
@@ -812,7 +865,7 @@ class _MentorHistoryBubble extends StatelessWidget {
                             ),
                           ),
                         ],
-                        if (mine && confirmed && showConfirm) ...[
+                        if (mine && widget.confirmed && widget.showConfirm) ...[
                           const Icon(
                             Icons.check_circle,
                             size: 14,

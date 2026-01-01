@@ -7,7 +7,7 @@ import 'package:nail/Services/SupabaseService.dart';
 ///
 /// [author] : 'mentee' | 'mentor'
 /// [selfRole] : 현재 화면 사용자 역할 ('mentee' | 'mentor')
-class JournalBubble extends StatelessWidget {
+class JournalBubble extends StatefulWidget {
   final String author;
   final String selfRole;
   final String text;
@@ -38,9 +38,61 @@ class JournalBubble extends StatelessWidget {
   });
 
   @override
+  State<JournalBubble> createState() => _JournalBubbleState();
+}
+
+class _JournalBubbleState extends State<JournalBubble> {
+  List<String> _photoUrls = [];
+  bool _loadingUrls = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPhotoUrls();
+  }
+
+  @override
+  void didUpdateWidget(JournalBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // photos가 변경되면 URL 다시 로드
+    if (widget.photos != oldWidget.photos) {
+      _loadPhotoUrls();
+    }
+  }
+
+  Future<void> _loadPhotoUrls() async {
+    if (widget.photos.isEmpty) {
+      setState(() {
+        _photoUrls = [];
+        _loadingUrls = false;
+      });
+      return;
+    }
+
+    setState(() => _loadingUrls = true);
+    
+    try {
+      final urls = await Future.wait(
+        widget.photos.map((e) => SupabaseService.instance.getJournalPhotoUrl(e.toString()))
+      );
+      if (mounted) {
+        setState(() {
+          _photoUrls = urls;
+          _loadingUrls = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[JournalBubble] Failed to load photo URLs: $e');
+      if (mounted) {
+        setState(() => _loadingUrls = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final bool isMenteeMsg = author == 'mentee';
-    final bool mine = author == selfRole;
+    final bool isMenteeMsg = widget.author == 'mentee';
+    final bool mine = widget.author == widget.selfRole;
 
     final Color bg =
         isMenteeMsg ? const Color(0xFFEFF6FF) : const Color(0xFFECFDF5);
@@ -49,20 +101,15 @@ class JournalBubble extends StatelessWidget {
     final Color fg =
         isMenteeMsg ? const Color(0xFF2563EB) : const Color(0xFF059669);
 
-    // 스토리지 경로(List)를 실제 표시/뷰어용 URL 리스트로 변환
-    final List<String> photoUrls = photos
-        .map((e) => SupabaseService.instance.getJournalPhotoUrl(e.toString()))
-        .toList(growable: false);
-
     void openGallery(int initialIndex) {
-      if (photoUrls.isEmpty) return;
+      if (_photoUrls.isEmpty) return;
       Navigator.of(context).push(
         PageRouteBuilder(
           barrierColor: Colors.black,
           opaque: false,
           pageBuilder: (_, __, ___) => ChatImageViewer(
-            images: photoUrls,
-            initialIndex: initialIndex.clamp(0, photoUrls.length - 1),
+            images: _photoUrls,
+            initialIndex: initialIndex.clamp(0, _photoUrls.length - 1),
             titles: null,
           ),
           transitionsBuilder: (_, anim, __, child) =>
@@ -93,159 +140,119 @@ class JournalBubble extends StatelessWidget {
                   fontSize: 12,
                 ),
               ),
-              if (photoUrls.isNotEmpty) ...[
+              // ===== 사진 표시 영역 =====
+              if (widget.photos.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                photoUrls.length == 1
-                    ? GestureDetector(
-                        onTap: () => openGallery(0),
-                        child: Container(
-                          width: 200,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: const Color(0xFFE2E8F0),
-                            ),
-                            image: DecorationImage(
-                              image: NetworkImage(photoUrls.first),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
+                _loadingUrls
+                    ? const SizedBox(
+                        width: 200,
+                        height: 140,
+                        child: Center(
+                          child: CircularProgressIndicator(),
                         ),
                       )
-                    : Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: List.generate(
-                          photoUrls.length,
-                          (i) => GestureDetector(
-                            onTap: () => openGallery(i),
+                    : _photoUrls.length == 1
+                        ? GestureDetector(
+                            onTap: () => openGallery(0),
                             child: Container(
-                              width: 70,
-                              height: 70,
+                              width: 200,
+                              height: 140,
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
                                   color: const Color(0xFFE2E8F0),
                                 ),
                                 image: DecorationImage(
-                                  image: NetworkImage(photoUrls[i]),
+                                  image: NetworkImage(_photoUrls.first),
                                   fit: BoxFit.cover,
                                 ),
                               ),
                             ),
+                          )
+                        : Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: List.generate(
+                              _photoUrls.length,
+                              (i) => GestureDetector(
+                                onTap: () => openGallery(i),
+                                child: Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF1F5F9),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                    image: DecorationImage(
+                                      image: NetworkImage(_photoUrls[i]),
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
               ],
-              const SizedBox(height: 6),
-              Text(
-                text,
-                style: const TextStyle(
-                  color: UiTokens.title,
-                  fontWeight: FontWeight.w700,
+              if (widget.text.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                SelectableText(
+                  widget.text,
+                  style: const TextStyle(
+                    color: UiTokens.title,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
+              ],
+              const SizedBox(height: 8),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    time,
+                    widget.time,
                     style: const TextStyle(
                       color: Color(0xFF94A3B8),
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 10.0),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (!mine && showConfirm && !confirmed)
-                          InkWell(
-                            onTap: onConfirm ??
-                                () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('데모: 확인 처리'),
-                                    ),
-                                  );
-                                },
-                            borderRadius: BorderRadius.circular(20),
-                            child: Container(
-                              padding:
-                                  const EdgeInsets.fromLTRB(10, 5, 12, 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.6),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: UiTokens.primaryBlue
-                                      .withOpacity(0.3),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(
-                                    Icons.check_rounded,
-                                    size: 14,
-                                    color: UiTokens.primaryBlue,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    '확인하기',
-                                    style: TextStyle(
-                                      color: UiTokens.primaryBlue,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                  const Spacer(),
+                  // ===== 확인 버튼/라벨 =====
+                  if (!mine && widget.showConfirm && !widget.confirmed) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: widget.onConfirm,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: widget.confirmed
+                              ? const Color(0xFFEFF6FF)
+                              : const Color(0xFF2563EB),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '확인',
+                          style: TextStyle(
+                            color: widget.confirmed
+                                ? const Color(0xFF2563EB)
+                                : Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
                           ),
-                        // 내가 받은 최신 메시지인데 이미 확인한 경우
-                        if (!mine && confirmed && showConfirm) ...[
-                          const Icon(
-                            Icons.check_circle,
-                            size: 14,
-                            color: UiTokens.primaryBlue,
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            '확인함',
-                            style: TextStyle(
-                              color: UiTokens.primaryBlue,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                        // 내가 보낸 최신 메시지를 상대가 확인한 경우
-                        if (mine && confirmed && showConfirm) ...[
-                          const Icon(
-                            Icons.check_circle,
-                            size: 14,
-                            color: Color(0xFF059669),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            '확인됨',
-                            style: TextStyle(
-                              color: Color(0xFF059669),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ] else if (!mine && widget.showConfirm && widget.confirmed) ...[
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF2563EB),
+                      size: 16,
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -255,5 +262,3 @@ class JournalBubble extends StatelessWidget {
     );
   }
 }
-
-

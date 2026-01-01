@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
+import 'package:nail/Services/StorageService.dart';
 
 /// UI에서 파일 업로드는 아직 하지 않으므로, 선택 결과만 담는 경량 모델
 class PickedLocalFile {
@@ -1056,6 +1057,9 @@ class SupabaseService {
 
   /// [공통] 일지 사진 업로드 (단건) -> Storage Path 반환
   Future<String> uploadJournalPhoto(File file) async {
+    // ✅ Supabase 세션 확인 (Storage RLS 우회)
+    await _ensureSupabaseSession();
+    
     final now = DateTime.now();
     final dateStr = "${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}";
     final timestamp = now.millisecondsSinceEpoch;
@@ -1073,10 +1077,39 @@ class SupabaseService {
     return path;
   }
 
-  /// [공통] 일지 사진 URL 조회
-  String getJournalPhotoUrl(String path) {
+  /// Supabase 익명 세션 확인/갱신 (Storage RLS 우회용)
+  Future<void> _ensureSupabaseSession() async {
+    final session = _sb.auth.currentSession;
+    
+    if (session == null) {
+      debugPrint('[SupabaseService] No session, signing in anonymously');
+      await _sb.auth.signInAnonymously();
+    } else {
+      // 세션 만료 임박 시 자동 갱신
+      final expiresAt = session.expiresAt;
+      if (expiresAt != null) {
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final bufferSeconds = 60; // 1분 버퍼
+        
+        if (expiresAt - now < bufferSeconds) {
+          debugPrint('[SupabaseService] Session expiring soon, refreshing');
+          try {
+            await _sb.auth.refreshSession();
+          } catch (e) {
+            debugPrint('[SupabaseService] Session refresh failed, re-authenticating: $e');
+            await _sb.auth.signInAnonymously();
+          }
+        }
+      }
+    }
+  }
+
+  /// [공통] 일지 사진 URL 조회 (Signed URL, 캐싱)
+  Future<String> getJournalPhotoUrl(String path) async {
     if (path.startsWith('http')) return path;
-    return _sb.storage.from('daily_journals').getPublicUrl(path);
+    
+    // StorageService의 캐싱 기능 사용
+    return await StorageService().getOrCreateSignedUrlJournal(path);
   }
 
   String _randomString(int length) {

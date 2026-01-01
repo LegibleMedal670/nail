@@ -118,6 +118,29 @@ class StorageService {
     return url;
   }
 
+  /// 일지 버킷용 Signed URL (캐싱 지원)
+  Future<String> getOrCreateSignedUrlJournal(
+      String objectPath, {
+        int expiresInSec = 21600, // 6h
+        int minTtlBufferSec = 300,
+      }) async {
+    final key = objectPath; // 일지는 이미 상대 경로
+    final now = DateTime.now();
+    final cached = _signedCache[key];
+    if (cached != null &&
+        now.isBefore(cached.expiresAt.subtract(Duration(seconds: minTtlBufferSec)))) {
+      return cached.url;
+    }
+    
+    // ✅ Supabase 세션 확인
+    await _ensureSupabaseSession();
+    
+    final url = await _sb.storage.from('daily_journals').createSignedUrl(key, expiresInSec);
+    final exp = now.add(Duration(seconds: expiresInSec));
+    _signedCache[key] = SignedUrlCacheEntry(url: url, expiresAt: exp);
+    return url;
+  }
+
   void evictSignedUrl(String? objectPath) {
     if (objectPath == null) return;
     final key = normalizeObjectPath(objectPath);
@@ -148,6 +171,9 @@ class StorageService {
     bool upsert = false,
     String? contentType,
   }) async {
+    // ✅ Supabase 세션 확인 (Storage RLS 우회)
+    await _ensureSupabaseSession();
+    
     final rawName = _fileNameFromPath(file.path);
     final name = _uniqueSanitizedName(_sanitizeForStorage(rawName));
     final key = chatObjectPath(roomId: roomId, filename: name, kind: kind);
@@ -432,6 +458,30 @@ class StorageService {
         return 'image/heic';
       default:
         return 'application/octet-stream';
+    }
+  }
+
+  /// Supabase 익명 세션 확인/갱신 (Storage RLS 우회용)
+  Future<void> _ensureSupabaseSession() async {
+    final session = _sb.auth.currentSession;
+    
+    if (session == null) {
+      await _sb.auth.signInAnonymously();
+    } else {
+      // 세션 만료 임박 시 자동 갱신
+      final expiresAt = session.expiresAt;
+      if (expiresAt != null) {
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final bufferSeconds = 60; // 1분 버퍼
+        
+        if (expiresAt - now < bufferSeconds) {
+          try {
+            await _sb.auth.refreshSession();
+          } catch (e) {
+            await _sb.auth.signInAnonymously();
+          }
+        }
+      }
     }
   }
 }

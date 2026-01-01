@@ -695,6 +695,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     // optimistic bubble (단일 이미지 미리보기)
     _insertTempImageBubble(localPath);
     try {
+      // ✅ Supabase 세션 확인 (Storage RLS 우회)
+      await _ensureSupabaseSession();
+      
       // 스토리지에 업로드
       final mime = _guessImageMime(localPath);
       final storagePath = await _storage.uploadChatFile(
@@ -745,6 +748,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     final String mime = _guessFileMime(name);
     _insertTempFileBubble(localPath, name, size);
     try {
+      // ✅ Supabase 세션 확인 (Storage RLS 우회)
+      await _ensureSupabaseSession();
+      
       final storagePath = await _storage.uploadChatFile(
         file: file,
         roomId: widget.roomId,
@@ -771,6 +777,37 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       await _markRead();
     } catch (e) {
       debugPrint('sendFile error: $e');
+    }
+  }
+
+  /// Supabase 익명 세션 확인/갱신 (Storage RLS 우회용)
+  Future<void> _ensureSupabaseSession() async {
+    final sb = Supabase.instance.client;
+    
+    // 현재 세션 확인
+    final session = sb.auth.currentSession;
+    
+    if (session == null) {
+      // 세션 없음 → 익명 로그인
+      debugPrint('[ChatRoom] No Supabase session, signing in anonymously');
+      await sb.auth.signInAnonymously();
+    } else {
+      // 세션 만료 임박 시 자동 갱신
+      final expiresAt = session.expiresAt;
+      if (expiresAt != null) {
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final bufferSeconds = 60; // 1분 버퍼
+        
+        if (expiresAt - now < bufferSeconds) {
+          debugPrint('[ChatRoom] Supabase session expiring soon, refreshing');
+          try {
+            await sb.auth.refreshSession();
+          } catch (e) {
+            debugPrint('[ChatRoom] Session refresh failed, re-authenticating: $e');
+            await sb.auth.signInAnonymously();
+          }
+        }
+      }
     }
   }
 
