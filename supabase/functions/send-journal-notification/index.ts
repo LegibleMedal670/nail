@@ -31,7 +31,7 @@ serve(async (req) => {
 
     const isMentorReply = sender?.is_mentor || record.sender_id === journal.mentor_id;
 
-    // 3. 수신자 결정 및 FCM 토큰 조회
+    // 3. 수신자 결정 및 메시지 구성
     let recipientId: string;
     let notificationType: string;
     let title: string;
@@ -44,7 +44,7 @@ serve(async (req) => {
       title = '일지 답변 도착';
       body = `${sender?.nickname || '멘토'}님이 일지에 답변했습니다.`;
     } else {
-      // 멘티 제출 → 멘토에게 알림
+      // 멘티 제출(메시지/사진 추가 포함) → 멘토에게 알림 (매번 전송)
       if (!journal.mentor_id) {
         console.log('[JournalNotification] No mentor assigned');
         return new Response(JSON.stringify({ success: true }), {
@@ -56,20 +56,6 @@ serve(async (req) => {
       notificationType = 'journal_submitted';
       title = '일일 일지 제출';
       body = `${sender?.nickname || '멘티'}님이 오늘 일지를 작성했습니다.`;
-
-      // 중복 알림 방지: 오늘 일지에 멘티 메시지가 이미 있는지 확인
-      const { count } = await supabase
-        .from('daily_journal_messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('journal_id', record.journal_id)
-        .eq('sender_id', journal.mentee_id);
-
-      if (count && count > 1) {
-        console.log('[JournalNotification] Already notified today');
-        return new Response(JSON.stringify({ success: true, skipped: true }), {
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
     }
 
     // 4. 수신자 FCM 토큰 조회
@@ -95,10 +81,9 @@ serve(async (req) => {
         targetId: record.journal_id,
         journalId: record.journal_id,
         date: journal.date,
-        ...(isMentorReply 
+        ...(isMentorReply
           ? { mentorName: sender?.nickname || '멘토' }
-          : { menteeId: journal.mentee_id, menteeName: sender?.nickname || '멘티' }
-        ),
+          : { menteeId: journal.mentee_id, menteeName: sender?.nickname || '멘티' }),
       }
     );
 
@@ -113,4 +98,3 @@ serve(async (req) => {
     });
   }
 });
-
