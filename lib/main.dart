@@ -76,7 +76,31 @@ class MyApp extends StatefulWidget {
   State<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    // 앱 라이프사이클 관찰자 등록
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // 앱이 포그라운드로 돌아올 때마다 배지 초기화
+    if (state == AppLifecycleState.resumed) {
+      FCMService.instance.clearBadge();
+      debugPrint('[App] Resumed - Badge cleared');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

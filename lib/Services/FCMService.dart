@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_app_badger/flutter_app_badger.dart';
 import 'package:nail/main.dart' show navigatorKey;
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomPage.dart';
@@ -14,6 +15,7 @@ import 'package:nail/Pages/Mentor/page/MentorHomeScaffold.dart';
 /// FCM (Firebase Cloud Messaging) 서비스
 /// - 푸시 알림 토큰 관리
 /// - 포그라운드/백그라운드 알림 수신
+/// - 앱 아이콘 배지 관리
 class FCMService {
   FCMService._();
   static final instance = FCMService._();
@@ -28,8 +30,12 @@ class FCMService {
   /// - 권한 요청
   /// - 토큰 가져오기
   /// - 토큰 갱신 리스너 등록
+  /// - 앱 배지 초기화
   Future<void> initialize({required String firebaseUid}) async {
     try {
+      // 0. 앱 배지 초기화 (앱 열릴 때마다 0으로)
+      await clearBadge();
+
       // 1. 권한 요청
       final settings = await _messaging.requestPermission(
         alert: true,
@@ -63,17 +69,34 @@ class FCMService {
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
       // 5. 백그라운드 알림 클릭 처리
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        clearBadge(); // 알림 클릭 시 배지 제거
+        _handleNotificationTap(message);
+      });
 
       // 6. 앱이 종료된 상태에서 알림으로 열린 경우
       final initialMessage = await _messaging.getInitialMessage();
       if (initialMessage != null) {
+        clearBadge(); // 알림으로 앱 시작 시 배지 제거
         _handleNotificationTap(initialMessage);
       }
 
       debugPrint('[FCM] Initialized successfully');
     } catch (e) {
       debugPrint('[FCM] Initialization failed: $e');
+    }
+  }
+
+  /// 앱 아이콘 배지 제거
+  Future<void> clearBadge() async {
+    try {
+      final supported = await FlutterAppBadger.isAppBadgeSupported();
+      if (supported) {
+        await FlutterAppBadger.removeBadge();
+        debugPrint('[FCM] Badge cleared');
+      }
+    } catch (e) {
+      debugPrint('[FCM] Failed to clear badge: $e');
     }
   }
 
