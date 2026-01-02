@@ -44,8 +44,9 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
   @override
   void initState() {
     super.initState();
-    // 첫 렌더 뒤 진행도 로드
+    // 첫 렌더 뒤 커리큘럼 + 진행도 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CurriculumProvider>().ensureLoaded();
       _loadProgress();
     });
   }

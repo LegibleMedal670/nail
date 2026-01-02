@@ -1,14 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nail/Pages/Common/model/CurriculumItem.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
 class CurriculumProvider extends ChangeNotifier {
-  static const _kCacheVersionKey = 'curriculum.version';
-  static const _kCachePayloadKey = 'curriculum.payload.v4'; // ✅ 모델 변경 → 키 승격
-
   final List<CurriculumItem> _items = [];
   List<CurriculumItem> get items => List.unmodifiable(_items);
 
@@ -21,7 +16,6 @@ class CurriculumProvider extends ChangeNotifier {
   int? _currentVersion;
   int? get currentVersion => _currentVersion;
 
-  bool _initialized = false;
   bool _disposed = false;
 
   @override
@@ -31,13 +25,8 @@ class CurriculumProvider extends ChangeNotifier {
   }
 
   Future<void> ensureLoaded() async {
-    if (_initialized) return;
-    _initialized = true;
-
-    await _loadFromCache();
-    // 비차단 SWR
-    // ignore: unawaited_futures
-    _fetchFromServer();
+    // 매번 서버에서 새로 로드 (캐시 없음)
+    await _fetchFromServer();
   }
 
   Future<void> refresh({bool force = false}) async {
@@ -45,41 +34,6 @@ class CurriculumProvider extends ChangeNotifier {
   }
 
   // ---- 내부 구현 ----
-
-  Future<void> _loadFromCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final cachedJson = prefs.getString(_kCachePayloadKey);
-      final ver = prefs.getInt(_kCacheVersionKey);
-
-      if (cachedJson != null) {
-        final List list = jsonDecode(cachedJson) as List;
-        final parsed = list
-            .map((e) => _itemFromJson(Map<String, dynamic>.from(e as Map)))
-            .toList()
-          ..sort((a, b) => a.week.compareTo(b.week));
-
-        _applyState(items: parsed, version: ver, loading: false, error: null);
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('Curriculum cache load error: $e');
-      }
-    }
-  }
-
-  Future<void> _saveCache(int version, List<CurriculumItem> list) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final payload = jsonEncode(list.map(_itemToJson).toList());
-      await prefs.setInt(_kCacheVersionKey, version);
-      await prefs.setString(_kCachePayloadKey, payload);
-    } catch (e) {
-      if (kDebugMode) {
-        print('Curriculum cache save error: $e');
-      }
-    }
-  }
 
   Future<void> _fetchFromServer({bool force = false}) async {
     if (_loading && !force) return;
@@ -92,18 +46,13 @@ class CurriculumProvider extends ChangeNotifier {
       // 2) 아이템 조회 (옵션 A: 뷰 사용)
       final items = await SupabaseService.instance.listCurriculumItems(version: latest);
 
-      if (items.isEmpty) {
-        _applyState(loading: false, error: '서버에서 커리큘럼을 찾을 수 없어요');
-        return;
-      }
-
+      // 빈 배열도 정상 처리 (에러 아님)
       final version = latest ?? _currentVersion ?? 1;
       final sorted = [...items]..sort((a, b) => a.week.compareTo(b.week));
 
       _applyState(items: sorted, version: version, loading: false, error: null);
 
-      // ignore: unawaited_futures
-      _saveCache(version, sorted);
+      // 캐시 사용 안 함 - 매번 서버에서 로드
     } catch (e) {
       _applyState(loading: false, error: '불러오기 실패: $e');
     }
@@ -139,56 +88,6 @@ class CurriculumProvider extends ChangeNotifier {
     }
 
     if (changed) notifyListeners();
-  }
-
-  // ---- 캐시 직렬화 유틸 (옵션 A 스키마) ----
-  CurriculumItem _itemFromJson(Map<String, dynamic> j) {
-    final dynamic goalsRaw = j['goals'];
-    final List<String> goals = (goalsRaw is List)
-        ? goalsRaw.map((e) => e?.toString() ?? '').where((e) => e.isNotEmpty).toList()
-        : const <String>[];
-
-    final dynamic resourcesRaw = j['resources'];
-    final List<Map<String, dynamic>> resources = (resourcesRaw is List)
-        ? resourcesRaw
-        .whereType<dynamic>()
-        .map<Map<String, dynamic>>(
-          (e) => e is Map ? Map<String, dynamic>.from(e as Map) : <String, dynamic>{},
-    )
-        .toList(growable: false)
-        : const <Map<String, dynamic>>[];
-
-    return CurriculumItem(
-      id: j['id'] as String,
-      week: j['week'] as int,
-      title: j['title'] as String,
-      summary: j['summary'] as String,
-      goals: goals,
-      hasVideo: j['hasVideo'] == true,
-      videoUrl: (j['videoUrl'] as String?)?.trim().isEmpty == true ? null : j['videoUrl'] as String?,
-      requiresExam: j['requiresExam'] == true,
-      resources: resources,
-      durationMinutes: (j['durationMinutes'] as int?) ?? 0, // 호환용
-      version: j['version'] as int?,
-      thumbUrl: (j['thumbUrl'] as String?)?.trim().isEmpty == true ? null : j['thumbUrl'] as String?, // ✅ 추가
-    );
-  }
-
-  Map<String, dynamic> _itemToJson(CurriculumItem i) {
-    return {
-      'id': i.id,
-      'week': i.week,
-      'title': i.title,
-      'summary': i.summary,
-      'goals': i.goals,
-      'hasVideo': i.hasVideo,
-      'videoUrl': i.videoUrl,
-      'requiresExam': i.requiresExam,
-      'resources': i.resources,
-      'durationMinutes': i.durationMinutes, // 호환용
-      'version': i.version,
-      'thumbUrl': i.thumbUrl, // ✅ 추가
-    };
   }
 
   void upsertLocal(CurriculumItem item) {

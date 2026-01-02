@@ -197,7 +197,7 @@ class _CurriculumManageTabState extends State<CurriculumManageTab> {
                 if (loading && items.isEmpty) ...[
                   const SizedBox(height: 80),
                   const Center(child: CircularProgressIndicator()),
-                ] else if (error != null && items.isEmpty) ...[
+                ] else if (error != null) ...[
                   const SizedBox(height: 40),
                   _ErrorBlock(
                     message: error,

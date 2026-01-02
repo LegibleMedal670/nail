@@ -66,7 +66,6 @@ class SignatureService {
         manufacturer = 'Apple';
       }
     } catch (e) {
-      debugPrint('[SignatureService] Failed to get device info: $e');
       deviceId = 'unknown';
       model = 'unknown';
       os = 'unknown';
@@ -107,7 +106,6 @@ class SignatureService {
         format: CompressFormat.png,
       );
 
-      debugPrint('[SignatureService] Original size: ${imageBytes.length}, Compressed: ${compressed.length}');
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final path = '$type/$userId/$timestamp.png';
@@ -126,10 +124,8 @@ class SignatureService {
 
       final url = _sb.storage.from(bucketName).getPublicUrl(path);
 
-      debugPrint('[SignatureService] Uploaded signature: $path');
       return url;
     } catch (e) {
-      debugPrint('[SignatureService] Upload failed: $e');
       rethrow;
     }
   }
@@ -142,27 +138,21 @@ class SignatureService {
     required String phoneNumber,
   }) async {
     try {
-      debugPrint('[SignatureService] Starting signTheoryModule for module: $moduleCode');
 
       // 1. 이미지 업로드 (loginKey를 경로에 사용)
-      debugPrint('[SignatureService] Uploading signature image...');
       final imageUrl = await uploadSignatureImage(
         imageBytes: signatureImage,
         type: 'theory',
         userId: loginKey, // Firebase UID를 경로에 사용
       );
-      debugPrint('[SignatureService] Image uploaded: $imageUrl');
 
       // 2. 메타데이터 수집
-      debugPrint('[SignatureService] Collecting metadata...');
       final metadata = await collectMetadata(
         signatureImage: signatureImage,
         phoneNumber: phoneNumber,
       );
-      debugPrint('[SignatureService] Metadata collected. Hash: ${metadata.hashValue.substring(0, 16)}...');
 
       // 3. RPC 호출
-      debugPrint('[SignatureService] Calling sign_theory_module RPC...');
       final result = await _sb.rpc(
         'sign_theory_module',
         params: {
@@ -175,7 +165,6 @@ class SignatureService {
         },
       );
 
-      debugPrint('[SignatureService] RPC result type: ${result.runtimeType}, value: $result');
 
       // RPC 결과 파싱 (UUID 반환)
       String signatureId;
@@ -189,11 +178,8 @@ class SignatureService {
         signatureId = result.toString();
       }
 
-      debugPrint('[SignatureService] Theory module signed: $signatureId');
       return signatureId;
     } catch (e, stackTrace) {
-      debugPrint('[SignatureService] signTheoryModule failed: $e');
-      debugPrint('[SignatureService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -207,28 +193,22 @@ class SignatureService {
     required String phoneNumber,
   }) async {
     try {
-      debugPrint('[SignatureService] Starting signPracticeAttempt for attempt: $attemptId (${isMentor ? 'mentor' : 'mentee'})');
 
       // 1. 이미지 업로드 (loginKey를 경로에 사용)
       final type = isMentor ? 'practice_mentor' : 'practice_mentee';
-      debugPrint('[SignatureService] Uploading signature image...');
       final imageUrl = await uploadSignatureImage(
         imageBytes: signatureImage,
         type: type,
         userId: loginKey, // Firebase UID를 경로에 사용
       );
-      debugPrint('[SignatureService] Image uploaded: $imageUrl');
 
       // 2. 메타데이터 수집
-      debugPrint('[SignatureService] Collecting metadata...');
       final metadata = await collectMetadata(
         signatureImage: signatureImage,
         phoneNumber: phoneNumber,
       );
-      debugPrint('[SignatureService] Metadata collected. Hash: ${metadata.hashValue.substring(0, 16)}...');
 
       // 3. RPC 호출
-      debugPrint('[SignatureService] Calling sign_practice_attempt RPC...');
       final result = await _sb.rpc(
         'sign_practice_attempt',
         params: {
@@ -242,7 +222,6 @@ class SignatureService {
         },
       );
 
-      debugPrint('[SignatureService] RPC result type: ${result.runtimeType}, value: $result');
 
       // RPC 결과 파싱 (UUID 반환)
       String signatureId;
@@ -256,11 +235,8 @@ class SignatureService {
         signatureId = result.toString();
       }
 
-      debugPrint('[SignatureService] Practice attempt signed: $signatureId (${isMentor ? 'mentor' : 'mentee'})');
       return signatureId;
     } catch (e, stackTrace) {
-      debugPrint('[SignatureService] signPracticeAttempt failed: $e');
-      debugPrint('[SignatureService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -284,10 +260,8 @@ class SignatureService {
         }
       }
 
-      debugPrint('[SignatureService] Signed theory modules: ${signed.length}');
       return signed;
     } catch (e) {
-      debugPrint('[SignatureService] getSignedTheoryModules failed: $e');
       return {};
     }
   }
@@ -318,10 +292,8 @@ class SignatureService {
         }
       }
 
-      debugPrint('[SignatureService] Signed practice attempts: ${signedMap.length}');
       return signedMap;
     } catch (e) {
-      debugPrint('[SignatureService] getSignedPracticeAttempts failed: $e');
       return {};
     }
   }
@@ -335,28 +307,22 @@ class SignatureService {
     required String phoneNumber,
   }) async {
     try {
-      debugPrint('[SignatureService] Starting signCompletion for mentee: $menteeId (${isMentor ? 'mentor' : 'mentee'})');
 
       // 1. 이미지 업로드
       final type = isMentor ? 'completion_mentor' : 'completion_mentee';
-      debugPrint('[SignatureService] Uploading signature image...');
       final imageUrl = await uploadSignatureImage(
         imageBytes: signatureImage,
         type: type,
         userId: loginKey,
       );
-      debugPrint('[SignatureService] Image uploaded: $imageUrl');
 
       // 2. 메타데이터 수집
-      debugPrint('[SignatureService] Collecting metadata...');
       final metadata = await collectMetadata(
         signatureImage: signatureImage,
         phoneNumber: phoneNumber,
       );
-      debugPrint('[SignatureService] Metadata collected. Hash: ${metadata.hashValue.substring(0, 16)}...');
 
       // 3. RPC 호출
-      debugPrint('[SignatureService] Calling sign_completion RPC...');
       final result = await _sb.rpc(
         'sign_completion',
         params: {
@@ -370,7 +336,6 @@ class SignatureService {
         },
       );
 
-      debugPrint('[SignatureService] RPC result type: ${result.runtimeType}, value: $result');
 
       // RPC 결과 파싱 (UUID 반환)
       String signatureId;
@@ -384,11 +349,8 @@ class SignatureService {
         signatureId = result.toString();
       }
 
-      debugPrint('[SignatureService] Completion signed: $signatureId (${isMentor ? 'mentor' : 'mentee'})');
       return signatureId;
     } catch (e, stackTrace) {
-      debugPrint('[SignatureService] signCompletion failed: $e');
-      debugPrint('[SignatureService] Stack trace: $stackTrace');
       rethrow;
     }
   }
@@ -416,7 +378,6 @@ class SignatureService {
 
       return null;
     } catch (e) {
-      debugPrint('[SignatureService] getCompletionSignatureStatus failed: $e');
       return null;
     }
   }
@@ -434,7 +395,6 @@ class SignatureService {
       final List<dynamic> rows = result is List ? result : [result];
       return rows.where((r) => r != null).map((r) => Map<String, dynamic>.from(r as Map)).toList();
     } catch (e) {
-      debugPrint('[SignatureService] getCompletionPendingList failed: $e');
       return [];
     }
   }
