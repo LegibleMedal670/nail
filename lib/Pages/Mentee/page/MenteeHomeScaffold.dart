@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
+import 'package:nail/Pages/Common/widgets/WithdrawDialog.dart';
+import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/TodoService.dart';
+import 'package:nail/Services/UserService.dart';
 import 'package:provider/provider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
@@ -191,6 +194,58 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
     _journalRt = ch;
   }
 
+  Future<void> _withdraw() async {
+    final confirmed = await showWithdrawConfirmDialog(context);
+
+    if (confirmed != true || !mounted) return;
+
+    final up = context.read<UserProvider>();
+    final userId = up.current?.id;
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사용자 정보를 찾을 수 없습니다.')),
+      );
+      return;
+    }
+
+    // 로딩 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await UserService.instance.withdrawUser(userId: userId);
+
+      if (!mounted) return;
+
+      // 로딩 닫기
+      Navigator.of(context).pop();
+
+      // Firebase Auth 로그아웃
+      await up.signOut();
+
+      if (!mounted) return;
+
+      // 로그인 화면으로 이동
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      // 로딩 닫기
+      Navigator.of(context).pop();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회원 탈퇴 실패: $e')),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _chatRt?.unsubscribe();
@@ -273,6 +328,11 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
                   ),
                 ),
               ),
+            ),
+            IconButton(
+              tooltip: '회원 탈퇴',
+              icon: const Icon(Icons.person_remove_outlined, color: UiTokens.title),
+              onPressed: _withdraw,
             ),
           ],
           IconButton(

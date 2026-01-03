@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
+import 'package:nail/Pages/Common/widgets/WithdrawDialog.dart';
 import 'package:nail/Pages/Mentor/page/MentorMainPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupsView.dart';
@@ -8,11 +9,13 @@ import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
 import 'package:nail/Pages/Mentor/page/MentorJournalPage.dart';
 import 'package:nail/Pages/Common/page/MyTodoPage.dart';
 import 'package:nail/Pages/Welcome/PhoneLoginPage.dart';
+import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/ChatService.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Services/TodoService.dart';
+import 'package:nail/Services/UserService.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -117,6 +120,69 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
       MaterialPageRoute(builder: (_) => const PhoneLoginPage()),
       (route) => false,
     );
+  }
+
+  Future<void> _withdraw() async {
+    final confirmed = await showWithdrawConfirmDialog(context);
+
+    if (confirmed != true || !mounted) return;
+
+    final up = context.read<UserProvider>();
+    final userId = up.current?.id;
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사용자 정보를 찾을 수 없습니다.')),
+      );
+      return;
+    }
+
+    // 로딩 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await UserService.instance.withdrawUser(userId: userId);
+
+      if (!mounted) return;
+
+      // 로딩 닫기
+      Navigator.of(context).pop();
+
+      // 멘토인 경우 영향받은 멘티 수 표시
+      if (result['role'] == 'mentor' && result['affectedMentees'] > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${result['affectedMentees']}명의 멘티가 배정 해제되었습니다.'),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        await Future.delayed(const Duration(seconds: 2));
+      }
+
+      // Firebase Auth 로그아웃
+      await up.signOut();
+
+      if (!mounted) return;
+
+      // 로그인 화면으로 이동
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()),
+            (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      // 로딩 닫기
+      Navigator.of(context).pop();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회원 탈퇴 실패: $e')),
+      );
+    }
   }
 
   Future<void> _ensureChatRealtime() async {
@@ -255,8 +321,14 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
                 },
               ),
             ),
-          ],
-          // 공통 로그아웃 버튼
+          ]
+          else if (_currentIndex == 4) ... [
+              IconButton(
+                tooltip: '회원 탈퇴',
+                icon: const Icon(Icons.person_remove_outlined, color: UiTokens.title),
+                onPressed: _withdraw,
+              ),
+            ],
           IconButton(
             tooltip: '로그아웃',
             icon: const Icon(Icons.logout_rounded, color: UiTokens.title),

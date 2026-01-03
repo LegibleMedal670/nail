@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomListPage.dart';
 import 'package:nail/Pages/Chat/page/CreateChatRoomPage.dart';
 import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
+import 'package:nail/Pages/Common/widgets/WithdrawDialog.dart';
 import 'package:nail/Pages/Manager/page/PendingUsersPage.dart';
 import 'package:nail/Pages/Welcome/PhoneLoginPage.dart';
+import 'package:nail/Pages/Welcome/SplashScreen.dart';
 import 'package:nail/Services/ChatService.dart';
+import 'package:nail/Services/UserService.dart';
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/ManagerTodoStatusPage.dart';
@@ -78,6 +81,60 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
       MaterialPageRoute(builder: (_) => const PhoneLoginPage()),
       (route) => false,
     );
+  }
+
+  Future<void> _withdraw() async {
+    final confirmed = await showWithdrawConfirmDialog(context);
+    
+    if (confirmed != true || !mounted) return;
+
+    final up = context.read<UserProvider>();
+    final userId = up.current?.id;
+
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사용자 정보를 찾을 수 없습니다.')),
+      );
+      return;
+    }
+
+    // 로딩 표시
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await UserService.instance.withdrawUser(userId: userId);
+
+      if (!mounted) return;
+
+      // 로딩 닫기
+      Navigator.of(context).pop();
+
+      // Firebase Auth 로그아웃
+      await up.signOut();
+
+      if (!mounted) return;
+
+      // 로그인 화면으로 이동
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SplashScreen()),
+        (route) => false,
+      );
+
+      // 성공 메시지는 Splash에서 처리하도록 (현재 화면은 이미 dispose됨)
+    } catch (e) {
+      if (!mounted) return;
+
+      // 로딩 닫기
+      Navigator.of(context).pop();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회원 탈퇴 실패: $e')),
+      );
+    }
   }
 
   static const List<BottomNavigationBarItem> _navItems = [
@@ -227,6 +284,12 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
                   ),
                 ),
               ),
+            ),
+          if (_currentIndex == 4)
+            IconButton(
+              tooltip: '회원 탈퇴',
+              icon: const Icon(Icons.person_remove_outlined, color: UiTokens.title),
+              onPressed: _withdraw,
             ),
         ],
       ),
