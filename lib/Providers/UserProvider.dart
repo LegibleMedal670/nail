@@ -21,6 +21,9 @@ class UserAccount {
   final String? mentorId;
   final String? mentorName;
   final String? photoUrl;
+  final bool agreedToTerms;
+  final bool agreedToPrivacy;
+  final DateTime? agreedAt;
 
   const UserAccount({
     required this.id,
@@ -34,6 +37,9 @@ class UserAccount {
     this.mentorId,
     this.mentorName,
     this.photoUrl,
+    this.agreedToTerms = false,
+    this.agreedToPrivacy = false,
+    this.agreedAt,
   });
 
   /// role이 pending이면 역할 미배정 상태
@@ -61,6 +67,9 @@ class UserAccount {
     String? mentorId,
     String? mentorName,
     String? photoUrl,
+    bool? agreedToTerms,
+    bool? agreedToPrivacy,
+    DateTime? agreedAt,
   }) {
     return UserAccount(
       id: id ?? this.id,
@@ -74,6 +83,9 @@ class UserAccount {
       mentorId: mentorId ?? this.mentorId,
       mentorName: mentorName ?? this.mentorName,
       photoUrl: photoUrl ?? this.photoUrl,
+      agreedToTerms: agreedToTerms ?? this.agreedToTerms,
+      agreedToPrivacy: agreedToPrivacy ?? this.agreedToPrivacy,
+      agreedAt: agreedAt ?? this.agreedAt,
     );
   }
 }
@@ -253,6 +265,8 @@ class UserProvider extends ChangeNotifier {
   Future<({UserAccount? user, bool isNewUser})> syncWithSupabase({
     required String firebaseUid,
     required String phone,
+    bool agreedToTerms = false,
+    bool agreedToPrivacy = false,
   }) async {
     _loading = true;
     notifyListeners();
@@ -263,10 +277,12 @@ class UserProvider extends ChangeNotifier {
         await _sb.auth.signInAnonymously();
       }
 
-      // 2. RPC 호출: 조회/생성
+      // 2. RPC 호출: 조회/생성 (약관 동의 포함)
       final res = await _sb.rpc('rpc_get_or_create_user', params: {
         'p_firebase_uid': firebaseUid,
         'p_phone': phone,
+        'p_agreed_to_terms': agreedToTerms,
+        'p_agreed_to_privacy': agreedToPrivacy,
       });
 
       if (res == null) {
@@ -396,7 +412,7 @@ class UserProvider extends ChangeNotifier {
 
   UserAccount _mapRowToAccount(Map<String, dynamic> row) {
     return UserAccount(
-      id: _asString(row['id']),
+      id: _asString(row['user_id'] ?? row['id']), // user_id 또는 id
       firebaseUid: _asString(row['firebase_uid']),
       phone: _asString(row['phone']),
       nickname: _asString(row['nickname'], '신규회원'),
@@ -407,6 +423,9 @@ class UserProvider extends ChangeNotifier {
       mentorId: row['mentor'] as String?,
       mentorName: row['mentor_name'] as String?,
       photoUrl: row['photo_url'] as String?,
+      agreedToTerms: _asBool(row['agreed_to_terms']),
+      agreedToPrivacy: _asBool(row['agreed_to_privacy']),
+      agreedAt: _parseDate(row['agreed_at']),
     );
   }
 }

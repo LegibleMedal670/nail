@@ -129,11 +129,13 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
     }
 
     try {
-      // Supabase 연동
+      // Supabase 연동 (약관 동의 정보 포함)
       final userProvider = context.read<UserProvider>();
       final result = await userProvider.syncWithSupabase(
         firebaseUid: uid,
         phone: phone,
+        agreedToTerms: _agreedToTerms,
+        agreedToPrivacy: _agreedToPrivacy,
       );
 
       if (!mounted) return;
