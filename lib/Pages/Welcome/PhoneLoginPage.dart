@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/page/ManagerMainPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorHomeScaffold.dart';
@@ -24,6 +25,10 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
   bool _isCodeSent = false;
   bool _isLoading = false;
 
+  // 약관 동의 상태
+  bool _agreedToTerms = false;
+  bool _agreedToPrivacy = false;
+
   // 입력 필드 컨트롤러
   final _phoneNumberController = TextEditingController();
   final _codeController = TextEditingController();
@@ -45,6 +50,12 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
   Future<void> _sendVerificationCode() async {
     if (!_isPhoneValid) {
       _showError('올바른 전화번호를 입력해주세요.');
+      return;
+    }
+
+    // 약관 동의 확인
+    if (!_agreedToTerms || !_agreedToPrivacy) {
+      _showError('서비스 이용약관 및 개인정보처리방침에 동의해주세요.');
       return;
     }
 
@@ -325,6 +336,11 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
             letterSpacing: 0.5,
           ),
         ),
+        const SizedBox(height: 24),
+
+        // 약관 동의 체크박스
+        _buildAgreementCheckboxes(),
+        
         const SizedBox(height: 32),
 
         // 인증번호 전송 버튼
@@ -332,7 +348,9 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: (_isLoading || !_isPhoneValid) ? null : _sendVerificationCode,
+            onPressed: (_isLoading || !_isPhoneValid || !_agreedToTerms || !_agreedToPrivacy) 
+                ? null 
+                : _sendVerificationCode,
             style: ElevatedButton.styleFrom(
               backgroundColor: UiTokens.primaryBlue,
               disabledBackgroundColor: const Color(0xFFE2E8F0),
@@ -353,7 +371,9 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
                 : Text(
                     '인증번호 받기',
                     style: TextStyle(
-                      color: _isPhoneValid ? Colors.white : const Color(0xFF94A3B8),
+                      color: (_isPhoneValid && _agreedToTerms && _agreedToPrivacy) 
+                          ? Colors.white 
+                          : const Color(0xFF94A3B8),
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
                     ),
@@ -477,6 +497,122 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
         ),
       ],
     );
+  }
+
+  /// 약관 동의 체크박스
+  Widget _buildAgreementCheckboxes() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7FA),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        children: [
+          // 서비스 이용약관
+          _buildCheckboxRow(
+            value: _agreedToTerms,
+            onChanged: (value) => setState(() => _agreedToTerms = value ?? false),
+            label: '서비스 이용약관',
+            isRequired: true,
+            onTapLink: () => _openUrl('https://sites.google.com/view/termsofuse01/'),
+          ),
+          const SizedBox(height: 12),
+          
+          // 개인정보처리방침
+          _buildCheckboxRow(
+            value: _agreedToPrivacy,
+            onChanged: (value) => setState(() => _agreedToPrivacy = value ?? false),
+            label: '개인정보처리방침',
+            isRequired: true,
+            onTapLink: () => _openUrl('https://sites.google.com/view/privateinfopolicy/'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 체크박스 행
+  Widget _buildCheckboxRow({
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    required String label,
+    required bool isRequired,
+    required VoidCallback onTapLink,
+  }) {
+    return Row(
+      children: [
+        SizedBox(
+          width: 24,
+          height: 24,
+          child: Checkbox(
+            value: value,
+            onChanged: onChanged,
+            activeColor: UiTokens.primaryBlue,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: GestureDetector(
+            onTap: () => onChanged(!value),
+            child: Row(
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: UiTokens.title,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (isRequired) ...[
+                  const SizedBox(width: 4),
+                  const Text(
+                    '(필수)',
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        InkWell(
+          onTap: onTapLink,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(
+              Icons.open_in_new,
+              size: 18,
+              color: UiTokens.title.withOpacity(0.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// URL 열기
+  Future<void> _openUrl(String urlString) async {
+    final url = Uri.parse(urlString);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+    } else {
+      if (mounted) {
+        _showError('링크를 열 수 없습니다.');
+      }
+    }
   }
 }
 
