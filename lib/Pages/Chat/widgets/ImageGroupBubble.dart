@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:nail/Pages/Chat/models/ReplyInfo.dart';
 
 class ImageGroupBubble extends StatelessWidget {
   final bool isMe;
@@ -12,6 +13,11 @@ class ImageGroupBubble extends StatelessWidget {
   final bool loading;
   final VoidCallback? onTap; // 전체를 탭하면 풀스크린 뷰어 열기
   final int? expectedCount;   // URL 준비 전 셀 개수
+  
+  /// 답장 정보 (원본 메시지)
+  final ReplyInfo? replyTo;
+  /// 답장 인용 클릭 시 원본으로 이동
+  final VoidCallback? onReplyTap;
 
   const ImageGroupBubble({
     Key? key,
@@ -23,6 +29,8 @@ class ImageGroupBubble extends StatelessWidget {
     this.loading = false,
     this.onTap,
     this.expectedCount,
+    this.replyTo,
+    this.onReplyTap,
   }) : super(key: key);
 
   @override
@@ -36,28 +44,43 @@ class ImageGroupBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.70,
         ),
-        child: Stack(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: UiTokens.cardBorder),
-                boxShadow: const [UiTokens.cardShadow],
-              ),
-              clipBehavior: Clip.hardEdge,
-              child: grid,
-            ),
-            if (loading) ...[
-              Positioned.fill(child: Container(color: Colors.black26)),
-              Positioned.fill(
-                child: Center(
-                  child: SizedBox(
-                    width: 32, height: 32,
-                    child: const CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                  ),
-                ),
-              ),
+            // 답장 인용 부분
+            if (replyTo != null) ...[
+              _buildReplyQuote(context, replyTo!),
+              SizedBox(height: 6),
             ],
+            // 이미지 그리드
+            Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: UiTokens.cardBorder),
+                    boxShadow: const [UiTokens.cardShadow],
+                  ),
+                  clipBehavior: Clip.hardEdge,
+                  child: grid,
+                ),
+                if (loading) ...[
+                  Positioned.fill(child: Container(color: Colors.black26)),
+                  Positioned.fill(
+                    child: Center(
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
@@ -111,6 +134,68 @@ class ImageGroupBubble extends StatelessWidget {
     final h = lt.hour.toString().padLeft(2, '0');
     final m = lt.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  /// 답장 인용 박스 위젯
+  Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
+    return GestureDetector(
+      onTap: onReplyTap,
+      child: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isMe ? UiTokens.primaryBlue.withOpacity(0.2) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: isMe ? UiTokens.primaryBlue : Color(0xFF007AFF),
+              width: 3,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.reply,
+                  size: 12,
+                  color: isMe ? UiTokens.primaryBlue : Colors.grey[600],
+                ),
+                SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    reply.senderNickname,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isMe ? UiTokens.primaryBlue : Color(0xFF007AFF),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 3),
+            Text(
+              reply.deleted ? '삭제된 메시지입니다' : reply.preview,
+              style: TextStyle(
+                fontSize: 12,
+                color: reply.deleted
+                    ? Colors.grey[500]
+                    : (isMe ? UiTokens.title : Colors.grey[700]),
+                fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

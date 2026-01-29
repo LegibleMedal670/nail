@@ -11,6 +11,7 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 import 'package:nail/Pages/Chat/models/RoomMemberBrief.dart';
+import 'package:nail/Pages/Chat/models/ReplyInfo.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomInfoPage.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 import 'package:nail/Pages/Chat/widgets/ConfirmModal.dart';
@@ -22,7 +23,8 @@ import 'package:nail/Pages/Chat/widgets/MessageBubble.dart';
 import 'package:nail/Pages/Chat/widgets/MessageInputBar.dart';
 import 'package:nail/Pages/Chat/widgets/SystemEventChip.dart';
 import 'package:nail/Pages/Chat/widgets/MemberProfileSheet.dart';
-import 'package:nail/Services/SupabaseService.dart';
+import 'package:nail/Pages/Chat/widgets/SwipeableMessageBubble.dart';
+import 'package:nail/Pages/Chat/widgets/ReplyPreviewBar.dart';
 import 'package:nail/Pages/Manager/page/MentorDetailPage.dart';
 import 'package:nail/Pages/Manager/page/MenteeDetailPage.dart';
 import 'package:nail/Pages/Manager/models/mentor.dart' as legacy;
@@ -93,6 +95,9 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   // 메시지
   final List<_Msg> _messages = <_Msg>[];
+  
+  // ========== 답장 모드 ==========
+  _Msg? _replyToMessage; // 현재 답장 대상 메시지
 
   Future<void> _openAdminProfileForUser(String userId, String nickname, String? photoUrl) async {
     if (userId.isEmpty) return;
@@ -246,6 +251,106 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (!mounted) return '';
     final up = context.read<UserProvider>();
     return up.current?.userId ?? '';
+  }
+  
+  // ========== 답장 관련 헬퍼 ==========
+  
+  /// 답장 설정
+  void _setReplyTo(_Msg msg) {
+    if (!_canReply(msg)) return;
+    setState(() {
+      _replyToMessage = msg;
+    });
+    // 입력창에 포커스
+    _inputKey.currentState?.focusInput();
+  }
+  
+  /// 답장 취소
+  void _clearReply() {
+    setState(() {
+      _replyToMessage = null;
+    });
+  }
+  
+  /// 답장 가능 여부 체크
+  bool _canReply(_Msg msg) {
+    if (msg.isSystem) return false;
+    if (msg.type == null) return false;
+    return msg.type == _MsgType.text || 
+           msg.type == _MsgType.image || 
+           msg.type == _MsgType.file;
+  }
+  
+  /// 미리보기 텍스트 생성
+  String _buildReplyPreview(_Msg msg) {
+    if (msg.type == _MsgType.text) {
+      return msg.text ?? '';
+    } else if (msg.type == _MsgType.image) {
+      return '사진';
+    } else if (msg.type == _MsgType.file) {
+      return '파일';
+    }
+    return '';
+  }
+  
+  /// 원본 메시지의 실시간 삭제 상태를 반영한 ReplyInfo 반환
+  ReplyInfo? _getReplyInfoWithDeletedStatus(ReplyInfo? replyTo) {
+    if (replyTo == null) return null;
+    
+    // 원본 메시지 찾기
+    final originalMsg = _messages.firstWhere(
+      (m) => m.id == replyTo.messageId,
+      orElse: () => _Msg.system(
+        id: -1,
+        createdAt: DateTime.now(),
+        systemText: '',
+      ),
+    );
+    
+    // 원본을 찾았고 삭제 상태가 다르면 업데이트
+    if (originalMsg.id != -1 && originalMsg.deleted != replyTo.deleted) {
+      return ReplyInfo(
+        messageId: replyTo.messageId,
+        senderId: replyTo.senderId,
+        senderNickname: replyTo.senderNickname,
+        type: replyTo.type,
+        preview: replyTo.preview,
+        deleted: originalMsg.deleted, // 원본의 실시간 삭제 상태 반영
+      );
+    }
+    
+    return replyTo;
+  }
+  
+  /// 원본 메시지로 스크롤 이동
+  Future<void> _scrollToMessage(int messageId) async {
+    // 1. 현재 로드된 메시지 중 찾기
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    
+    if (index >= 0) {
+      // reverse: true이므로 역순 인덱스 계산
+      final items = _buildItemsWithSeparators(_messages);
+      final targetItem = items.indexWhere((item) => item.msg?.id == messageId);
+      
+      if (targetItem >= 0) {
+        // reverse 리스트이므로 역순 인덱스로 변환
+        final reverseIndex = items.length - 1 - targetItem;
+        await _itemScrollController.scrollTo(
+          index: reverseIndex,
+          duration: Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+          alignment: 0.5, // 화면 중앙에 위치
+        );
+      }
+      return;
+    }
+    
+    // 2. 없으면 토스트로 알림
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('원본 메시지를 찾을 수 없습니다')),
+      );
+    }
   }
 
   void _jumpToBottom({bool animate = false}) {
@@ -633,6 +738,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               readCount: m.readCount, nickname: m.nickname,
               photoUrl: m.photoUrl, isSystem: m.isSystem,
               systemText: m.systemText, sendStatus: m.sendStatus,
+              meta: m.meta,
             );
           }
         }
@@ -659,6 +765,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         readCount: m.readCount, nickname: m.nickname,
         photoUrl: m.photoUrl, isSystem: m.isSystem,
         systemText: m.systemText, sendStatus: m.sendStatus,
+        meta: m.meta,
       );
     }).toList();
   }
@@ -1024,14 +1131,37 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   Future<void> _sendText(String text) async {
     final key = _loginKey();
     if (key.isEmpty) return;
+    
+    // 답장 정보 구성
+    Map<String, dynamic> meta = {
+      'client_ts': DateTime.now().toIso8601String(),
+      'kind': 'text',
+    };
+    
+    if (_replyToMessage != null) {
+      meta['reply_to'] = {
+        'message_id': _replyToMessage!.id,
+        'sender_id': _replyToMessage!.senderId,
+        'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
+        'type': _replyToMessage!.type.toString().split('.').last,
+        'preview': _buildReplyPreview(_replyToMessage!),
+        'deleted': _replyToMessage!.deleted,
+      };
+    }
+    
     _insertTempTextBubble(text);
+    
     try {
       await _svc.sendText(
         loginKey: key,
         roomId: widget.roomId,
         text: text,
-        meta: {'client_ts': DateTime.now().toIso8601String()},
+        meta: meta,
       );
+      
+      // 답장 모드 해제
+      _clearReply();
+      
       if (!mounted) return;
       await _reloadLatestWindow();
       if (!mounted) return;
@@ -1078,12 +1208,31 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           'storage_path': storagePaths[i],
         });
       }
+      // 답장 정보 구성
+      Map<String, dynamic> meta = {
+        'client_ts': DateTime.now().toIso8601String(),
+      };
+      
+      if (_replyToMessage != null) {
+        meta['reply_to'] = {
+          'message_id': _replyToMessage!.id,
+          'sender_id': _replyToMessage!.senderId,
+          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
+          'type': _replyToMessage!.type.toString().split('.').last,
+          'preview': _buildReplyPreview(_replyToMessage!),
+          'deleted': _replyToMessage!.deleted,
+        };
+      }
+      
       await _svc.sendImagesGroup(
         loginKey: key,
         roomId: widget.roomId,
         files: filesMeta,
-        meta: {'client_ts': DateTime.now().toIso8601String()},
+        meta: meta,
       );
+      
+      // 답장 모드 해제
+      _clearReply();
       if (!mounted) return;
       await _reloadLatestWindow();
       if (!mounted) return;
@@ -1098,6 +1247,22 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   void _insertTempImageBubble(String localPath) {
     final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    
+    // 답장 정보 구성
+    Map<String, dynamic>? meta;
+    if (_replyToMessage != null) {
+      meta = {
+        'reply_to': {
+          'message_id': _replyToMessage!.id,
+          'sender_id': _replyToMessage!.senderId,
+          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
+          'type': _replyToMessage!.type.toString().split('.').last,
+          'preview': _buildReplyPreview(_replyToMessage!),
+          'deleted': _replyToMessage!.deleted,
+        }
+      };
+    }
+    
     final temp = _Msg(
       id: nextId,
       me: true,
@@ -1117,6 +1282,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       isSystem: false,
       systemText: null,
       sendStatus: _SendStatus.sending,
+      meta: meta,
     );
     setState(() {
       _messages.add(temp);
@@ -1127,6 +1293,22 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   void _insertTempImageGroupBubble(List<String> localPaths) {
     final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    
+    // 답장 정보 구성
+    Map<String, dynamic>? meta;
+    if (_replyToMessage != null) {
+      meta = {
+        'reply_to': {
+          'message_id': _replyToMessage!.id,
+          'sender_id': _replyToMessage!.senderId,
+          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
+          'type': _replyToMessage!.type.toString().split('.').last,
+          'preview': _buildReplyPreview(_replyToMessage!),
+          'deleted': _replyToMessage!.deleted,
+        }
+      };
+    }
+    
     final temp = _Msg(
       id: nextId,
       me: true,
@@ -1148,6 +1330,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       isSystem: false,
       systemText: null,
       sendStatus: _SendStatus.sending,
+      meta: meta,
     );
     setState(() {
       _messages.add(temp);
@@ -1158,6 +1341,22 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   void _insertTempTextBubble(String text) {
     final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
+    
+    // 답장 정보 구성
+    Map<String, dynamic>? meta;
+    if (_replyToMessage != null) {
+      meta = {
+        'reply_to': {
+          'message_id': _replyToMessage!.id,
+          'sender_id': _replyToMessage!.senderId,
+          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
+          'type': _replyToMessage!.type.toString().split('.').last,
+          'preview': _buildReplyPreview(_replyToMessage!),
+          'deleted': _replyToMessage!.deleted,
+        }
+      };
+    }
+    
     final temp = _Msg(
       id: nextId,
       me: true,
@@ -1177,6 +1376,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       isSystem: false,
       systemText: null,
       sendStatus: _SendStatus.sending,
+      meta: meta,
     );
     setState(() {
       _messages.add(temp);
@@ -1225,6 +1425,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       builder: (sheetCtx) {
         final meUid = _myUid();
         final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
+        final canReply = _canReply(m);
         return SafeArea(
           top: false,
           child: Column(
@@ -1243,6 +1444,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                   title: const Text('삭제'),
                   onTap: () => Navigator.of(sheetCtx).pop('delete'),
                 ),
+              if (canReply)
+                ListTile(
+                  leading: const Icon(Icons.reply),
+                  title: const Text('답장'),
+                  onTap: () => Navigator.of(sheetCtx).pop('reply'),
+                ),
               const SizedBox(height: 8),
             ],
           ),
@@ -1254,6 +1461,11 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
     final key = _loginKey();
     if (key.isEmpty) return;
+
+    if (action == 'reply') {
+      _setReplyTo(m);
+      return;
+    }
 
     if (action == 'delete') {
       final ok = await confirmDeleteMessage(context);
@@ -1385,6 +1597,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
               isSystem: _messages[i].isSystem,
               systemText: _messages[i].systemText,
               sendStatus: _SendStatus.sent,
+              meta: _messages[i].meta,
             );
             break;
           }
@@ -1684,6 +1897,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                       } else {
                         switch (m.type!) {
                           case _MsgType.text:
+                            final replyInfo = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = MessageBubble(
                               isMe: isMe,
                               text: m.text ?? '',
@@ -1691,10 +1905,13 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                               readCount: m.isSystem ? null : m.readCount,
                               highlightQuery: _isSearchMode ? _searchQuery : null,
                               isCurrentSearchResult: isCurrentResult,
+                              replyTo: replyInfo,
+                              onReplyTap: replyInfo != null && !replyInfo.deleted ? () => _scrollToMessage(replyInfo.messageId) : null,
                             );
                             break;
                           case _MsgType.image:
                             final heroTag = 'chat_img_${m.id}';
+                            final replyInfoImage = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = FutureBuilder<String?>(
                               future: _signedUrlForPath(m.imageUrl),
                               builder: (context, snap) {
@@ -1708,12 +1925,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                   loading: m.sendStatus == _SendStatus.sending,
                               onTap: () => _openImageFullscreen(m),
                               heroTag: heroTag,
+                                  replyTo: replyInfoImage,
+                                  onReplyTap: replyInfoImage != null && !replyInfoImage.deleted ? () => _scrollToMessage(replyInfoImage.messageId) : null,
                                 );
                                 return img;
                               },
                             );
                             break;
                           case _MsgType.imageGroup:
+                            final replyInfoGroup = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = FutureBuilder<List<String>>(
                               future: _resolveSignedUrls(m.imageUrls),
                               builder: (context, snap) {
@@ -1727,11 +1947,14 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                   localPreviewPaths: m.imageLocals,
                                   expectedCount: m.imageUrls?.length,
                                   onTap: () => _openImagesFullscreen(m),
+                                  replyTo: replyInfoGroup,
+                                  onReplyTap: replyInfoGroup != null && !replyInfoGroup.deleted ? () => _scrollToMessage(replyInfoGroup.messageId) : null,
                                 );
                               },
                             );
                             break;
                           case _MsgType.file:
+                            final replyInfoFile = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = FutureBuilder<String?>(
                               future: _signedUrlForPath(m.fileUrl),
                               builder: (context, snap) {
@@ -1756,6 +1979,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                       _downloadFileToAppStorage(m, url);
                                     }
                                   },
+                                  replyTo: replyInfoFile,
+                                  onReplyTap: replyInfoFile != null && !replyInfoFile.deleted ? () => _scrollToMessage(replyInfoFile.messageId) : null,
                                 );
                                 return file;
                               },
@@ -1764,22 +1989,27 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         }
                       }
 
-                      // ✅ 액션시트: 버블 외곽 래퍼에서 onLongPress로 처리 (버블에 삭제 핸들러 전달 X)
-                      final wrapped = GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onLongPress: () {
-                          if (m.deleted) return;
-                          final meUid = _myUid();
-                          final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
-                          // 관리자가 아니고 내 메시지도 아니면 액션시트 자체를 열지 않음
-                          if (!isAdmin && !isMine) return;
-                          _showMessageActionSheet(
-                            m,
-                            isAdmin: isAdmin,
-                            allowNotice: m.type == _MsgType.text,
-                          );
-                        },
-                        child: bubbleRow,
+                      // ✅ 스와이프 답장 + 롱프레스 메뉴
+                      final wrapped = SwipeableMessageBubble(
+                        canReply: _canReply(m) && !m.deleted,
+                        onReply: () => _setReplyTo(m),
+                        isMine: isMe,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onLongPress: () {
+                            if (m.deleted) return;
+                            final meUid = _myUid();
+                            final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
+                            // 관리자가 아니고 내 메시지도 아니면 액션시트 자체를 열지 않음
+                            if (!isAdmin && !isMine) return;
+                            _showMessageActionSheet(
+                              m,
+                              isAdmin: isAdmin,
+                              allowNotice: m.type == _MsgType.text,
+                            );
+                          },
+                          child: bubbleRow,
+                        ),
                       );
 
                       if (!isMe) {
@@ -1840,6 +2070,15 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     },
                   ),
                 ),
+                // 답장 프리뷰 바 (답장 모드일 때만 표시)
+                if (_replyToMessage != null)
+                  ReplyPreviewBar(
+                    senderNickname: _replyToMessage!.nickname ?? '알 수 없음',
+                    preview: _buildReplyPreview(_replyToMessage!),
+                    type: _replyToMessage!.type.toString().split('.').last,
+                    isDeleted: _replyToMessage!.deleted,
+                    onCancel: _clearReply,
+                  ),
                 // 검색 모드일 때는 네비게이션 바, 아니면 입력바
                 if (_isSearchMode)
                   _buildSearchNavigationBar()
@@ -1928,6 +2167,7 @@ class _Msg {
   final String? systemText;
   final _SendStatus sendStatus;
   final String? deletedBy; // 'admin' | 'user'
+  final Map<String, dynamic>? meta; // 메타데이터 (답장 정보 포함)
 
   _Msg({
     required this.id,
@@ -1952,7 +2192,18 @@ class _Msg {
     this.systemText,
     this.sendStatus = _SendStatus.sent,
     this.deletedBy,
+    this.meta,
   });
+  
+  /// 답장 정보 getter
+  ReplyInfo? get replyTo {
+    if (meta == null || meta!['reply_to'] == null) return null;
+    try {
+      return ReplyInfo.fromJson(meta!['reply_to'] as Map<String, dynamic>);
+    } catch (e) {
+      return null;
+    }
+  }
 
   _Msg.system({
     required this.id,
@@ -1976,7 +2227,8 @@ class _Msg {
         photoUrl = null,
         isSystem = true,
         sendStatus = _SendStatus.sent,
-        deletedBy = null;
+        deletedBy = null,
+        meta = null;
 }
 
 enum _RowKind { separator, system, message }
@@ -2232,6 +2484,7 @@ MsgMapper _mapRowToMsg(String myUid) => (Map<String, dynamic> r) {
     isSystem: isSystem,
     systemText: isSystem ? (r['text'] ?? '').toString() : null,
     deletedBy: deletedBy.isEmpty ? null : deletedBy,
+    meta: meta.isNotEmpty ? meta : null, // ✨ meta 전달 추가
   );
 };
 

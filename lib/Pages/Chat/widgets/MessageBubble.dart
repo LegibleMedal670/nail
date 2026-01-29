@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
+import 'package:nail/Pages/Chat/models/ReplyInfo.dart';
 
 class MessageBubble extends StatelessWidget {
   final bool isMe;
@@ -12,6 +13,11 @@ class MessageBubble extends StatelessWidget {
   final String? highlightQuery;
   /// 현재 포커스된 검색 결과인지 (더 진한 하이라이트)
   final bool isCurrentSearchResult;
+  
+  /// 답장 정보 (원본 메시지)
+  final ReplyInfo? replyTo;
+  /// 답장 인용 클릭 시 원본으로 이동
+  final VoidCallback? onReplyTap;
 
   const MessageBubble({
     Key? key,
@@ -22,6 +28,8 @@ class MessageBubble extends StatelessWidget {
     this.onLongPressDelete,
     this.highlightQuery,
     this.isCurrentSearchResult = false,
+    this.replyTo,
+    this.onReplyTap,
   }) : super(key: key);
 
   @override
@@ -44,7 +52,19 @@ class MessageBubble extends StatelessWidget {
             border: isMe ? null : Border.all(color: UiTokens.cardBorder),
             boxShadow: const [UiTokens.cardShadow],
           ),
-          child: textWidget,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 답장 인용 부분
+              if (replyTo != null) ...[
+                _buildReplyQuote(context, replyTo!),
+                SizedBox(height: 6),
+              ],
+              // 실제 메시지 내용
+              textWidget,
+            ],
+          ),
         ),
       ),
     );
@@ -147,6 +167,68 @@ class MessageBubble extends StatelessWidget {
     final h = lt.hour.toString().padLeft(2, '0');
     final m = lt.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  /// 답장 인용 박스 위젯
+  Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
+    return GestureDetector(
+      onTap: onReplyTap,
+      child: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isMe ? Colors.white.withOpacity(0.15) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: isMe ? Colors.white70 : Color(0xFF007AFF),
+              width: 3,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.reply,
+                  size: 12,
+                  color: isMe ? Colors.white70 : Colors.grey[600],
+                ),
+                SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    reply.senderNickname,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isMe ? Colors.white : Color(0xFF007AFF),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 3),
+            Text(
+              reply.deleted ? '삭제된 메시지입니다' : reply.preview,
+              style: TextStyle(
+                fontSize: 12,
+                color: reply.deleted
+                    ? (isMe ? Colors.white54 : Colors.grey[500])
+                    : (isMe ? Colors.white70 : Colors.grey[700]),
+                fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

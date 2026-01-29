@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:path/path.dart' as p;
+import 'package:nail/Pages/Chat/models/ReplyInfo.dart';
 
 class FileBubble extends StatelessWidget {
   final bool isMe;
@@ -14,6 +15,11 @@ class FileBubble extends StatelessWidget {
   final VoidCallback? onLongPressDelete;
   final bool loading;
   final bool downloaded;
+  
+  /// 답장 정보 (원본 메시지)
+  final ReplyInfo? replyTo;
+  /// 답장 인용 클릭 시 원본으로 이동
+  final VoidCallback? onReplyTap;
 
   const FileBubble({
     Key? key,
@@ -28,6 +34,8 @@ class FileBubble extends StatelessWidget {
     this.onLongPressDelete,
     this.loading = false,
     this.downloaded = false,
+    this.replyTo,
+    this.onReplyTap,
   }) : super(key: key);
 
   @override
@@ -40,9 +48,16 @@ class FileBubble extends StatelessWidget {
       onLongPress: onLongPressDelete,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
-        child: Stack(
-          alignment: Alignment.center,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
+            // 답장 인용 부분
+            if (replyTo != null) ...[
+              _buildReplyQuote(context, replyTo!),
+              SizedBox(height: 6),
+            ],
+            // 파일 카드
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -54,7 +69,8 @@ class FileBubble extends StatelessWidget {
               child: Row(
                 children: [
                   Container(
-                    width: 36, height: 36,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
@@ -68,10 +84,16 @@ class FileBubble extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700, fontSize: 13)),
+                        Text(fileName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: UiTokens.title,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13)),
                         const SizedBox(height: 2),
-                        Text(_formatSize(fileBytes), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                        Text(_formatSize(fileBytes),
+                            style: const TextStyle(color: Colors.grey, fontSize: 11)),
                       ],
                     ),
                   ),
@@ -80,17 +102,21 @@ class FileBubble extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(right: 4.0),
                       child: Icon(
-                        downloaded ? Icons.open_in_new_rounded : Icons.download_rounded,
+                        downloaded
+                            ? Icons.open_in_new_rounded
+                            : Icons.download_rounded,
                         size: 22,
                         color: Colors.black54,
                       ),
                     )
                   else
                     Container(
-                      width: 26, height: 26,
+                      width: 26,
+                      height: 26,
                       alignment: Alignment.center,
                       child: const SizedBox(
-                        width: 18, height: 18,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
@@ -100,7 +126,6 @@ class FileBubble extends StatelessWidget {
                 ],
               ),
             ),
-            // 스피너는 trailing 영역에서만 표시하므로 별도 오버레이는 사용하지 않음
           ],
         ),
       ),
@@ -155,6 +180,68 @@ class FileBubble extends StatelessWidget {
     final h = lt.hour.toString().padLeft(2, '0');
     final m = lt.minute.toString().padLeft(2, '0');
     return '$h:$m';
+  }
+
+  /// 답장 인용 박스 위젯
+  Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
+    return GestureDetector(
+      onTap: onReplyTap,
+      child: Container(
+        padding: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isMe ? UiTokens.primaryBlue.withOpacity(0.2) : Colors.grey[200],
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: isMe ? UiTokens.primaryBlue : Color(0xFF007AFF),
+              width: 3,
+            ),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.reply,
+                  size: 12,
+                  color: isMe ? UiTokens.primaryBlue : Colors.grey[600],
+                ),
+                SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    reply.senderNickname,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isMe ? UiTokens.primaryBlue : Color(0xFF007AFF),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 3),
+            Text(
+              reply.deleted ? '삭제된 메시지입니다' : reply.preview,
+              style: TextStyle(
+                fontSize: 12,
+                color: reply.deleted
+                    ? Colors.grey[500]
+                    : (isMe ? UiTokens.title : Colors.grey[700]),
+                fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

@@ -25,6 +25,7 @@ class MessageInputBar extends StatefulWidget {
 class MessageInputBarState extends State<MessageInputBar> with SingleTickerProviderStateMixin {
   final _ctrl = TextEditingController();
   final _picker = ImagePicker();
+  final _focusNode = FocusNode(); // FocusNode 추가
   bool _sending = false;
   bool _panelOpen = false;
 
@@ -38,6 +39,11 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
     }
   }
 
+  /// 입력창에 포커스 (답장 모드 등에서 사용)
+  void focusInput() {
+    _focusNode.requestFocus();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +55,7 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
   void dispose() {
     _ac.dispose();
     _ctrl.dispose();
+    _focusNode.dispose(); // FocusNode도 dispose
     super.dispose();
   }
 
@@ -88,6 +95,7 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
                       ),
                       child: TextField(
                         controller: _ctrl,
+                        focusNode: _focusNode, // FocusNode 연결
                         minLines: 1,
                         maxLines: 5,
                         textInputAction: TextInputAction.newline,
