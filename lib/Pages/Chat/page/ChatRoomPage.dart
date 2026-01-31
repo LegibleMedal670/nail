@@ -883,6 +883,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.file);
       });
       await _markRead();
+      
+      // 메시지 전송 후 맨 아래로 스크롤
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) _jumpToBottom(animate: true);
     } catch (e) {
       debugPrint('sendFile error: $e');
     }
@@ -1170,6 +1174,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         _messages.removeWhere((m) => m.sendStatus == _SendStatus.sending && m.type == _MsgType.text);
       });
       await _markRead();
+      
+      // 메시지 전송 후 맨 아래로 스크롤
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) _jumpToBottom(animate: true);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('전송 실패: $e')));
