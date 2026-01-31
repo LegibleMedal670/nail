@@ -54,16 +54,25 @@ class ImageBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.60,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 답장 인용 부분
-            if (replyTo != null) ...[
-              _buildReplyQuote(context, replyTo!),
-              SizedBox(height: 6),
-            ],
-            // 이미지
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 답장 인용 부분
+              if (replyTo != null) ...[
+                _buildReplyQuote(context, replyTo!),
+                // 구분선 (버블 전체 너비)
+                Padding(
+                  padding: EdgeInsets.only(left: 4, right: 4),
+                  child: Container(
+                    height: 1,
+                    color: Colors.grey[400],
+                  ),
+                ),
+                SizedBox(height: 6),
+              ],
+              // 이미지
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: 260),
               child: Stack(
@@ -97,6 +106,7 @@ class ImageBubble extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -157,7 +167,7 @@ class ImageBubble extends StatelessWidget {
   Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
     return GestureDetector(
       onTap: onReplyTap,
-      behavior: HitTestBehavior.translucent, // 전체 영역 탭 가능
+      behavior: HitTestBehavior.translucent,
       child: Padding(
         padding: EdgeInsets.only(bottom: 6, left: 4, right: 4),
         child: IntrinsicWidth(
@@ -189,11 +199,6 @@ class ImageBubble extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               SizedBox(height: 4),
-              // 얇은 구분선
-              Container(
-                height: 1,
-                color: Colors.grey[400],
-              ),
             ],
           ),
         ),

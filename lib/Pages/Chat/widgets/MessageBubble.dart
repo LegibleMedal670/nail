@@ -52,18 +52,25 @@ class MessageBubble extends StatelessWidget {
             border: isMe ? null : Border.all(color: UiTokens.cardBorder),
             boxShadow: const [UiTokens.cardShadow],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 답장 인용 부분
-              if (replyTo != null) ...[
-                _buildReplyQuote(context, replyTo!),
-                SizedBox(height: 6),
+          child: IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 답장 인용 부분
+                if (replyTo != null) ...[
+                  _buildReplyQuote(context, replyTo!),
+                  // 구분선 (버블 전체 너비)
+                  Container(
+                    height: 1,
+                    color: isMe ? Colors.white.withOpacity(0.3) : Colors.grey[400],
+                  ),
+                  SizedBox(height: 6),
+                ],
+                // 실제 메시지 내용
+                textWidget,
               ],
-              // 실제 메시지 내용
-              textWidget,
-            ],
+            ),
           ),
         ),
       ),
@@ -173,7 +180,7 @@ class MessageBubble extends StatelessWidget {
   Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
     return GestureDetector(
       onTap: onReplyTap,
-      behavior: HitTestBehavior.translucent, // 전체 영역 탭 가능
+      behavior: HitTestBehavior.translucent,
       child: IntrinsicWidth(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,11 +212,6 @@ class MessageBubble extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
             SizedBox(height: 4),
-            // 얇은 구분선
-            Container(
-              height: 1,
-              color: isMe ? Colors.white.withOpacity(0.3) : Colors.grey[400],
-            ),
           ],
         ),
       ),

@@ -48,16 +48,25 @@ class FileBubble extends StatelessWidget {
       onLongPress: onLongPressDelete,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.68),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 답장 인용 부분
-            if (replyTo != null) ...[
-              _buildReplyQuote(context, replyTo!),
-              SizedBox(height: 6),
-            ],
-            // 파일 카드
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 답장 인용 부분
+              if (replyTo != null) ...[
+                _buildReplyQuote(context, replyTo!),
+                // 구분선 (버블 전체 너비)
+                Padding(
+                  padding: EdgeInsets.only(left: 4, right: 4),
+                  child: Container(
+                    height: 1,
+                    color: Colors.grey[400],
+                  ),
+                ),
+                SizedBox(height: 6),
+              ],
+              // 파일 카드
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -127,6 +136,7 @@ class FileBubble extends StatelessWidget {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -186,7 +196,7 @@ class FileBubble extends StatelessWidget {
   Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
     return GestureDetector(
       onTap: onReplyTap,
-      behavior: HitTestBehavior.translucent, // 전체 영역 탭 가능
+      behavior: HitTestBehavior.translucent,
       child: Padding(
         padding: EdgeInsets.only(bottom: 6, left: 4, right: 4),
         child: IntrinsicWidth(
@@ -218,11 +228,6 @@ class FileBubble extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               SizedBox(height: 4),
-              // 얇은 구분선
-              Container(
-                height: 1,
-                color: Colors.grey[400],
-              ),
             ],
           ),
         ),
