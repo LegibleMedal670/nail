@@ -192,7 +192,7 @@ class MessageBubble extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w400,
-                color: isMe ? Colors.white : Colors.grey[600],
+                color: isMe ? Colors.white : Colors.grey[900],
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -204,8 +204,8 @@ class MessageBubble extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 color: reply.deleted
-                    ? (isMe ? Colors.white : Colors.grey[500])
-                    : (isMe ? Colors.white : Colors.grey[700]),
+                    ? (isMe ? Colors.white : Colors.grey[900])
+                    : (isMe ? Colors.white : Colors.grey[900]),
                 fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
               ),
               maxLines: 1,
