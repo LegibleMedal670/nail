@@ -278,6 +278,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
     if (msg.type == null) return false;
     return msg.type == _MsgType.text || 
            msg.type == _MsgType.image || 
+           msg.type == _MsgType.imageGroup ||
            msg.type == _MsgType.file;
   }
   
@@ -285,7 +286,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   String _buildReplyPreview(_Msg msg) {
     if (msg.type == _MsgType.text) {
       return msg.text ?? '';
-    } else if (msg.type == _MsgType.image) {
+    } else if (msg.type == _MsgType.image || msg.type == _MsgType.imageGroup) {
       return '사진';
     } else if (msg.type == _MsgType.file) {
       return '파일';
