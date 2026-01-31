@@ -311,7 +311,7 @@ class _MenteeMainPageState extends State<MenteeMainPage> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              '멘토 : $mentorName',
+                              '선임 : $mentorName',
                               style: TextStyle(
                                 color: UiTokens.title.withOpacity(0.6),
                                 fontSize: 13,

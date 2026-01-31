@@ -324,7 +324,7 @@ class _PracticeTileWithBadge extends StatelessWidget {
                       final prevMentorSigned = prevSignData?['mentor_signed'] == true;
                       final prevMenteeSigned = prevSignData?['mentee_signed'] == true;
                       
-                      // 멘토와 멘티 둘 다 서명 완료
+                      // 선임와 후임 둘 다 서명 완료
                       prevSigned = prevMentorSigned && prevMenteeSigned;
                     }
                     
@@ -426,15 +426,15 @@ class _PracticeTileWithBadge extends StatelessWidget {
                     final mentorSigned = signData?['mentor_signed'] == true;
                     final menteeSigned = signData?['mentee_signed'] == true;
                     
-                    // 멘토는 서명했지만 멘티가 아직 안 한 경우
+                    // 선임는 서명했지만 후임가 아직 안 한 경우
                     if (mentorSigned && menteeSigned) {
-                      // 멘토+멘티 모두 서명 완료
+                      // 선임+후임 모두 서명 완료
                       label = '서명 완료';
                     } else if (mentorSigned && !menteeSigned) {
-                      // 멘토만 서명 → 멘티 서명 대기
+                      // 선임만 서명 → 후임 서명 대기
                       label = '서명 대기';
                     } else {
-                      // 그 외(아직 멘토도 서명 안 함 등) → 기본값 유지(검토 완료)
+                      // 그 외(아직 선임도 서명 안 함 등) → 기본값 유지(검토 완료)
                       // label은 기존 '검토 완료' 그대로 두면 됨
                     }
                   }
@@ -567,7 +567,7 @@ class _ProfileGauge extends StatelessWidget {
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(displayName, style: const TextStyle(color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
-                Text('멘토 : $mentorName', style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w700)),
+                Text('선임 : $mentorName', style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text('시작일 : $startDate', style: TextStyle(color: UiTokens.title.withOpacity(0.6), fontSize: 13, fontWeight: FontWeight.w700)),
               ]),

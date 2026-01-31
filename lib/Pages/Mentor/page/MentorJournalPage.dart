@@ -147,7 +147,7 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
 
   Future<void> _openDetail(Map<String, dynamic> row) async {
     final journalId = (row['journal_id'] ?? row['id']).toString();
-    final menteeName = (row['mentee_nickname'] ?? '멘티').toString(); // ✅ mentee_name → mentee_nickname
+    final menteeName = (row['mentee_nickname'] ?? '후임').toString(); // ✅ mentee_name → mentee_nickname
     final menteeId = (row['mentee_id'] ?? '').toString();
     final date = _parseDate(row['date']);
 
@@ -255,9 +255,9 @@ class _MentorJournalPageState extends State<MentorJournalPage> {
                   builder: (context) {
                     final r = _items[i];
                     final menteeName =
-                        (r['mentee_nickname'] ?? '멘티').toString(); // ✅ mentee_name → mentee_nickname
+                        (r['mentee_nickname'] ?? '후임').toString(); // ✅ mentee_name → mentee_nickname
                     
-                    // ✅ RPC의 is_pending (마지막 메시지가 멘티인지)를 사용
+                    // ✅ RPC의 is_pending (마지막 메시지가 후임인지)를 사용
                     final bool isPending = r['is_pending'] == true;
                     final String status = isPending ? 'pending' : 'replied';
 
@@ -556,7 +556,7 @@ class _MentorJournalDetailPageState extends State<_MentorJournalDetailPage> {
         ),
         actions: [
           IconButton(
-            tooltip: '멘티 히스토리(달력)',
+            tooltip: '후임 히스토리(달력)',
             icon: const Icon(Icons.calendar_month_rounded, color: UiTokens.title),
             onPressed: () {
               Navigator.of(context).push(
@@ -727,7 +727,7 @@ class _MentorJournalReplyPageState extends State<_MentorJournalReplyPage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          '${widget.menteeName} • 멘토 답장',
+          '${widget.menteeName} • 선임 답장',
           style: const TextStyle(
             color: UiTokens.title,
             fontWeight: FontWeight.w800,
@@ -751,7 +751,7 @@ class _MentorJournalReplyPageState extends State<_MentorJournalReplyPage> {
         padding: const EdgeInsets.all(20),
         children: [
           const Text(
-            '멘티에게 피드백을 남겨주세요.',
+            '후임에게 피드백을 남겨주세요.',
             style: TextStyle(
               color: UiTokens.title,
               fontSize: 18,

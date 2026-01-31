@@ -70,7 +70,7 @@ class MentorDetailProvider extends ChangeNotifier {
     return cnt;
   }
 
-  // 상세 페이지(멘티 시도 이력)
+  // 상세 페이지(후임 시도 이력)
   Future<List<PracticeAttempt>> listAttempts(String menteeId) async {
     final rows = await _api.adminListMenteePracticeAttempts(menteeId: menteeId, limit: 200);
     return rows.map(PracticeAttempt.fromRow).toList();

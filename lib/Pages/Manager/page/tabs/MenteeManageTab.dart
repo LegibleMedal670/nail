@@ -18,7 +18,7 @@ import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 /// 정렬 옵션
 enum MenteeSort { latest, name, progress }
 
-/// ===== 멘티 관리 탭 =====
+/// ===== 후임 관리 탭 =====
 class MenteeManageTab extends StatefulWidget {
   const MenteeManageTab({super.key});
 
@@ -36,7 +36,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<CurriculumProvider>().ensureLoaded();
-      context.read<AdminProgressProvider>().ensureLoaded(); // 멘티+메트릭 일괄 로드
+      context.read<AdminProgressProvider>().ensureLoaded(); // 후임+메트릭 일괄 로드
     });
   }
 
@@ -103,7 +103,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
     if (res?.mentee != null) {
       await context.read<AdminProgressProvider>().refreshAll();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('멘티 "${res!.mentee!.name}" 추가됨')),
+        SnackBar(content: Text('후임 "${res!.mentee!.name}" 추가됨')),
       );
     }
   }
@@ -123,7 +123,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           ),
           const SizedBox(height: 16),
           Text(
-            '등록된 멘티가 없습니다',
+            '등록된 후임가 없습니다',
             style: TextStyle(
               color: UiTokens.title.withOpacity(0.5),
               fontSize: 16,
@@ -132,7 +132,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           ),
           const SizedBox(height: 8),
           Text(
-            '아래 버튼을 눌러 멘티를 추가해보세요',
+            '아래 버튼을 눌러 후임를 추가해보세요',
             style: TextStyle(
               color: UiTokens.title.withOpacity(0.4),
               fontSize: 14,
@@ -179,7 +179,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
           children: [
             MetricCard.rich(
               icon: Icons.people_alt_outlined,
-              title: '총 멘티 수',
+              title: '총 후임 수',
               rich: TextSpan(
                 text: '$totalMentees',
                 style: const TextStyle(
@@ -212,13 +212,13 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
             ),
             // MetricCard.simple(
             //   icon: Icons.grade_outlined,
-            //   title: '멘티 평균 점수',
+            //   title: '후임 평균 점수',
             //   value: avgScore.toStringAsFixed(0),
             //   unit: '점',
             // ),
             // const MetricCard.simple(
             //   icon: Icons.hourglass_bottom_outlined,
-            //   title: '최종 평가를 기다리는 멘티',
+            //   title: '최종 평가를 기다리는 후임',
             //   value: '18',
             //   unit: '명',
             // ),
@@ -305,7 +305,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
               padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
               child: Row(
                 children: [
-                  const Text('멘티 목록',
+                  const Text('후임 목록',
                       style: TextStyle(
                           color: UiTokens.title,
                           fontSize: 20,
@@ -333,7 +333,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
               ),
             ),
 
-                            // ===== 멘티 목록 =====
+                            // ===== 후임 목록 =====
                             if (sorted.isEmpty)
                               _buildEmptyState()
                             else
@@ -405,7 +405,7 @@ class _MenteeManageTabState extends State<MenteeManageTab> {
                     if (res?.deleted == true) {
                       ScaffoldMessenger.of(pageCtx).showSnackBar(
                         const SnackBar(
-                            content: Text('멘티가 삭제되었습니다')),
+                            content: Text('후임가 삭제되었습니다')),
                       );
                     }
                   },

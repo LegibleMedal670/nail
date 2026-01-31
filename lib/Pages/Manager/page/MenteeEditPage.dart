@@ -8,7 +8,7 @@ import 'package:nail/Pages/Manager/models/MenteeEdtitResult.dart';
 import 'package:nail/Pages/Manager/widgets/DiscardConfirmSheet.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
-/// 드롭다운 소스용 경량 멘토 모델
+/// 드롭다운 소스용 경량 선임 모델
 class _MentorLite {
   final String id;
   final String name;
@@ -91,7 +91,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('멘토 목록 불러오기 실패: $e')),
+        SnackBar(content: Text('선임 목록 불러오기 실패: $e')),
       );
     } finally {
       if (mounted) setState(() => _loadingMentors = false);
@@ -170,8 +170,8 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
 
     final ok = await showDiscardChangesDialog(
       context,
-      title: '멘티 삭제',
-      message: '정말 “${widget.initial!.name}” 멘티를 삭제하시겠어요?\n되돌릴 수 없어요.',
+      title: '후임 삭제',
+      message: '정말 “${widget.initial!.name}” 후임를 삭제하시겠어요?\n되돌릴 수 없어요.',
       stayText: '취소',
       leaveText: '삭제',
       isDanger: true,                 // 🔴 위험 작업 스타일
@@ -202,9 +202,9 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
     try {
       Map<String, dynamic> row;
       if (widget.initial == null) {
-        // 현재 UI 플로우에서는 신규 멘티 추가를 사용하지 않음 (FAB 제거됨).
+        // 현재 UI 플로우에서는 신규 후임 추가를 사용하지 않음 (FAB 제거됨).
         // 혹시 호출되더라도 안전하게 막아둔다.
-        throw Exception('신규 멘티 추가는 현재 지원하지 않습니다.');
+        throw Exception('신규 후임 추가는 현재 지원하지 않습니다.');
       } else {
         // 편집
         row = await SupabaseService.instance.updateUserMin(
@@ -212,7 +212,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
           nickname: nickname,
           mentorId: mentorId,      // ✅ uuid 전달(미배정은 null)
         );
-        // ---- 여기부터 추가: 멘토 변경 시 관리자 RPC로 배정/해제 수행 ----
+        // ---- 여기부터 추가: 선임 변경 시 관리자 RPC로 배정/해제 수행 ----
         final prevMentorId = widget.initial!.mentorId;   // 예전 배정
         final nextMentorId = mentorId;                   // 드롭다운 선택값(null=미배정)
 
@@ -223,7 +223,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
               menteeIds: [widget.initial!.id],
             );
           } else if (nextMentorId != null) {
-            // 새 멘토로 배정/변경
+            // 새 선임로 배정/변경
             await SupabaseService.instance.adminAssignMenteesToMentor(
               mentorId: nextMentorId,
               menteeIds: [widget.initial!.id],
@@ -269,7 +269,7 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
         backgroundColor: Colors.white,
         appBar: AppBar(
           leading: const BackButton(color: UiTokens.title),
-          title: Text(isEdit ? '멘티 편집' : '멘티 추가',
+          title: Text(isEdit ? '후임 편집' : '후임 추가',
               style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
           backgroundColor: Colors.white,
           elevation: 0,
@@ -298,9 +298,9 @@ class _MenteeEditPageState extends State<MenteeEditPage> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ✅ 담당 멘토 (드롭다운)
+                  // ✅ 담당 선임 (드롭다운)
                   InputDecorator(
-                    decoration: _dec('담당 멘토(없으면 미배정)', Icons.school_outlined),
+                    decoration: _dec('담당 선임(없으면 미배정)', Icons.school_outlined),
                     child: Row(
                       children: [
                         Expanded(

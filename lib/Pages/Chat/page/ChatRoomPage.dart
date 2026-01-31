@@ -1592,8 +1592,8 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
 
   String _currentRoleLabel(UserProvider up) {
     if (up.isAdmin) return '관리자';
-    if (up.isMentor) return '멘토';
-    return '멘티';
+    if (up.isMentor) return '선임';
+    return '후임';
   }
 
   // ---------- AppBar 빌드 ----------

@@ -83,8 +83,8 @@ class _PendingUsersPageState extends State<PendingUsersPage> {
   String _roleLabel(String role) {
     switch (role) {
       case 'admin': return '관리자';
-      case 'mentor': return '멘토';
-      case 'mentee': return '멘티';
+      case 'mentor': return '선임';
+      case 'mentee': return '후임';
       default: return role;
     }
   }
@@ -385,13 +385,13 @@ class _AssignRoleSheetState extends State<_AssignRoleSheet> {
             Row(
               children: [
                 _RoleChip(
-                  label: '멘티',
+                  label: '후임',
                   selected: _selectedRole == 'mentee',
                   onTap: () => setState(() => _selectedRole = 'mentee'),
                 ),
                 const SizedBox(width: 8),
                 _RoleChip(
-                  label: '멘토',
+                  label: '선임',
                   selected: _selectedRole == 'mentor',
                   onTap: () => setState(() {
                     _selectedRole = 'mentor';
@@ -410,11 +410,11 @@ class _AssignRoleSheetState extends State<_AssignRoleSheet> {
               ],
             ),
 
-            // 멘토 선택 (멘티일 때만)
+            // 선임 선택 (후임일 때만)
             if (_selectedRole == 'mentee') ...[
               const SizedBox(height: 20),
               const Text(
-                '담당 멘토',
+                '담당 선임',
                 style: TextStyle(
                   color: UiTokens.title,
                   fontSize: 14,
@@ -433,7 +433,7 @@ class _AssignRoleSheetState extends State<_AssignRoleSheet> {
                     hint: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        '멘토를 선택하세요',
+                        '선임를 선택하세요',
                         style: TextStyle(color: UiTokens.title.withOpacity(0.4)),
                       ),
                     ),

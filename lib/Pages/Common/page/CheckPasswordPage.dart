@@ -130,12 +130,12 @@ class _CheckPasswordPageState extends State<CheckPasswordPage>
     }
     if (widget.mode == EntryMode.mentee && (user.isAdmin || user.isMentor)) {
       await user.signOut();
-      await _failFeedback('이 코드는 멘티 전용입니다');
+      await _failFeedback('이 코드는 후임 전용입니다');
       return;
     }
     if (widget.mode == EntryMode.mentor && (!user.isMentor || user.isAdmin)) {
       await user.signOut();
-      await _failFeedback('이 코드는 멘토 전용입니다');
+      await _failFeedback('이 코드는 선임 전용입니다');
       return;
     }
 

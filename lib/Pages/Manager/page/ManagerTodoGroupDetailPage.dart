@@ -120,7 +120,7 @@ class _ManagerTodoGroupDetailPageState extends State<ManagerTodoGroupDetailPage>
 
           return _AssigneeVm(
             name: nick.isEmpty ? '(이름 없음)' : nick,
-            role: isMentor ? '멘토' : '멘티',
+            role: isMentor ? '선임' : '후임',
             acknowledgedAt: ackAt,
             isDone: isDone,
           );

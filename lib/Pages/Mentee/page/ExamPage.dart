@@ -9,7 +9,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 enum _FlowMode { taking, result }
 
 /// =========================
-/// 멘티 시험 페이지 (A안: 단일 라우트 내부 전환, 안전 인덱싱 개선)
+/// 후임 시험 페이지 (A안: 단일 라우트 내부 전환, 안전 인덱싱 개선)
 /// =========================
 class ExamPage extends StatefulWidget {
   final List<ExamQuestion> questions;

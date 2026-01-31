@@ -3,7 +3,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Mentee/page/MenteeMainPage.dart';
 import 'package:nail/Pages/Mentee/page/MenteePracticePage.dart';
 
-/// 멘티용 교육 탭: 상단 세그먼트(이론/실습)로 전환
+/// 후임용 교육 탭: 상단 세그먼트(이론/실습)로 전환
 class MenteeEducationPage extends StatefulWidget {
   final bool embedded;
   /// 상위(AppBar 토글 등)와 동기화할 외부 상태. true=이론, false=실습

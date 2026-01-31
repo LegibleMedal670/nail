@@ -72,7 +72,7 @@ class _ManagerTodoCreatePageState extends State<ManagerTodoCreatePage>
       final loginKey =
           context.read<UserProvider>().adminKey?.trim() ?? '';
 
-      // 1) 멘티 목록: 공개 RPC(list_mentees)
+      // 1) 후임 목록: 공개 RPC(list_mentees)
       final menteeMaps = await TodoService.instance.listMenteesForSelect();
       final mentees = menteeMaps.map((m) {
         final mentorName = (m['mentor_name'] ?? '').toString();
@@ -80,16 +80,16 @@ class _ManagerTodoCreatePageState extends State<ManagerTodoCreatePage>
           id: (m['id'] ?? '').toString(),
           name: (m['name'] ?? '').toString(),
           role: 'mentee',
-          subtitle: mentorName.isNotEmpty ? '담당 멘토: $mentorName' : null,
+          subtitle: mentorName.isNotEmpty ? '담당 선임: $mentorName' : null,
           photoUrl: (m['photo_url'] ?? '').toString(),
         );
       }).toList(growable: false);
 
-      // 2) 멘토 목록: 관리자 전용 RPC(list_mentors_for_select)
+      // 2) 선임 목록: 관리자 전용 RPC(list_mentors_for_select)
       List<_UserVm> mentors = const [];
       if (loginKey.isEmpty) {
         _adminWarn =
-        '로그인 정보가 없어 멘토 목록을 불러오지 못했습니다. (관리자 권한 확인 불가)';
+        '로그인 정보가 없어 선임 목록을 불러오지 못했습니다. (관리자 권한 확인 불가)';
       } else {
         try {
           final mentorMaps = await TodoService.instance
@@ -99,12 +99,12 @@ class _ManagerTodoCreatePageState extends State<ManagerTodoCreatePage>
             id: (m['id'] ?? '').toString(),
             name: (m['name'] ?? '').toString(),
             role: 'mentor',
-            subtitle: null, // 요구사항: 멘토 밑에는 아무 텍스트 없음
+            subtitle: null, // 요구사항: 선임 밑에는 아무 텍스트 없음
             photoUrl: (m['photo_url'] ?? '').toString(),
           ))
               .toList(growable: false);
         } catch (e) {
-          _adminWarn = '멘토 목록을 불러오지 못했습니다. 관리자 권한을 확인하세요.';
+          _adminWarn = '선임 목록을 불러오지 못했습니다. 관리자 권한을 확인하세요.';
         }
       }
 
@@ -225,14 +225,14 @@ class _ManagerTodoCreatePageState extends State<ManagerTodoCreatePage>
             _quickChip(
               context,
               icon: Icons.support_agent_outlined,
-              label: '멘토 전체',
+              label: '선임 전체',
               selected: mentorAllSelected,
               onTap: () => _toggleMentor(!mentorAllSelected),
             ),
             _quickChip(
               context,
               icon: Icons.people_outline,
-              label: '멘티 전체',
+              label: '후임 전체',
               selected: menteeAllSelected,
               onTap: () => _toggleMentee(!menteeAllSelected),
             ),
@@ -385,7 +385,7 @@ class _ManagerTodoCreatePageState extends State<ManagerTodoCreatePage>
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
             children: [
               _assigneeSection(
-                title: '멘토',
+                title: '선임',
                 total: _mentors.length,
                 selected: _selectedMentors.length,
                 onToggleAll: () => _toggleMentor(!mentorAllSelected),
@@ -398,7 +398,7 @@ class _ManagerTodoCreatePageState extends State<ManagerTodoCreatePage>
               ),
               const SizedBox(height: 16),
               _assigneeSection(
-                title: '멘티',
+                title: '후임',
                 total: _mentees.length,
                 selected: _selectedMentees.length,
                 onToggleAll: () => _toggleMentee(!menteeAllSelected),
@@ -770,7 +770,7 @@ class _UserVm {
   final String id;
   final String name;
   final String role; // 'mentor' | 'mentee'
-  final String? subtitle; // 멘토: null, 멘티: '담당 멘토: OOO'
+  final String? subtitle; // 선임: null, 후임: '담당 선임: OOO'
   final String? photoUrl;
 
   const _UserVm({

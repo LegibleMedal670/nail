@@ -66,7 +66,7 @@ class _AssignMenteesPageState extends State<AssignMenteesPage> {
             Navigator.pop(context);
           },
         ),
-        title: const Text('멘티 배정하기', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
+        title: const Text('후임 배정하기', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
         backgroundColor: Colors.white,
         elevation: 0,
       ),

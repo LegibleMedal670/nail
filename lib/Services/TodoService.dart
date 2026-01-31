@@ -7,7 +7,7 @@ class TodoService {
 
   SupabaseClient get _sb => Supabase.instance.client;
 
-  /// 관리자 전용 멘토 선택 목록
+  /// 관리자 전용 선임 선택 목록
   /// 서버에서 p_login_key로 관리자 여부 검증
   /// 반환 컬럼: id (uuid), nickname->name (string), joined_at (iso string), photo_url (string)
   Future<List<Map<String, String>>> listMentorsForSelect({
@@ -28,7 +28,7 @@ class TodoService {
     }).toList(growable: false);
   }
 
-  /// 멘티 선택 목록 (공용 RPC)
+  /// 후임 선택 목록 (공용 RPC)
   /// list_mentees → { id, nickname, mentor, mentor_name, photo_url }
   Future<List<Map<String, String>>> listMenteesForSelect() async {
     final res = await _sb.rpc('list_mentees');
@@ -209,7 +209,7 @@ class TodoService {
     return <String, dynamic>{};
   }
 
-  /// 멘토 전용: 멘티들에게 단건 생성 편의 함수
+  /// 선임 전용: 후임들에게 단건 생성 편의 함수
   Future<List<Map<String, dynamic>>> createTodoForMentees({
     required String mentorLoginKey,
     required String title,

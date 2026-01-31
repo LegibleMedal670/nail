@@ -78,7 +78,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
     try {
       final adminLoginKey = context.read<UserProvider>().adminKey?.trim() ?? '';
 
-      // 멘티 목록 (공용 RPC)
+      // 후임 목록 (공용 RPC)
       final menteeMaps = await TodoService.instance.listMenteesForSelect();
       final mentees = menteeMaps
           .map((m) => _UserVm(
@@ -86,7 +86,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
         name: (m['name'] ?? '').toString(),
         role: 'mentee',
         subtitle: (m['mentor_name'] ?? '').toString().isNotEmpty
-            ? '담당 멘토: ${(m['mentor_name'] ?? '').toString()}'
+            ? '담당 선임: ${(m['mentor_name'] ?? '').toString()}'
             : null,
         photoUrl: (m['photo_url'] ?? '').toString(),
       ))
@@ -111,7 +111,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
         } catch (_) {}
       }
 
-      // 멘토 목록 (관리자 권한 필요)
+      // 선임 목록 (관리자 권한 필요)
       List<_UserVm> mentors = const [];
       if (adminLoginKey.isNotEmpty && _isAdmin) {
         try {
@@ -134,7 +134,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('멘토 목록을 불러오지 못했습니다 (권한 확인).')),
+              const SnackBar(content: Text('선임 목록을 불러오지 못했습니다 (권한 확인).')),
             );
           }
         }
@@ -345,9 +345,9 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
               const SizedBox(height: 16),
             ],
 
-            // ===== 멘토 섹션 =====
+            // ===== 선임 섹션 =====
             _sectionHeader(
-              '멘토',
+              '선임',
               selected: _selectedMentorIds.length,
               total: _mentors.length,
               trailing: TextButton.icon(
@@ -376,7 +376,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
               ),
             ),
             if (_mentors.isEmpty)
-              _emptyHint('멘토 목록이 없어요')
+              _emptyHint('선임 목록이 없어요')
             else
               ..._filter(_mentors).map(
                     (u) => _UserRow(
@@ -389,9 +389,9 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
               ),
             const SizedBox(height: 16),
 
-            // ===== 멘티 섹션 =====
+            // ===== 후임 섹션 =====
             _sectionHeader(
-              '멘티',
+              '후임',
               selected: _selectedMenteeIds.length,
               total: _mentees.length,
               trailing: TextButton.icon(
@@ -420,7 +420,7 @@ class _CreateChatRoomPageState extends State<CreateChatRoomPage> {
               ),
             ),
             if (_mentees.isEmpty)
-              _emptyHint('멘티 목록이 없어요')
+              _emptyHint('후임 목록이 없어요')
             else
               ..._filter(_mentees).map(
                     (u) => _UserRow(

@@ -49,22 +49,22 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
       case SignatureType.practiceMentor:
         return [
           MapEntry('실습 과정', widget.data['practiceTitle'] ?? '-'),
-          MapEntry('멘티', widget.data['menteeName'] ?? '-'),
-          MapEntry('멘토', widget.data['name'] ?? '-'),
+          MapEntry('후임', widget.data['menteeName'] ?? '-'),
+          MapEntry('선임', widget.data['name'] ?? '-'),
           MapEntry('평가 등급', _gradeLabel(widget.data['grade'])),
         ];
       case SignatureType.practiceMentee:
         return [
           MapEntry('실습 과정', widget.data['practiceTitle'] ?? '-'),
-          MapEntry('담당 멘토', widget.data['mentorName'] ?? '-'), // ✅ 멘토 이름 추가
+          MapEntry('담당 선임', widget.data['mentorName'] ?? '-'),
           MapEntry('이름', widget.data['name'] ?? '-'),
           MapEntry('연락처', _maskPhone(widget.data['phone'])),
-          MapEntry('멘토 평가', _gradeLabel(widget.data['grade'])),
+          MapEntry('선임 평가', _gradeLabel(widget.data['grade'])),
         ];
       case SignatureType.completionMentee:
         return [
           MapEntry('이름', widget.data['name'] ?? '-'),
-          MapEntry('담당 멘토', widget.data['mentorName'] ?? '-'), // ✅ 멘토 이름 추가
+          MapEntry('담당 선임', widget.data['mentorName'] ?? '-'),
           MapEntry('연락처', _maskPhone(widget.data['phone'])),
           MapEntry('이론 교육', '${widget.data['theoryCount']}개 완료'),
           MapEntry('실습 교육', '${widget.data['practiceCount']}개 완료'),
@@ -74,7 +74,7 @@ class _SignatureConfirmPageState extends State<SignatureConfirmPage> {
       case SignatureType.completionMentor:
         return [
           MapEntry('교육생', widget.data['menteeName'] ?? '-'),
-          MapEntry('멘토', widget.data['name'] ?? '-'),
+          MapEntry('선임', widget.data['name'] ?? '-'),
           MapEntry('이론 교육', '${widget.data['theoryCount']}개 완료'),
           MapEntry('실습 교육', '${widget.data['practiceCount']}개 완료'),
         ];

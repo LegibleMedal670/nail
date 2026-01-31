@@ -66,7 +66,7 @@ class SelectUserPage extends StatefulWidget {
     this.onStart,
     this.initialSelectedUserId,
     this.title = '사용자 선택',
-    this.hintText = '이름 또는 멘토 검색',
+    this.hintText = '이름 또는 선임 검색',
     this.startButtonText = '시작하기',
     this.subtitleBuilder,
   }) : users = users ?? kDemoMentees;
@@ -211,7 +211,7 @@ class _SelectUserPageState extends State<SelectUserPage> {
                   itemBuilder: (context, i) {
                     final u = _filtered[i];
                     final selected = _selectedId == u.id;
-                    final subtitleText = widget.subtitleBuilder?.call(u) ?? '멘토: ${u.meta}';
+                    final subtitleText = widget.subtitleBuilder?.call(u) ?? '선임: ${u.meta}';
                     return _UserTile(
                       user: u,
                       subtitleText: subtitleText,

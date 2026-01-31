@@ -84,7 +84,7 @@ class _MentorTodoGroupDetailPageState extends State<MentorTodoGroupDetailPage>
           if (ack is DateTime) ackAt = ack; else if (ack != null) ackAt = DateTime.tryParse('$ack');
           return _MemberVm(
             name: '${m['nickname'] ?? '(이름 없음)'}',
-            role: m['is_mentor'] == true ? '멘토' : '멘티',
+            role: m['is_mentor'] == true ? '선임' : '후임',
             ackAt: ackAt,
             isDone: m['done_at'] != null,
           );

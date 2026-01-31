@@ -11,7 +11,7 @@ class ExamRecord {
   const ExamRecord({this.attempts = 0, this.bestScore, this.passed = false});
 }
 
-/// 관리자 탭의 "멘티 요약 타일" (영상+시험 통합 UI)
+/// 관리자 탭의 "후임 요약 타일" (영상+시험 통합 UI)
 class MenteeSummaryTile extends StatelessWidget {
   final Mentee mentee;
 
@@ -103,7 +103,7 @@ class MenteeSummaryTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ===== 헤더: 프로필 + 이름·멘토 + 진행바 + 퍼센트 =====
+          // ===== 헤더: 프로필 + 이름·선임 + 진행바 + 퍼센트 =====
           Row(
             children: [
               CircleAvatar(
@@ -120,7 +120,7 @@ class MenteeSummaryTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ✅ "김멘티 · 멘토 : 김멘토" 형식으로 한 줄 표시 (넘치면 …)
+                    // ✅ "김후임 · 선임 : 김선임" 형식으로 한 줄 표시 (넘치면 …)
                     Text.rich(
                       TextSpan(
                         children: [
@@ -133,7 +133,7 @@ class MenteeSummaryTile extends StatelessWidget {
                             ),
                           ),
                           TextSpan(
-                            text: '  ·  멘토 : ',
+                            text: '  ·  선임 : ',
                             style: TextStyle(
                               color: UiTokens.title.withOpacity(0.75),
                               fontSize: 13,

@@ -197,7 +197,7 @@ class _MyTodoDetailPageState extends State<MyTodoDetailPage> {
                                 ? Icons.shield_outlined
                                 : Icons.school_outlined,
                             label: '발행 주체',
-                            value: _role == 'admin' ? '관리자' : '담당 멘토',
+                            value: _role == 'admin' ? '관리자' : '담당 선임',
                           ),
                           const SizedBox(height: 10),
                           _InfoRow(
@@ -349,7 +349,7 @@ class _RoleBadge extends StatelessWidget {
     final bg = isAdmin ? const Color(0xFFEEF2FF) : const Color(0xFFECFDF5);
     final border = isAdmin ? const Color(0xFFCBD5FE) : const Color(0xFFA7F3D0);
     final fg = isAdmin ? const Color(0xFF4338CA) : const Color(0xFF059669);
-    final label = isAdmin ? '관리자' : '담당 멘토';
+    final label = isAdmin ? '관리자' : '담당 선임';
     final icon = isAdmin ? Icons.shield_outlined : Icons.school_outlined;
 
     return Container(

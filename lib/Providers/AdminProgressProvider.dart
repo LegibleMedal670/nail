@@ -5,8 +5,8 @@ import 'package:nail/Pages/Common/model/CurriculumProgress.dart';
 import 'package:nail/Services/AdminMenteeService.dart';
 import 'package:nail/Services/CourseProgressService.dart';
 
-/// 관리자 전용: 멘티 목록 + 진행 메트릭 + (지연)모듈별 상세 진행.
-/// - 모든 화면(가장 빠른 신입 / 멘티 관리 / 멘티 상세)이 이 Provider만 보게 하여
+/// 관리자 전용: 후임 목록 + 진행 메트릭 + (지연)모듈별 상세 진행.
+/// - 모든 화면(가장 빠른 신입 / 후임 관리 / 후임 상세)이 이 Provider만 보게 하여
 ///   '진행도 %'의 일관성을 보장.
 /// - 게이지/퍼센트는 1차적으로 서버 메트릭(progress)을 사용.
 /// - 뱃지/현재 모듈 등 세부는 per-mentee progressMap(지연 로딩) 사용.
@@ -20,7 +20,7 @@ class AdminProgressProvider extends ChangeNotifier {
   // userId -> loginKey (per-mentee 상세 로딩용)
   final Map<String, String> _loginKeyByUser = {};
 
-  // ===== 2) 멘티별 상세(지연 로딩) =====
+  // ===== 2) 후임별 상세(지연 로딩) =====
   // userId -> (moduleCode -> CurriculumProgress)
   final Map<String, Map<String, CurriculumProgress>> _progressByUser = {};
   final Set<String> _inflightUsers = {}; // 중복 로딩 방지
@@ -49,7 +49,7 @@ class AdminProgressProvider extends ChangeNotifier {
   /// 진행 맵(모듈별)
   Map<String, CurriculumProgress>? progressMapFor(String userId) => _progressByUser[userId];
 
-  /// 가장 진도가 빠른 멘티(동률이면 첫 번째)
+  /// 가장 진도가 빠른 후임(동률이면 첫 번째)
   Mentee? get topMentee {
     if (_mentees.isEmpty) return null;
     final sorted = [..._mentees]..sort((a, b) => (b.progress).compareTo(a.progress));
@@ -113,7 +113,7 @@ class AdminProgressProvider extends ChangeNotifier {
     }
   }
 
-  /// 멘티별 모듈 진행(지연 로딩). 없을 때만 가져옴.
+  /// 후임별 모듈 진행(지연 로딩). 없을 때만 가져옴.
   Future<void> loadMenteeProgress(String userId) async {
     if (_progressByUser.containsKey(userId)) return;
     if (_inflightUsers.contains(userId)) return;

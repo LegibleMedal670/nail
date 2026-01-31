@@ -11,7 +11,7 @@ import 'package:nail/Services/SupabaseService.dart';
 /// 필터 옵션
 enum _Filter { all, done, notDone }
 
-/// 멘토가 특정 멘티의 실습 현황을 보는 상세 페이지
+/// 선임가 특정 후임의 실습 현황을 보는 상세 페이지
 class MentorMenteeDetailPage extends StatefulWidget {
   final String mentorLoginKey;
   final String menteeId;
@@ -129,7 +129,7 @@ class _MentorMenteeDetailPageState extends State<MentorMenteeDetailPage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('멘티 상세', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+        title: const Text('후임 상세', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
         backgroundColor: Colors.white, elevation: 0,
         leading: IconButton(
           tooltip: '뒤로가기',
@@ -289,7 +289,7 @@ class _HeaderCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          joinedText != null ? '가입일: $joinedText' : '멘티 정보',
+                          joinedText != null ? '가입일: $joinedText' : '후임 정보',
                           style: TextStyle(
                             color: UiTokens.title.withOpacity(0.6),
                             fontWeight: FontWeight.w700,

@@ -79,7 +79,7 @@ class ExamService {
   // Mentee
   // ---------------------------------------------------------------------------
 
-  /// 멘티: 시험 제출 (결과 attempt_id, passed 반환)
+  /// 후임: 시험 제출 (결과 attempt_id, passed 반환)
   Future<MenteeSubmitResult> menteeSubmitExam({
     required String loginKey,
     required String moduleCode,
@@ -100,7 +100,7 @@ class ExamService {
     );
   }
 
-  /// 멘티: 시도 이력(점수/통과/시간)
+  /// 후임: 시도 이력(점수/통과/시간)
   Future<List<MenteeAttempt>> menteeListAttempts({
     required String loginKey,
     required String moduleCode,
@@ -131,7 +131,7 @@ class ExamService {
     }).toList(growable: false);
   }
 
-  /// 멘티: 간단 통계(횟수/최고점/통과여부)
+  /// 후임: 간단 통계(횟수/최고점/통과여부)
   Future<MenteeExamStats> getMyStats({
     required String loginKey,
     required String moduleCode,
@@ -235,7 +235,7 @@ class MenteeSubmitResult {
   const MenteeSubmitResult({required this.attemptId, required this.passed});
 }
 
-/// 멘티 시도 내역 아이템
+/// 후임 시도 내역 아이템
 class MenteeAttempt {
   final int score;
   final bool passed;
@@ -247,7 +247,7 @@ class MenteeAttempt {
   });
 }
 
-/// 멘티 간단 통계
+/// 후임 간단 통계
 class MenteeExamStats {
   final int attempts;
   final int? bestScore;

@@ -33,7 +33,7 @@ class MentorMainPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ✅ 멘토 플로우 최상단에서 한 번만 생성
+    // ✅ 선임 플로우 최상단에서 한 번만 생성
     return ChangeNotifierProvider(
       create: (_) => MentorProvider(
         mentorLoginKey: mentorLoginKey,
@@ -95,7 +95,7 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
           elevation: 0,
           automaticallyImplyLeading: false,
           title: const Text(
-            '멘토 대시보드',
+            '선임 대시보드',
             style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800),
           ),
           actions: [
@@ -181,7 +181,7 @@ class _ScaffoldViewState extends State<_ScaffoldView> {
   }
 }
 
-/// 멘토 대시보드 본문(임베드 가능)
+/// 선임 대시보드 본문(임베드 가능)
 class MentorDashboardBody extends StatelessWidget {
   final Future<void> Function()? onAfterRefresh;
   const MentorDashboardBody({Key? key, this.onAfterRefresh}) : super(key: key);
@@ -238,7 +238,7 @@ class _ProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.watch<MentorProvider>();
-    final name = p.mentorName ?? '멘토';
+    final name = p.mentorName ?? '선임';
     final photoUrl = p.mentorPhotoUrl;
     final hiredAtText = p.mentorHiredAt != null ? _fmtDate(p.mentorHiredAt!) : null;
 
@@ -273,7 +273,7 @@ class _ProfileHeader extends StatelessWidget {
                           color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
                   Text(
-                    hiredAtText != null ? '입사일: $hiredAtText' : '담당 멘티 현황을 확인하세요',
+                    hiredAtText != null ? '입사일: $hiredAtText' : '담당 후임 현황을 확인하세요',
                     style: TextStyle(
                         color: UiTokens.title.withOpacity(0.6), fontWeight: FontWeight.w700),
                   ),
@@ -362,7 +362,7 @@ class _Tabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = context.watch<MentorProvider>();
-    const labels = ['대기 큐', '내 멘티', '히스토리'];
+    const labels = ['대기 큐', '내 후임', '히스토리'];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
@@ -590,7 +590,7 @@ class _QueueTab extends StatelessWidget {
 
 enum _QueueFilter { waiting, reviewed }
 
-/// ===== (B) 내 멘티 탭 =====
+/// ===== (B) 내 후임 탭 =====
 class _MenteesTab extends StatelessWidget {
   const _MenteesTab();
 
@@ -607,7 +607,7 @@ class _MenteesTab extends StatelessWidget {
         current: p.onlyPendingMentees ? _MenteeFilter.pending : _MenteeFilter.all,
         options: const [
           SortOption(value: _MenteeFilter.all, label: '전체', icon: Icons.list_alt),
-          SortOption(value: _MenteeFilter.pending, label: '평가 대기 멘티', icon: Icons.hourglass_bottom_rounded),
+          SortOption(value: _MenteeFilter.pending, label: '평가 대기 후임', icon: Icons.hourglass_bottom_rounded),
         ],
       ),
     );
@@ -624,14 +624,14 @@ class _MenteesTab extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
         child: Row(
           children: [
-            const Text('담당 멘티',
+            const Text('담당 후임',
                 style: TextStyle(color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w800)),
             const Spacer(),
             TextButton.icon(
               onPressed: () => _openMenteeFilter(context),
               icon: const Icon(Icons.filter_list_rounded, color: UiTokens.actionIcon, size: 18),
               label: Text(
-                p.onlyPendingMentees ? '평가 대기 멘티' : '전체',
+                p.onlyPendingMentees ? '평가 대기 후임' : '전체',
                 style: const TextStyle(
                     color: UiTokens.actionIcon, fontSize: 14, fontWeight: FontWeight.w700),
               ),
@@ -645,7 +645,7 @@ class _MenteesTab extends StatelessWidget {
         ),
       ),
       if (p.mentees.isEmpty)
-        const _Empty(message: '배정된 멘티가 없습니다.'),
+        const _Empty(message: '배정된 후임가 없습니다.'),
       if (p.mentees.isNotEmpty)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -670,7 +670,7 @@ class _MenteesTab extends StatelessWidget {
                         child: MentorMenteeDetailPage(
                           mentorLoginKey: mp.mentorLoginKey,
                           menteeId: '${m['id']}',
-                          menteeName: '${m['nickname'] ?? '멘티'}',
+                          menteeName: '${m['nickname'] ?? '후임'}',
                           menteePhotoUrl: m['photo_url'] as String?,
                           joinedAt: (m['joined_at'] is String)
                               ? DateTime.tryParse(m['joined_at']) // 문자열인 경우

@@ -101,14 +101,14 @@ class _SelectRolePageState extends State<SelectRolePage>
                   ),
                 );
                 break;
-              case '멘토':
+              case '선임':
                 Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(
                     builder: (_) => const CheckPasswordPage(mode: EntryMode.mentor),
                   ),
                 );
                 break;
-              case '멘티':
+              case '후임':
               default:
                 Navigator.of(context, rootNavigator: true).push(
                   MaterialPageRoute(
@@ -174,20 +174,20 @@ class _SelectRolePageState extends State<SelectRolePage>
             ),
             const SizedBox(height: 24),
 
-            // 멘토
+            // 선임
             _roleTileBuilt(
               icon: Icons.support_agent_outlined,
-              label: '멘토',
+              label: '선임',
               slide: _slideMentor,
               fade: _fadeMentor,
               color: const Color(0xFF6366F1), // 보라톤로 구분
             ),
             const SizedBox(height: 24),
 
-            // 멘티
+            // 후임
             _roleTileBuilt(
               icon: Icons.child_care,
-              label: '멘티',
+              label: '후임',
               slide: _slideMentee,
               fade: _fadeMentee,
               color: const Color.fromRGBO(47, 130, 246, 1), // 기존 블루

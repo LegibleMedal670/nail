@@ -150,7 +150,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
     if (_gradeKor == null) { _showSnack('등급을 선택해주세요'); return; }
 
     final mp = context.read<MentorProvider>();
-    final menteeName = _attempt?['mentee_nickname'] ?? '멘티';
+    final menteeName = _attempt?['mentee_nickname'] ?? '후임';
     final practiceTitle = _attempt?['set_title'] ?? '실습';
 
     // 사용자 정보 가져오기
@@ -183,7 +183,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
           data: {
             'practiceTitle': practiceTitle,
             'menteeName': menteeName,
-            'name': mp.mentorName ?? user.nickname ?? '멘토',
+            'name': mp.mentorName ?? user.nickname ?? '선임',
             'phone': user.phone ?? '',
             'grade': gradeEng, // ✅ 영문 grade 전달
             'feedback': _fbCtrl.text,
@@ -230,7 +230,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
       );
       debugPrint('[AttemptReviewPage] Mentor signature saved successfully');
 
-      // 3. 전역 상태 갱신 (KPI/큐/멘티/히스토리)
+      // 3. 전역 상태 갱신 (KPI/큐/후임/히스토리)
       await mp.refreshAllAfterReview();
 
       if (mounted) {
@@ -250,7 +250,7 @@ class _AttemptReviewPageState extends State<AttemptReviewPage> {
         } else if (errorStr.contains('not authorized')) {
           errorMsg = '❌ 권한이 없습니다.';
         } else if (errorStr.contains('mentor must sign first')) {
-          errorMsg = '❌ 멘토가 먼저 서명해야 합니다.';
+          errorMsg = '❌ 선임가 먼저 서명해야 합니다.';
         } else {
           errorMsg = '❌ 평가 저장 실패: $e';
         }
@@ -1038,7 +1038,7 @@ class _FeedbackBoxState extends State<_FeedbackBox> {
             children: [
               const Icon(Icons.rate_review_rounded, size: 18, color: UiTokens.actionIcon),
               const SizedBox(width: 6),
-              const Text('멘토 피드백',
+              const Text('선임 피드백',
                   style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w900)),
               const Spacer(),
               if (filled && !ro)

@@ -409,7 +409,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
     }
     if ((userId ?? '').isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('멘티 식별자(user_id)가 없어 결과를 조회할 수 없어요.')),
+        const SnackBar(content: Text('후임 식별자(user_id)가 없어 결과를 조회할 수 없어요.')),
       );
       return;
     }
@@ -451,7 +451,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       context,
       MaterialPageRoute(
         builder: (_) => ManagerExamResultPage(
-          menteeName: widget.menteeName ?? '멘티',
+          menteeName: widget.menteeName ?? '후임',
           curriculumTitle: 'W${_item.week}. ${_item.title}',
           passScore: set.passScore,
           attempts: attempts,
@@ -2015,7 +2015,7 @@ class _CurriculumDetailPageState extends State<CurriculumDetailPage> {
       border = const Color(0xFFBFDBFE);
       fg = const Color(0xFF2563EB);
     } else {
-      label = '멘티';
+      label = '후임';
       bg = const Color(0xFFECFDF5);
       border = const Color(0xFFA7F3D0);
       fg = const Color(0xFF059669);

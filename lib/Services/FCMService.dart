@@ -237,7 +237,7 @@ class FCMService {
 
         case 'practice_submitted':
         case 'completion_mentee_signed':
-          // 멘토 → 대시보드 탭(4) + 대기 큐 새로고침
+          // 선임 → 대시보드 탭(4) + 대기 큐 새로고침
           if (role == 'mentor') {
             Navigator.pushAndRemoveUntil(
               context,
@@ -250,7 +250,7 @@ class FCMService {
           break;
 
         case 'practice_reviewed':
-          // 멘티 → 학습 탭(3) + 실습으로 전환
+          // 후임 → 학습 탭(3) + 실습으로 전환
           if (role == 'mentee') {
             Navigator.pushAndRemoveUntil(
               context,
@@ -266,7 +266,7 @@ class FCMService {
           break;
 
         case 'journal_submitted':
-          // 멘토 → 일일 일지 탭(2)
+          // 선임 → 일일 일지 탭(2)
           if (role == 'mentor') {
             Navigator.pushAndRemoveUntil(
               context,
@@ -279,7 +279,7 @@ class FCMService {
           break;
 
         case 'journal_replied':
-          // 멘티 → 일일 일지 탭(1)
+          // 후임 → 일일 일지 탭(1)
           if (role == 'mentee') {
             Navigator.pushAndRemoveUntil(
               context,

@@ -1,7 +1,7 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 앱 로컬 캐시/세션 보관.
-/// 현재 정책: "관리자 제외" 멘티만 자동로그인을 위해 저장합니다.
+/// 현재 정책: "관리자 제외" 후임만 자동로그인을 위해 저장합니다.
 class CacheService {
   CacheService._();
 
@@ -9,13 +9,13 @@ class CacheService {
 
   // _ : 라이브러리 private
   // k : 상수(constant) 키 네이밍 컨벤션
-  static const String _kLoginKey = 'login_key'; // (레거시) 멘티 접속코드
+  static const String _kLoginKey = 'login_key'; // (레거시) 후임 접속코드
   static const String _kUserId = 'user_id';
   static const String _kNickname = 'nickname';
   static const String _kIsAdmin = 'is_admin';
   static const String _kFirebaseUid = 'firebase_uid'; // Firebase UID
 
-  /// 멘티 로그인 성공 시 세션 저장
+  /// 후임 로그인 성공 시 세션 저장
   Future<void> saveMenteeSession({
     required String loginKey, // 접속코드(4자리)
     required String userId,
@@ -28,13 +28,13 @@ class CacheService {
     await sp.setBool(_kIsAdmin, false);
   }
 
-  /// 저장된 접속코드 꺼내기 (멘티 자동 로그인에서 사용)
+  /// 저장된 접속코드 꺼내기 (후임 자동 로그인에서 사용)
   Future<String?> getSavedLoginKey() async {
     final sp = await SharedPreferences.getInstance();
     return sp.getString(_kLoginKey);
   }
 
-  /// 멘티 자동 로그인 여부
+  /// 후임 자동 로그인 여부
   Future<bool> isMenteeLoggedIn() async {
     final sp = await SharedPreferences.getInstance();
     final key = sp.getString(_kLoginKey);

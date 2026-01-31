@@ -45,7 +45,7 @@ class UserAccount {
   /// role이 pending이면 역할 미배정 상태
   bool get isPending => role == 'pending';
 
-  /// 멘티 여부 (role 기반)
+  /// 후임 여부 (role 기반)
   bool get isMentee => role == 'mentee';
 
   // ===== 호환성 getter (레거시 코드용) =====

@@ -65,7 +65,7 @@ class MentorService {
     }
   }
 
-  // ===== 내 멘티 =====
+  // ===== 내 후임 =====
   Future<List<Map<String, dynamic>>> listMyMentees({
     required String loginKey,
     bool onlyPending = false,

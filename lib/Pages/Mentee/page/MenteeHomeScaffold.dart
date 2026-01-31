@@ -34,7 +34,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   bool _initialized = false;      // 첫 진입 1회 처리 (모달 + 배지 로딩)
   int _todoNotDoneCount = 0;      // 미완료 TODO 카운트 배지
   int _chatUnread = 0;            // 채팅 미읽음 배지
-  int _journalPending = 0;        // 일일 일지(멘티): 오늘 미제출 or 새 멘토 피드백 시 점 표시
+  int _journalPending = 0;        // 일일 일지(후임): 오늘 미제출 or 새 선임 피드백 시 점 표시
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
   RealtimeChannel? _journalRt;
@@ -144,7 +144,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
     _chatRt?.unsubscribe();
     final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
     if (loginKey.isEmpty) return;
-    // 멘티/멘토 세션은 login_with_key 재호출로 매핑 보장(가벼움)
+    // 후임/선임 세션은 login_with_key 재호출로 매핑 보장(가벼움)
     try {
       await SupabaseService.instance.loginWithKey(loginKey);
     } catch (_) {
@@ -510,7 +510,7 @@ class _MenteeHomeScaffoldState extends State<MenteeHomeScaffold> {
   }
 }
 
-/// 앱바용 이론/실습 토글(멘티)
+/// 앱바용 이론/실습 토글(후임)
 class _EduKindSegment extends StatelessWidget {
   final bool isTheory;
   final ValueChanged<bool> onChanged;

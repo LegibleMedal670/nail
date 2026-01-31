@@ -74,8 +74,8 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
   String _roleKo(String role) {
     switch (role) {
       case 'admin': return '관리자';
-      case 'mentor': return '멘토';
-      default: return '멘티';
+      case 'mentor': return '선임';
+      default: return '후임';
     }
   }
 
@@ -384,8 +384,8 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
         onViewProfile: () async {
           if (!widget.isAdmin) return;
           try {
-            // 역할 문자열로 분기: '멘토' | '멘티'
-            if (m.role == '멘토') {
+            // 역할 문자열로 분기: '선임' | '후임'
+            if (m.role == '선임') {
               final list = await SupabaseService.instance.adminListMentors();
               final row = list.firstWhere(
                 (e) => (e['id'] ?? '').toString() == m.userId,
@@ -409,7 +409,7 @@ class _ChatRoomInfoPageState extends State<ChatRoomInfoPage> {
               await Navigator.of(context).push(MaterialPageRoute(builder: (_) => MentorDetailPage(mentor: mentor)));
               return;
             } else {
-              // 멘티: 메트릭 목록에서 id 매칭(관리자용 RPC)
+              // 후임: 메트릭 목록에서 id 매칭(관리자용 RPC)
               final metrics = await AdminMenteeService.instance.listMenteesMetrics();
               final row = metrics.firstWhere(
                 (e) => (e['id'] ?? '').toString() == m.userId,
@@ -776,7 +776,7 @@ class _RoleBadge extends StatelessWidget {
       case '관리자':
         bg = const Color(0xFFE8F0FF);
         break;
-      case '멘토':
+      case '선임':
         bg = const Color(0xFFEAF7EE);
         break;
       default:

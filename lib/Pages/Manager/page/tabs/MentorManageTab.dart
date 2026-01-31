@@ -13,7 +13,7 @@ import 'package:nail/Services/SupabaseService.dart';
 // ✅ 관리자 세션 키를 읽기 위함
 import 'package:nail/Providers/UserProvider.dart';
 
-// ✅ 멘토 상세 Provider + Page
+// ✅ 선임 상세 Provider + Page
 import 'package:nail/Providers/AdminMentorDetailProvider.dart';
 import 'package:nail/Pages/Manager/page/MentorDetailPage.dart';
 
@@ -84,8 +84,8 @@ class _MentorManageTabState extends State<MentorManageTab> {
   String _sortLabel(MentorSort s) => switch (s) {
     MentorSort.recentHire => '최근 등록순',
     MentorSort.name => '가나다순',
-    MentorSort.menteeDesc => '멘티수 많은순',
-    MentorSort.menteeAsc => '멘티수 적은순',
+    MentorSort.menteeDesc => '후임수 많은순',
+    MentorSort.menteeAsc => '후임수 적은순',
     MentorSort.fastGraduate => '평균 교육 기간 짧은순',
   };
 
@@ -140,12 +140,12 @@ class _MentorManageTabState extends State<MentorManageTab> {
           ),
           SortOption(
             value: MentorSort.menteeDesc,
-            label: '멘티수 많은순',
+            label: '후임수 많은순',
             icon: Icons.trending_up,
           ),
           SortOption(
             value: MentorSort.menteeAsc,
-            label: '멘티수 적은순',
+            label: '후임수 적은순',
             icon: Icons.trending_down,
           ),
           SortOption(
@@ -170,7 +170,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
     if (res?.mentor != null) {
       setState(() => _mentors.add(res!.mentor!));
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('멘토가 추가되었습니다')));
+          .showSnackBar(const SnackBar(content: Text('선임가 추가되었습니다')));
     }
   }
 
@@ -197,7 +197,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('멘토가 삭제되었습니다')));
+            .showSnackBar(const SnackBar(content: Text('선임가 삭제되었습니다')));
       }
       return;
     }
@@ -231,7 +231,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
     if (res.deleted) {
       setState(() => _mentors.removeWhere((x) => x.id == m.id));
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('멘토가 삭제되었습니다')));
+          .showSnackBar(const SnackBar(content: Text('선임가 삭제되었습니다')));
       return;
     }
     if (res.mentor != null) {
@@ -303,7 +303,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
                     // 섹션 구성:
                     // 0: KPI
                     // 1: spacer
-                    // 2: header(멘토 목록 + 정렬)
+                    // 2: header(선임 목록 + 정렬)
                     // 3.. : empty or list items
                     // 마지막: tail spacer (pull 시 아래 잘림 체감 완화)
                     const headerCount = 3;
@@ -381,7 +381,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
       child: Row(
         children: [
           const Text(
-            '멘토 목록',
+            '선임 목록',
             style: TextStyle(
               color: UiTokens.title,
               fontSize: 20,
@@ -431,7 +431,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
           ),
           const SizedBox(height: 16),
           Text(
-            '등록된 멘토가 없습니다',
+            '등록된 선임가 없습니다',
             style: TextStyle(
               color: UiTokens.title.withOpacity(0.5),
               fontSize: 16,
@@ -440,7 +440,7 @@ class _MentorManageTabState extends State<MentorManageTab> {
           ),
           const SizedBox(height: 8),
           Text(
-            '아래 버튼을 눌러 멘토를 추가해보세요',
+            '아래 버튼을 눌러 선임를 추가해보세요',
             style: TextStyle(
               color: UiTokens.title.withOpacity(0.4),
               fontSize: 14,
@@ -480,13 +480,13 @@ class _MentorManageTabState extends State<MentorManageTab> {
           children: [
             MetricCard.simple(
               icon: Icons.groups_2_outlined,
-              title: '총 멘토 수',
+              title: '총 선임 수',
               value: '$_totalMentors',
               unit: '명',
             ),
             MetricCard.rich(
               icon: Icons.account_tree_outlined,
-              title: '멘토 당 평균 멘티 수',
+              title: '선임 당 평균 후임 수',
               rich: TextSpan(
                 text: _avgPerMentor.toStringAsFixed(1),
                 style: const TextStyle(

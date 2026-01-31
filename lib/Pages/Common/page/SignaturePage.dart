@@ -121,8 +121,8 @@ class _SignaturePageState extends State<SignaturePage> {
                 : feedback;
         return [
           '실습 과정: ${widget.data['practiceTitle'] ?? '(실습명 없음)'}',
-          '멘티 이름: ${widget.data['menteeName'] ?? '(이름 없음)'}',
-          '멘토 이름: $name',
+          '후임 이름: ${widget.data['menteeName'] ?? '(이름 없음)'}',
+          '선임 이름: $name',
           '평가 등급: ${_gradeLabel(widget.data['grade'])}',
           '검토 의견: $feedbackPreview',
         ];
@@ -130,22 +130,22 @@ class _SignaturePageState extends State<SignaturePage> {
       case SignatureType.practiceMentee:
         final submittedAtRaw = widget.data['submittedAt']?.toString() ?? '';
         final submittedAtFormatted = _formatDateTime(submittedAtRaw);
-        final mentorName = widget.data['mentorName']?.toString() ?? '(담당 멘토)';
+        final mentorName = widget.data['mentorName']?.toString() ?? '(담당 선임)';
         return [
           '실습 과정: ${widget.data['practiceTitle'] ?? '(실습명 없음)'}',
-          '멘티 이름: $name',
+          '후임 이름: $name',
           '연락처: $phone',
-          '담당 멘토: $mentorName', // ✅ 멘토 이름 추가
-          '멘토 평가: ${_gradeLabel(widget.data['grade'])}',
+          '담당 선임: $mentorName',
+          '선임 평가: ${_gradeLabel(widget.data['grade'])}',
           '제출 일시: $submittedAtFormatted',
         ];
 
       case SignatureType.completionMentee:
-        final mentorName = widget.data['mentorName']?.toString() ?? '(담당 멘토)';
+        final mentorName = widget.data['mentorName']?.toString() ?? '(담당 선임)';
         return [
           '교육생 이름: $name',
           '연락처: $phone',
-          '담당 멘토: $mentorName',
+          '담당 선임: $mentorName',
           '이론 교육: ${widget.data['theoryCount'] ?? 0}개 완료',
           '실습 교육: ${widget.data['practiceCount'] ?? 0}개 완료',
           '교육 시작일: ${widget.data['startedDate']}',
@@ -155,7 +155,7 @@ class _SignaturePageState extends State<SignaturePage> {
       case SignatureType.completionMentor:
         return [
           '교육생 이름: ${widget.data['menteeName'] ?? '(이름 없음)'}',
-          '담당 멘토: $name',
+          '담당 선임: $name',
           '이론 교육: ${widget.data['theoryCount'] ?? 0}개 완료',
           '실습 교육: ${widget.data['practiceCount'] ?? 0}개 완료',
           '수료 승인 일자: ${widget.data['approvalDate'] ?? '(날짜 없음)'}',

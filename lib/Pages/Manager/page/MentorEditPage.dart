@@ -88,8 +88,8 @@ class _MentorEditPageState extends State<MentorEditPage> {
 
     final ok = await showDiscardChangesDialog(
       context,
-      title: '멘토 삭제',
-      message: '정말 “${widget.initial!.name}” 멘토를 삭제하시겠어요?\n되돌릴 수 없어요.',
+      title: '선임 삭제',
+      message: '정말 “${widget.initial!.name}” 선임를 삭제하시겠어요?\n되돌릴 수 없어요.',
       stayText: '취소',
       leaveText: '삭제',
       isDanger: true,                 // 🔴 위험 작업 스타일
@@ -132,7 +132,7 @@ class _MentorEditPageState extends State<MentorEditPage> {
           id: widget.initial!.id,
           nickname: nickname,
           // joinedAt: _hiredAt,
-          // mentorId: null,           // 멘토 자신 편집이라 mentor(uuid) 사용 안 함
+          // mentorId: null,           // 선임 자신 편집이라 mentor(uuid) 사용 안 함
           // photoUrl: photoUrl,
           // loginKey: loginKey.isEmpty ? null : loginKey,
         );
@@ -169,7 +169,7 @@ class _MentorEditPageState extends State<MentorEditPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         leading: const BackButton(color: UiTokens.title),
-        title: Text(isEdit ? '멘토 편집' : '멘토 추가',
+        title: Text(isEdit ? '선임 편집' : '선임 추가',
             style: const TextStyle(color: UiTokens.title, fontWeight: FontWeight.w700)),
         backgroundColor: Colors.white,
         elevation: 0,

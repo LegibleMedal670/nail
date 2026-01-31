@@ -49,7 +49,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
   // 방금 제출한 로컬 이미지(서버 재조회 전에도 계속 보여주기)
   List<XFile> _lastSubmittedLocal = const [];
 
-  // ✅ 멘티 서명 완료 여부 (프로토타입: 로컬 상태만)
+  // ✅ 후임 서명 완료 여부 (프로토타입: 로컬 상태만)
   bool _menteeSigned = false;
 
   @override
@@ -102,7 +102,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
         final attemptId = latestAttempt['id'] as String?;
         final status = latestAttempt['status'] as String?;
         
-        // 멘토가 평가 완료(reviewed)한 경우에만 서명 상태 확인
+        // 선임가 평가 완료(reviewed)한 경우에만 서명 상태 확인
         if (attemptId != null && status == 'reviewed') {
           try {
             final user = context.read<UserProvider>().current;
@@ -110,7 +110,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
               final signedAttempts = await SignatureService.instance.getSignedPracticeAttempts(
                 loginKey: user.loginKey!,
               );
-              // 멘티 서명 여부 확인
+              // 후임 서명 여부 확인
               menteeSigned = signedAttempts[attemptId]?['mentee_signed'] == true;
               debugPrint('[PracticeDetailPage] Attempt $attemptId mentee signed: $menteeSigned');
             }
@@ -144,7 +144,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     }
   }
 
-  // ===== 멘티 확인 서명 =====
+  // ===== 후임 확인 서명 =====
   Future<void> _openMenteeSignature() async {
     if (_menteeSigned) return; // 이미 서명 완료
 
@@ -164,8 +164,8 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
     final grade = latestAttempt?['grade'] ?? '';
     final submittedAt = latestAttempt?['submitted_at'] ?? '(날짜 없음)';
 
-    // ✅ 멘토 이름 가져오기
-    final mentorName = user.mentorName ?? '담당 멘토';
+    // ✅ 선임 이름 가져오기
+    final mentorName = user.mentorName ?? '담당 선임';
 
     // SignatureConfirmPage로 이동
     final result = await Navigator.push<Map<String, dynamic>>(
@@ -179,7 +179,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
             'phone': user.phone,
             'grade': grade,
             'submittedAt': submittedAt,
-            'mentorName': mentorName, // ✅ 멘토 이름 추가
+            'mentorName': mentorName, // ✅ 선임 이름 추가
           },
         ),
       ),
@@ -242,7 +242,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
         if (errorStr.contains('already signed')) {
           errorMsg = '❌ 이미 서명이 완료되었습니다.';
         } else if (errorStr.contains('mentor must sign first')) {
-          errorMsg = '❌ 멘토가 먼저 서명해야 합니다.';
+          errorMsg = '❌ 선임가 먼저 서명해야 합니다.';
         } else if (errorStr.contains('not authorized')) {
           errorMsg = '❌ 권한이 없습니다.';
         } else {
@@ -296,7 +296,7 @@ class _PracticeDetailPageState extends State<PracticeDetailPage> {
       _lastSubmittedLocal = submittedCopy;
 
       await _load(); // 상태/뱃지(검토 대기) 반영
-      _showSnack('제출 완료! 멘토 검토를 기다려 주세요.');
+      _showSnack('제출 완료! 선임 검토를 기다려 주세요.');
     } catch (e) {
 
       print(e);

@@ -3,7 +3,7 @@ import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
-/// 멘토용: 특정 멘티의 일지 히스토리(달력)
+/// 선임용: 특정 후임의 일지 히스토리(달력)
 class MentorJournalHistoryPage extends StatefulWidget {
   final String menteeId;
   final String menteeName;
@@ -523,7 +523,7 @@ class _MentorDayCell extends StatelessWidget {
   }
 }
 
-/// 멘토용: 히스토리에서 진입하는 일지 상세 페이지
+/// 선임용: 히스토리에서 진입하는 일지 상세 페이지
 class _MentorHistoryDetailPage extends StatefulWidget {
   final String journalId;
   final String menteeName;
@@ -765,7 +765,7 @@ class _MentorHistoryBubbleState extends State<_MentorHistoryBubble> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isMenteeMsg ? '멘티' : '멘토',
+                isMenteeMsg ? '후임' : '선임',
                 style: TextStyle(
                   color: fg,
                   fontWeight: FontWeight.w800,

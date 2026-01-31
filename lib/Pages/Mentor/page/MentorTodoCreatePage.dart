@@ -27,7 +27,7 @@ class _MentorTodoCreatePageState extends State<MentorTodoCreatePage>
     super.initState();
     _tab = TabController(length: 2, vsync: this);
     _searchCtrl.addListener(() => setState(() => _q = _searchCtrl.text.trim()));
-    // 내 멘티 목록 보장 로드
+    // 내 후임 목록 보장 로드
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<MentorProvider>();
       if (p.mentees.isEmpty) {
@@ -98,7 +98,7 @@ class _MentorTodoCreatePageState extends State<MentorTodoCreatePage>
         SnackBar(content: Text('TODO ${_validDraftCount}개를 ${_selectedMentees.length}명에게 부여했어요.')),
       );
 
-      // 돌아가며 KPI/멘티 목록 갱신
+      // 돌아가며 KPI/후임 목록 갱신
       await p.refreshKpi();
       await p.refreshMentees(onlyPending: p.onlyPendingMentees);
       Navigator.pop(context, true);
@@ -149,7 +149,7 @@ class _MentorTodoCreatePageState extends State<MentorTodoCreatePage>
                   children: [
                     _QuickChip(
                       icon: Icons.people_outline,
-                      label: '담당 멘티 전체',
+                      label: '담당 후임 전체',
                       selected: menteeAllSelected,
                       onTap: () {
                         setState(() {
@@ -248,7 +248,7 @@ class _MentorTodoCreatePageState extends State<MentorTodoCreatePage>
                     controller: _searchCtrl,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.search),
-                      hintText: '멘티 이름 검색',
+                      hintText: '후임 이름 검색',
                       border: const OutlineInputBorder(),
                       suffixIcon: _q.isEmpty ? null : IconButton(
                         icon: const Icon(Icons.clear),
@@ -262,7 +262,7 @@ class _MentorTodoCreatePageState extends State<MentorTodoCreatePage>
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
                     children: [
                       _AssigneeSection(
-                        title: '담당 멘티',
+                        title: '담당 후임',
                         total: p.mentees.length,
                         selected: _selectedMentees.length,
                         onToggleAll: () {
@@ -410,7 +410,7 @@ class _MenteeList extends StatelessWidget {
     if (items.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Center(child: Text('멘티가 없습니다.', style: TextStyle(color: c.onSurfaceVariant))),
+        child: Center(child: Text('후임가 없습니다.', style: TextStyle(color: c.onSurfaceVariant))),
       );
     }
     return ListView.separated(
@@ -420,7 +420,7 @@ class _MenteeList extends StatelessWidget {
       itemBuilder: (_, i) {
         final m = items[i];
         final id = '${m['id']}';
-        final name = '${m['nickname'] ?? '멘티'}';
+        final name = '${m['nickname'] ?? '후임'}';
         final checked = selected.contains(id);
         return CheckboxListTile(
           value: checked,

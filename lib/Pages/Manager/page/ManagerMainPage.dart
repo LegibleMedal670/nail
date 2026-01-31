@@ -139,8 +139,8 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
 
   static const List<BottomNavigationBarItem> _navItems = [
     BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: '대시보드'),
-    BottomNavigationBarItem(icon: Icon(Icons.support_agent_outlined), label: '멘토 관리'),
-    BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: '멘티 관리'),
+    BottomNavigationBarItem(icon: Icon(Icons.support_agent_outlined), label: '선임 관리'),
+    BottomNavigationBarItem(icon: Icon(Icons.people_outline), label: '후임 관리'),
     BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: '채팅'),
     BottomNavigationBarItem(icon: Icon(Icons.assignment_turned_in_outlined), label: '교육 관리'),
   ];
@@ -195,7 +195,7 @@ class _ManagerMainPageState extends State<ManagerMainPage> {
         ),
         // ✅ 앱바 우측 액션:
         // - 대시보드(0)일 때: 가입 승인 + TODO 현황
-        // - 멘토 관리(1) / 멘티 관리(2)일 때: TODO 현황
+        // - 선임 관리(1) / 후임 관리(2)일 때: TODO 현황
         // - 채팅(3)일 때는 방 생성 + 버튼
         // - 교육 관리(4)일 때는 기존 이론/실습 토글 노출
         actions: [

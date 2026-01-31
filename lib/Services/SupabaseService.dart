@@ -28,7 +28,7 @@ class SupabaseService {
 
   bool _adminLinkEnsured = false;
 
-  // ---------------- 유저/멘티/멘토 관련 ----------------
+  // ---------------- 유저/후임/선임 관련 ----------------
   /// 서버 RPC(login_with_key) 결과를 맵으로 그대로 반환
   /// - B안 기준: mentor(uuid), mentor_name(text), is_mentor(bool) 포함
   Future<Map<String, dynamic>?> loginWithKey(String loginKey) async {
@@ -46,7 +46,7 @@ class SupabaseService {
     throw Exception('failed to generate login code');
   }
 
-  /// 멘티 생성 (멘토 지정은 uuid 사용)
+  /// 후임 생성 (선임 지정은 uuid 사용)
   Future<Map<String, dynamic>> createMentee({
     required String nickname,
     String? mentorId,   // ✅ uuid
@@ -60,7 +60,7 @@ class SupabaseService {
     return Map<String, dynamic>.from(rows.first);
   }
 
-  /// 최소 사용자 업데이트 (멘토 변경은 uuid 사용)
+  /// 최소 사용자 업데이트 (선임 변경은 uuid 사용)
   Future<Map<String, dynamic>> updateUserMin({
     required String id,
     String? nickname,
@@ -109,7 +109,7 @@ class SupabaseService {
     return rows.map((e) => Map<String, dynamic>.from(e as Map)).toList(growable: false);
   }
 
-  /// 관리자: 멘토 생성
+  /// 관리자: 선임 생성
   Future<Map<String, dynamic>> adminCreateMentor({
     required String nickname,
     required DateTime hiredAt,
@@ -493,7 +493,7 @@ class SupabaseService {
       'p_mentee_ids': menteeIds,
     });
     // 서버는 {id, nickname, mentor} 행들을 반환하므로
-    // 반환된 행 수를 업데이트된 멘티 수로 사용한다.
+    // 반환된 행 수를 업데이트된 후임 수로 사용한다.
     return rows.length;
   }
 
@@ -904,7 +904,7 @@ class SupabaseService {
 
   // ===================== Daily Journal (일일 일지) =====================
 
-  /// [멘티] 오늘의 일지 조회 (없으면 null)
+  /// [후임] 오늘의 일지 조회 (없으면 null)
   Future<Map<String, dynamic>?> menteeGetTodayJournal() async {
     final key = loginKey;
     if (key == null || key.isEmpty) throw Exception('loginKey is missing');
@@ -914,10 +914,10 @@ class SupabaseService {
     });
   }
 
-  /// [멘티] 일일 일지 배지 필요 여부
+  /// [후임] 일일 일지 배지 필요 여부
   /// - true: 하단 탭에 빨간 점 표시
   ///   - 오늘 일지를 아직 한 번도 제출하지 않았거나
-  ///   - 오늘 일지의 최신 메시지가 멘토(from mentor)이고, 아직 확인/답장(멘티 메시지)으로 처리되지 않은 경우
+  ///   - 오늘 일지의 최신 메시지가 선임(from mentor)이고, 아직 확인/답장(후임 메시지)으로 처리되지 않은 경우
   /// - false: 점 숨김
   Future<bool> menteeJournalNeedDot() async {
     final data = await menteeGetTodayJournal();
@@ -937,14 +937,14 @@ class SupabaseService {
     final bool isMine = latest['is_mine'] == true;
     final bool confirmed = latest['confirmed_at'] != null;
 
-    // 최신 메시지가 멘티(나)의 메시지이거나, 이미 확인 처리된 경우 → 새 피드백 없음
+    // 최신 메시지가 후임(나)의 메시지이거나, 이미 확인 처리된 경우 → 새 피드백 없음
     if (isMine || confirmed) return false;
 
-    // 최신 메시지가 멘토 메시지이고 아직 미확인이라면 → 새 피드백 알림 점
+    // 최신 메시지가 선임 메시지이고 아직 미확인이라면 → 새 피드백 알림 점
     return true;
   }
 
-  /// [멘티] 일지 제출 (생성 또는 메시지 추가)
+  /// [후임] 일지 제출 (생성 또는 메시지 추가)
   Future<Map<String, dynamic>> menteeSubmitJournalEntry({
     required String content,
     required List<String> photos,
@@ -961,7 +961,7 @@ class SupabaseService {
     return res;
   }
 
-  /// [멘토] 일지 목록 조회 (대시보드용)
+  /// [선임] 일지 목록 조회 (대시보드용)
   Future<List<Map<String, dynamic>>> mentorListDailyJournals({
     DateTime? date,
     String? statusFilter, // 'pending' | 'replied' | etc
@@ -976,7 +976,7 @@ class SupabaseService {
     });
   }
 
-  /// [멘토] 특정 멘티의 월별 일지 목록 (히스토리/달력용)
+  /// [선임] 특정 후임의 월별 일지 목록 (히스토리/달력용)
   /// - from, to: YYYY-MM-DD (보통 한 달 범위)
   /// - 반환: [{ journal_id, date, status }, ...]
   Future<List<Map<String, dynamic>>> mentorListMenteeJournalsByMonth({
@@ -996,7 +996,7 @@ class SupabaseService {
     });
   }
 
-  /// [멘토] 답장하기
+  /// [선임] 답장하기
   Future<void> mentorReplyJournal({
     required String journalId,
     required String content,
@@ -1035,9 +1035,9 @@ class SupabaseService {
     });
   }
 
-  /// [멘티] 오늘 제출 여부 확인 (배지용)
+  /// [후임] 오늘 제출 여부 확인 (배지용)
 
-  /// [멘티] 월별 일지 목록 (히스토리/달력용)
+  /// [후임] 월별 일지 목록 (히스토리/달력용)
   /// - from, to는 YYYY-MM-DD 기준 (보통 한 달 범위)
   /// - 반환: [{ journal_id, date, status }, ...]
   Future<List<Map<String, dynamic>>> menteeListJournalsByMonth({

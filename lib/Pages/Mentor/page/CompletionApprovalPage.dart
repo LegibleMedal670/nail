@@ -6,8 +6,8 @@ import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Services/SignatureService.dart';
 import 'package:provider/provider.dart';
 
-/// 멘토용 수료 승인 페이지
-/// - 멘티의 수료 신청을 확인하고 승인 서명
+/// 선임용 수료 승인 페이지
+/// - 후임의 수료 신청을 확인하고 승인 서명
 class CompletionApprovalPage extends StatefulWidget {
   final String menteeId;
   final String menteeName;
@@ -44,7 +44,7 @@ class _CompletionApprovalPageState extends State<CompletionApprovalPage> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      // ✅ 전달받은 멘티 서명 시점 사용
+      // ✅ 전달받은 후임 서명 시점 사용
       _menteeSignedAt = widget.menteeSignedAt;
       
       if (mounted) {
@@ -75,7 +75,7 @@ class _CompletionApprovalPageState extends State<CompletionApprovalPage> {
           type: SignatureType.completionMentor,
           data: {
             'menteeName': widget.menteeName,
-            'name': user.nickname ?? user.mentorName ?? '멘토',
+            'name': user.nickname ?? user.mentorName ?? '선임',
             'phone': user.phone,
             'theoryCount': widget.theoryCount,
             'practiceCount': widget.practiceCount,
@@ -162,7 +162,7 @@ class _CompletionApprovalPageState extends State<CompletionApprovalPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            '멘티가 모든 교육을 완료하고 수료 신청을 했습니다.\n승인 서명을 진행해주세요.',
+                            '후임가 모든 교육을 완료하고 수료 신청을 했습니다.\n승인 서명을 진행해주세요.',
                             style: TextStyle(
                               fontSize: 15,
                               color: Colors.blue[900],
@@ -248,7 +248,7 @@ class _CompletionApprovalPageState extends State<CompletionApprovalPage> {
                           const SizedBox(height: 12),
                           _InfoRow(
                             icon: Icons.edit,
-                            label: '멘티 서명',
+                            label: '후임 서명',
                             value: _formatDateTime(_menteeSignedAt),
                           ),
                         ],

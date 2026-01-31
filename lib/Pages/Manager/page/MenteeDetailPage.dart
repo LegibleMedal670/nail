@@ -25,10 +25,10 @@ enum DetailLessonFilter { all, incomplete }
 /// 진행 상태
 enum _RowState { notStarted, inProgress, done }
 
-/// 관리자용 멘티 상세 보기 (실데이터 연동)
+/// 관리자용 후임 상세 보기 (실데이터 연동)
 class MenteeDetailPage extends StatefulWidget {
   final Mentee mentee;
-  final Set<String> existingCodes; // 멘티 코드 중복검사용(편집 페이지에서 사용)
+  final Set<String> existingCodes; // 후임 코드 중복검사용(편집 페이지에서 사용)
 
   const MenteeDetailPage({
     super.key,
@@ -44,7 +44,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
   final _listController = ScrollController();
   DetailLessonFilter _filter = DetailLessonFilter.all;
 
-  // 상단 표시용 멘티 스냅샷(편집 후 갱신)
+  // 상단 표시용 후임 스냅샷(편집 후 갱신)
   late Mentee _mentee = widget.mentee;
 
   // 진행/시험 맵: 모듈코드 -> CurriculumProgress
@@ -183,7 +183,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
       setState(() => _mentee = res.mentee!);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('멘티 정보가 저장되었습니다')),
+        const SnackBar(content: Text('후임 정보가 저장되었습니다')),
       );
     }
   }
@@ -295,7 +295,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
             onPressed: _refreshAll,
           ),
           IconButton(
-            tooltip: '멘티 정보 수정',
+            tooltip: '후임 정보 수정',
             icon: const Icon(Icons.edit_rounded),
             onPressed: _editMentee,
           ),
@@ -339,7 +339,7 @@ class _MenteeDetailPageState extends State<MenteeDetailPage> {
                                       color: UiTokens.title, fontSize: 18, fontWeight: FontWeight.w900)),
                               const SizedBox(height: 4),
                               Text(
-                                '멘토 : ${_mentee.mentorName ?? '미배정'}',
+                                '선임 : ${_mentee.mentorName ?? '미배정'}',
                                 style: TextStyle(
                                   color: UiTokens.title.withOpacity(0.6),
                                   fontSize: 13,

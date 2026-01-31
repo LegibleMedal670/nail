@@ -165,11 +165,11 @@ class _MenteePracticeListPageState extends State<MenteePracticeListPage> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        '${m.name}님이 이 멘토에서 배정 해제되었습니다.',
+                        '${m.name}님이 이 선임에서 배정 해제되었습니다.',
                       ),
                     ),
                   );
-                  Navigator.of(context).pop(); // 멘티 실습 목록 페이지 닫기
+                  Navigator.of(context).pop(); // 후임 실습 목록 페이지 닫기
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(

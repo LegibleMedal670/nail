@@ -38,7 +38,7 @@ class MentorProvider extends ChangeNotifier {
   String queueStatus = 'submitted'; // 'submitted' | 'reviewed'
   List<Map<String, dynamic>> queueItems = [];
 
-  // 내 멘티
+  // 내 후임
   List<Map<String, dynamic>> mentees = [];
   bool onlyPendingMentees = false;
 

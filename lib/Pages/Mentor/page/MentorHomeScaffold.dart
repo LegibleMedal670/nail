@@ -35,7 +35,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
   // 채팅 배지
   int _chatUnread = 0;
   int _todoNotDoneCount = 0;
-  int _journalPendingCount = 0; // 일일 일지(멘토) 미응답 배지
+  int _journalPendingCount = 0; // 일일 일지(선임) 미응답 배지
   final _chatSvc = ChatService.instance;
   RealtimeChannel? _chatRt;
   RealtimeChannel? _journalRt;
@@ -74,7 +74,7 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
     final loginKey = context.read<UserProvider>().current?.loginKey ?? '';
     if (loginKey.isEmpty) return;
     try {
-      // 멘티와 동일 API: 미완료 TODO 카운트를 뱃지로
+      // 후임와 동일 API: 미완료 TODO 카운트를 뱃지로
       final rows = await TodoService.instance.listMyTodos(loginKey: loginKey, filter: 'not_done');
       if (!mounted) return;
       setState(() => _todoNotDoneCount = rows.length);
@@ -152,11 +152,11 @@ class _MentorHomeScaffoldState extends State<MentorHomeScaffold> {
       // 로딩 닫기
       Navigator.of(context).pop();
 
-      // 멘토인 경우 영향받은 멘티 수 표시
+      // 선임인 경우 영향받은 후임 수 표시
       if (result['role'] == 'mentor' && result['affectedMentees'] > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${result['affectedMentees']}명의 멘티가 배정 해제되었습니다.'),
+            content: Text('${result['affectedMentees']}명의 후임가 배정 해제되었습니다.'),
             duration: const Duration(seconds: 2),
           ),
         );

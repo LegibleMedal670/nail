@@ -20,7 +20,7 @@ class UserService {
   /// Returns: 탈퇴 처리 결과 정보
   /// - success: 성공 여부
   /// - role: 사용자 역할
-  /// - affectedMentees: 영향받은 멘티 수 (멘토인 경우)
+  /// - affectedMentees: 영향받은 후임 수 (선임인 경우)
   /// - removedChatRooms: 나간 채팅방 수
   Future<Map<String, dynamic>> withdrawUser({
     required String userId,

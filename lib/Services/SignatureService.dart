@@ -184,7 +184,7 @@ class SignatureService {
     }
   }
 
-  /// 실습 교육 서명 (멘토 or 멘티)
+  /// 실습 교육 서명 (선임 or 후임)
   Future<String> signPracticeAttempt({
     required String loginKey,
     required String attemptId,
@@ -298,7 +298,7 @@ class SignatureService {
     }
   }
 
-  /// 수료 서명 (멘티 or 멘토)
+  /// 수료 서명 (후임 or 선임)
   Future<String> signCompletion({
     required String loginKey,
     required String menteeId,
@@ -355,7 +355,7 @@ class SignatureService {
     }
   }
 
-  /// 수료 서명 상태 조회 (멘티용)
+  /// 수료 서명 상태 조회 (후임용)
   Future<Map<String, dynamic>?> getCompletionSignatureStatus({
     required String loginKey,
   }) async {
@@ -382,7 +382,7 @@ class SignatureService {
     }
   }
 
-  /// 멘토용: 수료 승인 대기 목록 조회
+  /// 선임용: 수료 승인 대기 목록 조회
   Future<List<Map<String, dynamic>>> getCompletionPendingList({
     required String mentorLoginKey,
   }) async {

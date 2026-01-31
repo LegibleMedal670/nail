@@ -32,7 +32,7 @@ class AdminMenteeService {
     return Map<String, dynamic>.from(rows.first as Map);
   }
 
-  /// 멘티 한 명의 코스 관련 데이터 묶음
+  /// 후임 한 명의 코스 관련 데이터 묶음
   /// - 커리큘럼 아이템 리스트(요약)
   /// - 완료된 모듈 id 집합
   /// - 모듈별 시청 비율
@@ -43,7 +43,7 @@ class AdminMenteeService {
   Map<String, double> progressRatio,
   Map<String, CurriculumProgress> progressMap,
   })> fetchMenteeCourseData(String loginKey) async {
-    // 1) 기본 모듈 진행 요약 (멘티 뷰 카드 구성에 사용)
+    // 1) 기본 모듈 진행 요약 (후임 뷰 카드 구성에 사용)
     final data = await _client
         .rpc('mentee_course_progress', params: {'p_firebase_uid': loginKey})
         .select(); // supabase 2.x
@@ -93,7 +93,7 @@ class AdminMenteeService {
     );
   }
 
-  /// 관리자용 멘티 메트릭 목록
+  /// 관리자용 후임 메트릭 목록
   /// - RPC: admin_list_mentees_metrics
   /// - 반환 컬럼에 mentor(uuid) + mentor_name(text) 포함 (B안)
   Future<List<Map<String, dynamic>>> listMenteesMetrics({

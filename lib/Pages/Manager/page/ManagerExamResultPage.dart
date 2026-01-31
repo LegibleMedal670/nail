@@ -83,7 +83,7 @@ class ManagerExamResultPage extends StatefulWidget {
 
   /// 서버 연동 파라미터 (둘 다 주어지면 자동 로드)
   final String? moduleCode;             // 과정 코드
-  final String? loginKey;               // 멘티 로그인 키
+  final String? loginKey;               // 후임 로그인 키
 
   /// 통과 기준(옵션). 전달 안 하면 서버에서 exam_set pass_score를 읽습니다.
   final int? passScore;

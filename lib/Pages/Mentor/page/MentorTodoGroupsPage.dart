@@ -175,10 +175,10 @@ class _MentorTodoGroupsPageState extends State<MentorTodoGroupsPage> {
               _NoResultBanner(filter: _filter),
 
             _AudienceSection(
-              title: '멘티 공지',
+              title: '후임 공지',
               icon: Icons.people_outline,
               items: fe,
-              emptyHint: '해당 상태의 멘티 공지가 없습니다.',
+              emptyHint: '해당 상태의 후임 공지가 없습니다.',
               statusOf: _calcStatus,
               onOpen: _openDetail,
             ),

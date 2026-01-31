@@ -471,7 +471,7 @@ class _RoleBadge extends StatelessWidget {
     final bg = isAdmin ? const Color(0xFFEEF2FF) : const Color(0xFFECFDF5);
     final border = isAdmin ? const Color(0xFFCBD5FE) : const Color(0xFFA7F3D0);
     final fg = isAdmin ? const Color(0xFF4338CA) : const Color(0xFF059669);
-    final label = isAdmin ? '관리자' : '담당 멘토';
+    final label = isAdmin ? '관리자' : '담당 선임';
     final icon = isAdmin ? Icons.shield_outlined : Icons.school_outlined;
 
     return Container(
@@ -507,7 +507,7 @@ class _AudienceChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label =
-        audience == 'all' ? '전체' : (audience == 'mentor' ? '멘토' : '멘티');
+        audience == 'all' ? '전체' : (audience == 'mentor' ? '선임' : '후임');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(

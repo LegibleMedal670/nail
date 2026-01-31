@@ -3,7 +3,7 @@ import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Services/SupabaseService.dart';
 import 'package:nail/Pages/Chat/widgets/ChatImageViewer.dart';
 
-/// 멘티용 일지 히스토리(달력) 페이지
+/// 후임용 일지 히스토리(달력) 페이지
 class MenteeJournalHistoryPage extends StatefulWidget {
   const MenteeJournalHistoryPage({super.key});
 
@@ -527,7 +527,7 @@ class _DayCell extends StatelessWidget {
   }
 }
 
-/// 멘티용 일지 상세 페이지 (히스토리에서 진입)
+/// 후임용 일지 상세 페이지 (히스토리에서 진입)
 class _MenteeJournalDetailPage extends StatefulWidget {
   final String journalId;
   final DateTime? date;
@@ -769,7 +769,7 @@ class _JournalBubbleState extends State<_JournalBubble> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isMenteeMsg ? '멘티' : '멘토',
+                isMenteeMsg ? '후임' : '선임',
                 style: TextStyle(
                   color: fg,
                   fontWeight: FontWeight.w800,

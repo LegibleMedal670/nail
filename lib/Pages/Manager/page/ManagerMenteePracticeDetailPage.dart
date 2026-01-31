@@ -7,10 +7,10 @@ import 'package:nail/Pages/Common/widgets/SortBottomSheet.dart';
 import 'package:nail/Pages/Mentor/page/AttemptReviewPage.dart';
 import 'package:nail/Services/SupabaseService.dart';
 
-/// 필터 옵션 (멘토 페이지와 동일)
+/// 필터 옵션 (선임 페이지와 동일)
 enum _AdminFilter { all, done, notDone }
 
-/// 관리자용: 특정 멘티의 실습 현황(세트 리스트 + 최근 시도 요약) 보기
+/// 관리자용: 특정 후임의 실습 현황(세트 리스트 + 최근 시도 요약) 보기
 class ManagerMenteePracticeDetailPage extends StatefulWidget {
   final String menteeId;
   final String menteeName;
@@ -35,7 +35,7 @@ class _ManagerMenteePracticeDetailPageState extends State<ManagerMenteePracticeD
 
   _AdminFilter _filter = _AdminFilter.all;
 
-  /// 서버에서 내려오는 형태(멘토 페이지와 같은 포맷 가정)
+  /// 서버에서 내려오는 형태(선임 페이지와 같은 포맷 가정)
   /// {
   ///   set_id, set_code, set_title,
   ///   attempted: bool,
@@ -117,7 +117,7 @@ class _ManagerMenteePracticeDetailPageState extends State<ManagerMenteePracticeD
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('멘티 실습 현황', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
+        title: const Text('후임 실습 현황', style: TextStyle(color: UiTokens.title, fontWeight: FontWeight.w800)),
         backgroundColor: Colors.white, elevation: 0,
         leading: IconButton(
           tooltip: '뒤로가기',
@@ -266,7 +266,7 @@ class _HeaderCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      joinedText != null ? '가입일: $joinedText' : '멘티 정보',
+                      joinedText != null ? '가입일: $joinedText' : '후임 정보',
                       style: TextStyle(
                         color: UiTokens.title.withOpacity(0.6),
                         fontWeight: FontWeight.w700,

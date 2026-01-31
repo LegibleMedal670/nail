@@ -133,7 +133,7 @@ class _JournalBubbleState extends State<JournalBubble> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                isMenteeMsg ? '멘티' : '멘토',
+                isMenteeMsg ? '후임' : '선임',
                 style: TextStyle(
                   color: fg,
                   fontWeight: FontWeight.w800,

@@ -65,7 +65,7 @@ class _MenteeJournalPageState extends State<MenteeJournalPage> {
         _journalId = null;
       }
 
-      // 배지 상태 동기화: 오늘 일지/최신 멘토 피드백 기준
+      // 배지 상태 동기화: 오늘 일지/최신 선임 피드백 기준
       if (widget.onBadgeChanged != null) {
         final bool needDot = await SupabaseService.instance.menteeJournalNeedDot();
         if (mounted) {

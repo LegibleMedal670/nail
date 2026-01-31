@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:nail/Pages/Manager/models/mentor.dart';
 
-/// 멘토 목록 타일 (프로필, 이름, 입사일, 멘티수, 평균 졸업기간, 평균점수 뱃지)
+/// 선임 목록 타일 (프로필, 이름, 입사일, 후임수, 평균 졸업기간, 평균점수 뱃지)
 class MentorTile extends StatelessWidget {
   final Mentor mentor;
   final VoidCallback? onTap;
@@ -64,12 +64,12 @@ class MentorTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
 
-                    // 1행: 입사일 / 멘티 수
+                    // 1행: 입사일 / 후임 수
                     Row(
                       children: [
                         _kv('입사일', _fmtDate(mentor.hiredAt)),
                         const SizedBox(width: 12),
-                        _kv('멘티', '${mentor.menteeCount}명'),
+                        _kv('후임', '${mentor.menteeCount}명'),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -86,7 +86,7 @@ class MentorTile extends StatelessWidget {
                         ),
                         // if (mentor.avgScore != null)
                         //   _chip(
-                        //     label: '멘티 평균 ${mentor.avgScore!.toStringAsFixed(0)}점',
+                        //     label: '후임 평균 ${mentor.avgScore!.toStringAsFixed(0)}점',
                         //     bg: const Color(0xFFE9F2FF),
                         //     fg: UiTokens.primaryBlue,
                         //   ),

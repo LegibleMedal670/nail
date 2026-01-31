@@ -8,7 +8,7 @@ import 'package:nail/Services/TodoService.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoGroupDetailPage.dart';
 import 'package:nail/Pages/Mentor/page/MentorTodoCreatePage.dart';
 
-/// 멘토용 TODO 현황 임베디드 뷰(탭에서 사용)
+/// 선임용 TODO 현황 임베디드 뷰(탭에서 사용)
 class MentorTodoGroupsView extends StatefulWidget {
   final bool embedded;
   const MentorTodoGroupsView({super.key, this.embedded = false});
@@ -143,19 +143,19 @@ class MentorTodoGroupsViewState extends State<MentorTodoGroupsView> {
             _NoResultBanner(filter: _filter),
 
           _AudienceSection(
-            title: '멘티 공지',
+            title: '후임 공지',
             icon: Icons.people_outline,
             items: fe,
-            emptyHint: '해당 상태의 멘티 공지가 없습니다.',
+            emptyHint: '해당 상태의 후임 공지가 없습니다.',
             statusOf: _calcStatus,
             onOpen: _openDetail,
           ),
           const SizedBox(height: 12),
           _AudienceSection(
-            title: '멘토 공지',
+            title: '선임 공지',
             icon: Icons.support_agent_outlined,
             items: fm,
-            emptyHint: '해당 상태의 멘토 공지가 없습니다.',
+            emptyHint: '해당 상태의 선임 공지가 없습니다.',
             statusOf: _calcStatus,
             onOpen: _openDetail,
           ),

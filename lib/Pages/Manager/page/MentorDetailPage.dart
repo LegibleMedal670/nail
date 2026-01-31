@@ -70,7 +70,7 @@ class _MentorDetailBody extends StatelessWidget {
             backgroundColor: Colors.white,
             appBar: AppBar(
               title: const Text(
-                '멘토 상세',
+                '선임 상세',
                 style: TextStyle(
                   color: UiTokens.title,
                   fontWeight: FontWeight.w700,
@@ -118,7 +118,7 @@ class _MentorDetailBody extends StatelessWidget {
               color: UiTokens.primaryBlue,
               displacement: 36,
               child: CustomScrollView(
-                // ✅ 핵심: 단일 스크롤 + AlwaysScrollable (멘티가 적어도 당겨짐)
+                // ✅ 핵심: 단일 스크롤 + AlwaysScrollable (후임가 적어도 당겨짐)
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverPadding(
@@ -143,7 +143,7 @@ class _MentorDetailBody extends StatelessWidget {
                             handled7d: p.overview?.handledLast7d ?? 0,
                           ),
 
-                          // ===== 멘티 배정하기 버튼 =====
+                          // ===== 후임 배정하기 버튼 =====
                           SizedBox(
                             width: double.infinity,
                             height: 48,
@@ -173,7 +173,7 @@ class _MentorDetailBody extends StatelessWidget {
                                 ),
                               ),
                               child: const Text(
-                                '멘티 배정하기',
+                                '후임 배정하기',
                                 style: TextStyle(fontWeight: FontWeight.w800),
                               ),
                             ),
@@ -185,7 +185,7 @@ class _MentorDetailBody extends StatelessWidget {
                           Row(
                             children: [
                               const Text(
-                                '담당 멘티',
+                                '담당 후임',
                                 style: TextStyle(
                                   color: UiTokens.title,
                                   fontSize: 20,
@@ -226,7 +226,7 @@ class _MentorDetailBody extends StatelessWidget {
                     ),
                   ),
 
-                  // ===== 멘티 목록 (Sliver로) =====
+                  // ===== 후임 목록 (Sliver로) =====
                   if (menteesCount == 0)
                     SliverPadding(
                       padding:
@@ -318,7 +318,7 @@ class _EmptyMentees extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '담당 멘티가 없습니다',
+            '담당 후임가 없습니다',
             style: TextStyle(
               color: UiTokens.title.withOpacity(0.6),
               fontWeight: FontWeight.w800,
@@ -326,7 +326,7 @@ class _EmptyMentees extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '위의 “멘티 배정하기” 버튼으로 멘티를 배정해보세요',
+            '위의 “후임 배정하기” 버튼으로 후임를 배정해보세요',
             style: TextStyle(
               color: UiTokens.title.withOpacity(0.45),
               fontWeight: FontWeight.w700,
@@ -418,7 +418,7 @@ class _HeaderCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '입사일: ${_fmtDate(hiredAt)}   멘티: $menteeCount명',
+                '입사일: ${_fmtDate(hiredAt)}   후임: $menteeCount명',
                 style: TextStyle(
                   color: UiTokens.title.withOpacity(0.6),
                   fontWeight: FontWeight.w700,
@@ -635,7 +635,7 @@ class _PendingBadge extends StatelessWidget {
 
 enum MenteeFilter { all, pending }
 
-String _filterLabel(bool onlyPending) => onlyPending ? '평가 대기 멘티' : '전체';
+String _filterLabel(bool onlyPending) => onlyPending ? '평가 대기 후임' : '전체';
 
 Future<void> _openFilter(BuildContext context, MentorDetailProvider p) async {
   final current = p.onlyPending ? MenteeFilter.pending : MenteeFilter.all;
@@ -653,7 +653,7 @@ Future<void> _openFilter(BuildContext context, MentorDetailProvider p) async {
         SortOption(value: MenteeFilter.all, label: '전체', icon: Icons.list_alt),
         SortOption(
           value: MenteeFilter.pending,
-          label: '평가 대기 멘티',
+          label: '평가 대기 후임',
           icon: Icons.hourglass_bottom_rounded,
         ),
       ],

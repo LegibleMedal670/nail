@@ -21,7 +21,7 @@ enum LessonFilter { all, incomplete }
 /// 강의 진행 상태
 enum Progress { notStarted, inProgress, done }
 
-/// 관리자 홈의 “진도 1등 멘티” 섹션
+/// 관리자 홈의 “진도 1등 후임” 섹션
 /// - 별도 props 없이 Provider에서 직접 읽는다.
 class MostProgressedMenteeTab extends StatefulWidget {
   const MostProgressedMenteeTab({super.key});
@@ -98,7 +98,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
     if (admin.mentees.isEmpty) {
       return const Scaffold(
         backgroundColor: Colors.white,
-        body: Center(child: Text('표시할 멘티가 없어요')),
+        body: Center(child: Text('표시할 후임가 없어요')),
       );
     }
 
@@ -180,7 +180,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ✅ “김멘티 · 멘토 : 김멘토” 형식
+                              // ✅ “김후임 · 멘토 : 김멘토” 형식
                               Text.rich(
                                 TextSpan(
                                   children: [
@@ -193,7 +193,7 @@ class _MostProgressedMenteeTabState extends State<MostProgressedMenteeTab> {
                                       ),
                                     ),
                                     TextSpan(
-                                      text: '  ·  멘토 : ',
+                                      text: '  ·  선임 : ',
                                       style: TextStyle(
                                         color: UiTokens.title.withOpacity(0.7),
                                         fontSize: 13,

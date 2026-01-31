@@ -52,7 +52,7 @@ class _CompletionPageState extends State<CompletionPage> {
     try {
       // 사용자 정보
       final user = context.read<UserProvider>().current;
-      _menteeName = user?.nickname ?? '멘티';
+      _menteeName = user?.nickname ?? '후임';
       _menteePhone = user?.phone ?? '';
       _menteeId = user?.id ?? '';
       final loginKey = user?.loginKey ?? '';
@@ -328,7 +328,7 @@ class _CompletionPageState extends State<CompletionPage> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  _mentorSigned ? '수료 승인 완료' : '멘토 승인 대기 중',
+                                  _mentorSigned ? '수료 승인 완료' : '선임 승인 대기 중',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -340,7 +340,7 @@ class _CompletionPageState extends State<CompletionPage> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            '멘티 서명: ${_formatDateTime(_menteeSignedAt)}',
+                            '후임 서명: ${_formatDateTime(_menteeSignedAt)}',
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey[700],
@@ -350,7 +350,7 @@ class _CompletionPageState extends State<CompletionPage> {
                           if (_mentorSigned && _mentorSignedAt != null) ...[
                             const SizedBox(height: 4),
                             Text(
-                              '멘토 승인: ${_formatDateTime(_mentorSignedAt)}',
+                              '선임 승인: ${_formatDateTime(_mentorSignedAt)}',
                               style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.grey[700],

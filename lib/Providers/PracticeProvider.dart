@@ -48,7 +48,7 @@ class PracticeProvider extends ChangeNotifier {
 
       // 4) 현재 진행중 카드: 
       //    우선순위 1) reviewed가 아닌 것 (검토 대기/검토 중)
-      //    우선순위 2) reviewed지만 서명 대기 (멘토 서명 완료, 멘티 서명 미완료)
+      //    우선순위 2) reviewed지만 서명 대기 (선임 서명 완료, 후임 서명 미완료)
       Map<String, dynamic>? foundAttempt;
       Map<String, dynamic>? foundSet;
       String? foundCardType;
@@ -92,7 +92,7 @@ class PracticeProvider extends ChangeNotifier {
             final mentorSigned = signData?['mentor_signed'] == true;
             final menteeSigned = signData?['mentee_signed'] == true;
             
-            // 멘토는 서명했지만 멘티가 아직 안 한 경우
+            // 선임는 서명했지만 후임가 아직 안 한 경우
             if (mentorSigned && !menteeSigned) {
               foundAttempt = {
                 'attempt_id': attemptId,
