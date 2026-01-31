@@ -169,61 +169,46 @@ class MessageBubble extends StatelessWidget {
     return '$h:$m';
   }
 
-  /// 답장 인용 박스 위젯
+  /// 답장 인용 박스 위젯 (카카오톡 스타일)
   Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
     return GestureDetector(
       onTap: onReplyTap,
-      child: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isMe ? Colors.white.withOpacity(0.15) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-          border: Border(
-            left: BorderSide(
-              color: isMe ? Colors.white70 : Color(0xFF007AFF),
-              width: 3,
-            ),
-          ),
-        ),
+      behavior: HitTestBehavior.translucent, // 전체 영역 탭 가능
+      child: IntrinsicWidth(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.reply,
-                  size: 12,
-                  color: isMe ? Colors.white70 : Colors.grey[600],
-                ),
-                SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    reply.senderNickname,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isMe ? Colors.white : Color(0xFF007AFF),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+            // "[닉네임]에게 답장" 텍스트
+            Text(
+              '${reply.senderNickname}에게 답장',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                color: isMe ? Colors.white : Colors.grey[600],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            SizedBox(height: 3),
+            SizedBox(height: 4),
+            // 프리뷰 텍스트
             Text(
               reply.deleted ? '삭제된 메시지입니다' : reply.preview,
               style: TextStyle(
                 fontSize: 12,
                 color: reply.deleted
-                    ? (isMe ? Colors.white54 : Colors.grey[500])
-                    : (isMe ? Colors.white70 : Colors.grey[700]),
+                    ? (isMe ? Colors.white : Colors.grey[500])
+                    : (isMe ? Colors.white : Colors.grey[700]),
                 fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 4),
+            // 얇은 구분선
+            Container(
+              height: 1,
+              color: isMe ? Colors.white.withOpacity(0.3) : Colors.grey[400],
             ),
           ],
         ),

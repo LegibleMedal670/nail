@@ -186,59 +186,45 @@ class FileBubble extends StatelessWidget {
   Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
     return GestureDetector(
       onTap: onReplyTap,
-      child: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: isMe ? UiTokens.primaryBlue.withOpacity(0.2) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(8),
-          border: Border(
-            left: BorderSide(
-              color: isMe ? UiTokens.primaryBlue : Color(0xFF007AFF),
-              width: 3,
-            ),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.reply,
-                  size: 12,
-                  color: isMe ? UiTokens.primaryBlue : Colors.grey[600],
+      behavior: HitTestBehavior.translucent, // 전체 영역 탭 가능
+      child: Padding(
+        padding: EdgeInsets.only(bottom: 6, left: 4, right: 4),
+        child: IntrinsicWidth(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // "[닉네임]에게 답장" 텍스트
+              Text(
+                '${reply.senderNickname}에게 답장',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.grey[600],
                 ),
-                SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    reply.senderNickname,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isMe ? UiTokens.primaryBlue : Color(0xFF007AFF),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 3),
-            Text(
-              reply.deleted ? '삭제된 메시지입니다' : reply.preview,
-              style: TextStyle(
-                fontSize: 12,
-                color: reply.deleted
-                    ? Colors.grey[500]
-                    : (isMe ? UiTokens.title : Colors.grey[700]),
-                fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              SizedBox(height: 4),
+              // 프리뷰 텍스트
+              Text(
+                reply.deleted ? '삭제된 메시지입니다' : reply.preview,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: reply.deleted ? Colors.grey[500] : Colors.grey[700],
+                  fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 4),
+              // 얇은 구분선
+              Container(
+                height: 1,
+                color: Colors.grey[400],
+              ),
+            ],
+          ),
         ),
       ),
     );
