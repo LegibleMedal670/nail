@@ -1948,34 +1948,27 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                         }
                       }
 
-                      // ✅ 스와이프 답장 + 롱프레스 메뉴
-                      final wrapped = SwipeableMessageBubble(
-                        canReply: _canReply(m) && !m.deleted,
-                        onReply: () => _setReplyTo(m),
-                        isMine: isMe,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onLongPress: () {
-                            if (m.deleted) return;
-                            final meUid = _myUid();
-                            final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
-                            // 관리자가 아니고 내 메시지도 아니면 액션시트 자체를 열지 않음
-                            if (!isAdmin && !isMine) return;
-                            _showMessageActionSheet(
-                              m,
-                              isAdmin: isAdmin,
-                              allowNotice: m.type == _MsgType.text,
-                            );
-                          },
-                          child: bubbleRow,
-                        ),
-                      );
-
+                      // 다른 사람 메시지인 경우
                       if (!isMe) {
-                        return IncomingMessageTile(
+                        final incomingTile = IncomingMessageTile(
                           nickname: m.nickname ?? '사용자',
                           photoUrl: m.photoUrl,
-                          childRow: wrapped,
+                          childRow: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onLongPress: () {
+                              if (m.deleted) return;
+                              final meUid = _myUid();
+                              final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
+                              // 관리자가 아니고 내 메시지도 아니면 액션시트 자체를 열지 않음
+                              if (!isAdmin && !isMine) return;
+                              _showMessageActionSheet(
+                                m,
+                                isAdmin: isAdmin,
+                                allowNotice: m.type == _MsgType.text,
+                              );
+                            },
+                            child: bubbleRow,
+                          ),
                           onTapAvatar: () {
                             final role = _currentRoleLabel(up);
                             showModalBottomSheet(
@@ -2024,8 +2017,37 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                             );
                           },
                         );
+                        
+                        // IncomingMessageTile 전체를 SwipeableMessageBubble로 감싸기
+                        return SwipeableMessageBubble(
+                          canReply: _canReply(m) && !m.deleted,
+                          onReply: () => _setReplyTo(m),
+                          isMine: false,
+                          child: incomingTile,
+                        );
                       }
-                      return wrapped;
+                      
+                      // 내 메시지인 경우
+                      return SwipeableMessageBubble(
+                        canReply: _canReply(m) && !m.deleted,
+                        onReply: () => _setReplyTo(m),
+                        isMine: true,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onLongPress: () {
+                            if (m.deleted) return;
+                            final meUid = _myUid();
+                            final isMine = (m.senderId != null && m.senderId!.isNotEmpty && m.senderId == meUid);
+                            if (!isAdmin && !isMine) return;
+                            _showMessageActionSheet(
+                              m,
+                              isAdmin: isAdmin,
+                              allowNotice: m.type == _MsgType.text,
+                            );
+                          },
+                          child: bubbleRow,
+                        ),
+                      );
                     },
                   ),
                 ),
