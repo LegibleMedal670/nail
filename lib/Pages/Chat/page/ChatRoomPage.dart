@@ -1208,21 +1208,10 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
           'storage_path': storagePaths[i],
         });
       }
-      // 답장 정보 구성
+      // 메타 구성 (답장 정보 제외 - 이미지는 텍스트로만 답장 가능)
       Map<String, dynamic> meta = {
         'client_ts': DateTime.now().toIso8601String(),
       };
-      
-      if (_replyToMessage != null) {
-        meta['reply_to'] = {
-          'message_id': _replyToMessage!.id,
-          'sender_id': _replyToMessage!.senderId,
-          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
-          'type': _replyToMessage!.type.toString().split('.').last,
-          'preview': _buildReplyPreview(_replyToMessage!),
-          'deleted': _replyToMessage!.deleted,
-        };
-      }
       
       await _svc.sendImagesGroup(
         loginKey: key,
@@ -1231,8 +1220,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
         meta: meta,
       );
       
-      // 답장 모드 해제
-      _clearReply();
       if (!mounted) return;
       await _reloadLatestWindow();
       if (!mounted) return;
@@ -1248,21 +1235,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   void _insertTempImageBubble(String localPath) {
     final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
     
-    // 답장 정보 구성
-    Map<String, dynamic>? meta;
-    if (_replyToMessage != null) {
-      meta = {
-        'reply_to': {
-          'message_id': _replyToMessage!.id,
-          'sender_id': _replyToMessage!.senderId,
-          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
-          'type': _replyToMessage!.type.toString().split('.').last,
-          'preview': _buildReplyPreview(_replyToMessage!),
-          'deleted': _replyToMessage!.deleted,
-        }
-      };
-    }
-    
+    // 이미지는 답장 모드 사용 불가 (메타 없음)
     final temp = _Msg(
       id: nextId,
       me: true,
@@ -1282,7 +1255,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       isSystem: false,
       systemText: null,
       sendStatus: _SendStatus.sending,
-      meta: meta,
+      meta: null, // 이미지는 답장 메타 없음
     );
     setState(() {
       _messages.add(temp);
@@ -1294,21 +1267,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
   void _insertTempImageGroupBubble(List<String> localPaths) {
     final int nextId = (_messages.isNotEmpty ? _messages.map((e)=>e.id).reduce((a,b)=>a>b?a:b) : 0) + 1;
     
-    // 답장 정보 구성
-    Map<String, dynamic>? meta;
-    if (_replyToMessage != null) {
-      meta = {
-        'reply_to': {
-          'message_id': _replyToMessage!.id,
-          'sender_id': _replyToMessage!.senderId,
-          'sender_nickname': _replyToMessage!.nickname ?? '알 수 없음',
-          'type': _replyToMessage!.type.toString().split('.').last,
-          'preview': _buildReplyPreview(_replyToMessage!),
-          'deleted': _replyToMessage!.deleted,
-        }
-      };
-    }
-    
+    // 이미지 그룹은 답장 모드 사용 불가 (메타 없음)
     final temp = _Msg(
       id: nextId,
       me: true,
@@ -1330,7 +1289,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
       isSystem: false,
       systemText: null,
       sendStatus: _SendStatus.sending,
-      meta: meta,
+      meta: null, // 이미지 그룹은 답장 메타 없음
     );
     setState(() {
       _messages.add(temp);
@@ -1911,7 +1870,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                             break;
                           case _MsgType.image:
                             final heroTag = 'chat_img_${m.id}';
-                            final replyInfoImage = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = FutureBuilder<String?>(
                               future: _signedUrlForPath(m.imageUrl),
                               builder: (context, snap) {
@@ -1925,15 +1883,12 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                   loading: m.sendStatus == _SendStatus.sending,
                               onTap: () => _openImageFullscreen(m),
                               heroTag: heroTag,
-                                  replyTo: replyInfoImage,
-                                  onReplyTap: replyInfoImage != null && !replyInfoImage.deleted ? () => _scrollToMessage(replyInfoImage.messageId) : null,
                                 );
                                 return img;
                               },
                             );
                             break;
                           case _MsgType.imageGroup:
-                            final replyInfoGroup = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = FutureBuilder<List<String>>(
                               future: _resolveSignedUrls(m.imageUrls),
                               builder: (context, snap) {
@@ -1947,14 +1902,11 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                   localPreviewPaths: m.imageLocals,
                                   expectedCount: m.imageUrls?.length,
                                   onTap: () => _openImagesFullscreen(m),
-                                  replyTo: replyInfoGroup,
-                                  onReplyTap: replyInfoGroup != null && !replyInfoGroup.deleted ? () => _scrollToMessage(replyInfoGroup.messageId) : null,
                                 );
                               },
                             );
                             break;
                           case _MsgType.file:
-                            final replyInfoFile = _getReplyInfoWithDeletedStatus(m.replyTo);
                             bubbleRow = FutureBuilder<String?>(
                               future: _signedUrlForPath(m.fileUrl),
                               builder: (context, snap) {
@@ -1979,8 +1931,6 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                                       _downloadFileToAppStorage(m, url);
                                     }
                                   },
-                                  replyTo: replyInfoFile,
-                                  onReplyTap: replyInfoFile != null && !replyInfoFile.deleted ? () => _scrollToMessage(replyInfoFile.messageId) : null,
                                 );
                                 return file;
                               },
@@ -2089,6 +2039,7 @@ class _ChatRoomPageState extends State<ChatRoomPage> {
                     onSendImageLocalPath: _sendImageLocalPath,
                     onSendFileLocalPath: _sendFileLocalPath,
                     onSendImagesLocalPaths: _sendImagesLocalPaths,
+                    isReplyMode: _replyToMessage != null, // 답장 모드 전달
                   ),
               ],
             ),

@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:nail/Pages/Common/ui_tokens.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:nail/Pages/Chat/models/ReplyInfo.dart';
 
 class ImageBubble extends StatelessWidget {
   final bool isMe;
@@ -17,11 +16,6 @@ class ImageBubble extends StatelessWidget {
   final String? heroTag;
   final VoidCallback? onTap;
   final bool loading;
-  
-  /// 답장 정보 (원본 메시지)
-  final ReplyInfo? replyTo;
-  /// 답장 인용 클릭 시 원본으로 이동
-  final VoidCallback? onReplyTap;
 
   const ImageBubble({
     Key? key,
@@ -34,8 +28,6 @@ class ImageBubble extends StatelessWidget {
     this.heroTag,
     this.onTap,
     this.loading = false,
-    this.replyTo,
-    this.onReplyTap,
   }) : super(key: key);
 
   @override
@@ -54,58 +46,36 @@ class ImageBubble extends StatelessWidget {
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.60,
         ),
-        child: IntrinsicWidth(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: 260),
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              // 답장 인용 부분
-              if (replyTo != null) ...[
-                _buildReplyQuote(context, replyTo!),
-                // 구분선 (버블 전체 너비)
-                Padding(
-                  padding: EdgeInsets.only(left: 4, right: 4),
-                  child: Container(
-                    height: 1,
-                    color: Colors.grey[400],
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: UiTokens.cardBorder),
+                  boxShadow: const [UiTokens.cardShadow],
+                ),
+                child: wrapped,
+              ),
+              if (loading) ...[
+                Positioned.fill(child: Container(color: Colors.black26)),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
-                SizedBox(height: 6),
               ],
-              // 이미지
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: 260),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: UiTokens.cardBorder),
-                      boxShadow: const [UiTokens.cardShadow],
-                    ),
-                    child: wrapped,
-                  ),
-                  if (loading) ...[
-                    Positioned.fill(child: Container(color: Colors.black26)),
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      padding: const EdgeInsets.all(6),
-                      child: const CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
+            ],
           ),
         ),
       ),
@@ -161,49 +131,6 @@ class ImageBubble extends StatelessWidget {
     final h = lt.hour.toString().padLeft(2, '0');
     final m = lt.minute.toString().padLeft(2, '0');
     return '$h:$m';
-  }
-
-  /// 답장 인용 박스 위젯
-  Widget _buildReplyQuote(BuildContext context, ReplyInfo reply) {
-    return GestureDetector(
-      onTap: onReplyTap,
-      behavior: HitTestBehavior.translucent,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: 6, left: 4, right: 4),
-        child: IntrinsicWidth(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // "[닉네임]에게 답장" 텍스트
-              Text(
-                '${reply.senderNickname}에게 답장',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                  color: Colors.grey[600],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 4),
-              // 프리뷰 텍스트
-              Text(
-                reply.deleted ? '삭제된 메시지입니다' : reply.preview,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: reply.deleted ? Colors.grey[500] : Colors.grey[700],
-                  fontStyle: reply.deleted ? FontStyle.italic : FontStyle.normal,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              SizedBox(height: 4),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 

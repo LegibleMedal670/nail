@@ -9,6 +9,7 @@ class MessageInputBar extends StatefulWidget {
   final void Function(String localImagePath) onSendImageLocalPath;
   final void Function(String localFilePath, String fileName, int fileBytes) onSendFileLocalPath;
   final void Function(List<String> localImagePaths)? onSendImagesLocalPaths; // 멀티 이미지
+  final bool isReplyMode; // 답장 모드 여부
 
   const MessageInputBar({
     Key? key,
@@ -16,6 +17,7 @@ class MessageInputBar extends StatefulWidget {
     required this.onSendImageLocalPath,
     required this.onSendFileLocalPath,
     this.onSendImagesLocalPaths,
+    this.isReplyMode = false, // 기본값 false
   }) : super(key: key);
 
   @override
@@ -75,16 +77,30 @@ class MessageInputBarState extends State<MessageInputBar> with SingleTickerProvi
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               child: Row(
                 children: [
-                  _PlusButton(onTap: () {
-                    setState(() => _panelOpen = !_panelOpen);
-                    if (_panelOpen) {
-                      FocusScope.of(context).unfocus(); // 패널 열면 키보드 닫기
-                      _ac.forward();
-                    } else {
-                      _ac.reverse();
-                    }
-                  }),
-                  const SizedBox(width: 8),
+                  // 답장 모드일 때는 + 버튼 숨기기
+                  if (!widget.isReplyMode) ...[
+                    _PlusButton(onTap: () {
+                      setState(() => _panelOpen = !_panelOpen);
+                      if (_panelOpen) {
+                        FocusScope.of(context).unfocus(); // 패널 열면 키보드 닫기
+                        _ac.forward();
+                      } else {
+                        _ac.reverse();
+                      }
+                    }),
+                    const SizedBox(width: 8),
+                  ] else ...[
+                    // 답장 모드일 때는 흰색 원으로 대체 (UI 균형 유지)
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
