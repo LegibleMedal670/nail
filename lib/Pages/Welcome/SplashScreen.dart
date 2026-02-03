@@ -59,12 +59,14 @@ class _SplashScreenState extends State<SplashScreen> {
   void _route(UserProvider userProvider) {
     // Firebase 로그인 안됨 → 로그인 페이지
     if (_firebaseAuth.currentUid == null) {
+      debugPrint('[SplashScreen] No Firebase UID');
       _navigateTo(const PhoneLoginPage());
       return;
     }
 
     // Supabase 프로필 없음 → 로그인 페이지 (재연동 필요)
     if (!userProvider.isLoggedIn) {
+      debugPrint('[SplashScreen] User not logged in');
       _navigateTo(const PhoneLoginPage());
       return;
     }

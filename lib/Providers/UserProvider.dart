@@ -97,6 +97,7 @@ class UserProvider extends ChangeNotifier {
 
   UserAccount? _current;
   bool _loading = false;
+  Completer<void>? _hydrateCompleter;  // hydrate 완료 대기용
   StreamSubscription<firebase_auth.User?>? _authStateSubscription;
 
   // ===== 공개 게터 =====
@@ -164,8 +165,15 @@ class UserProvider extends ChangeNotifier {
 
   /// 앱 시작 시 호출: Firebase 세션 확인 → Supabase 프로필 복원
   Future<void> hydrate() async {
-    if (_loading) return;
+    // ✅ 이미 실행 중이면 완료될 때까지 기다림 (Race Condition 방지)
+    if (_loading) {
+      debugPrint('[UserProvider] hydrate already in progress, waiting...');
+      await _hydrateCompleter?.future;
+      return;
+    }
+    
     _loading = true;
+    _hydrateCompleter = Completer<void>();
     notifyListeners();
 
     try {
@@ -190,11 +198,13 @@ class UserProvider extends ChangeNotifier {
       final row = await _getProfile(fbUid);
       if (row == null) {
         // Firebase는 로그인됐지만 Supabase에 없음 → 신규 사용자 생성 필요
+        debugPrint('[UserProvider] Profile not found for Firebase UID');
         _current = null;
         return;
       }
 
       _current = _mapRowToAccount(row);
+      debugPrint('[UserProvider] Profile loaded: ${_current?.nickname} (${_current?.role})');
       
       // SupabaseService에 키 설정 (레거시 호환)
       _syncSupabaseServiceKeys();
@@ -208,6 +218,7 @@ class UserProvider extends ChangeNotifier {
       _current = null;
     } finally {
       _loading = false;
+      _hydrateCompleter?.complete();
       notifyListeners();
     }
   }
@@ -241,6 +252,7 @@ class UserProvider extends ChangeNotifier {
       }
 
       final row = await _getProfile(user.uid);
+      
       if (row != null) {
         _current = _mapRowToAccount(row);
         _syncSupabaseServiceKeys();
@@ -253,6 +265,8 @@ class UserProvider extends ChangeNotifier {
         }
         
         notifyListeners();
+      } else {
+        debugPrint('[UserProvider] Profile not found for Firebase user');
       }
     } catch (e) {
       debugPrint('[UserProvider] _onAuthStateChanged error: $e');
@@ -400,14 +414,21 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>?> _getProfile(String firebaseUid) async {
-    final res = await _sb.rpc('rpc_get_my_profile', params: {
-      'p_firebase_uid': firebaseUid,
-    });
-
-    if (res == null) return null;
-    final rows = (res is List) ? res : [res];
-    if (rows.isEmpty) return null;
-    return Map<String, dynamic>.from(rows.first);
+    try {
+      final res = await _sb.rpc('rpc_get_my_profile', params: {
+        'p_firebase_uid': firebaseUid,
+      });
+      
+      if (res == null) return null;
+      
+      final rows = (res is List) ? res : [res];
+      if (rows.isEmpty) return null;
+      
+      return Map<String, dynamic>.from(rows.first);
+    } catch (e) {
+      debugPrint('[UserProvider] _getProfile error: $e');
+      return null;
+    }
   }
 
   UserAccount _mapRowToAccount(Map<String, dynamic> row) {

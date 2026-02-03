@@ -57,7 +57,7 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => UserProvider()..hydrate()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => CurriculumProvider()),
         ChangeNotifierProvider(create: (_) => PracticeProvider()),
         ChangeNotifierProvider(create: (_) => AdminProgressProvider()),
