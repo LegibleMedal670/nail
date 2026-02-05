@@ -608,12 +608,21 @@ class _PhoneLoginPageState extends State<PhoneLoginPage> {
   /// URL 열기
   Future<void> _openUrl(String urlString) async {
     final url = Uri.parse(urlString);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.inAppBrowserView);
-    } else {
-      if (mounted) {
-        _showError('링크를 열 수 없습니다.');
-      }
+    try {
+      final openedInApp = await launchUrl(url, mode: LaunchMode.inAppBrowserView);
+      if (openedInApp) return;
+
+      final openedExternally = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (openedExternally) return;
+    } catch (_) {
+      // Fall through to user-friendly error.
+    }
+
+    if (mounted) {
+      _showError('링크를 열 수 없습니다.');
     }
   }
 }

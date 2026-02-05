@@ -1,9 +1,10 @@
+import 'dart:io';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_app_badger/flutter_app_badger.dart';
 import 'package:nail/main.dart' show navigatorKey;
 import 'package:nail/Providers/UserProvider.dart';
 import 'package:nail/Pages/Chat/page/ChatRoomPage.dart';
@@ -22,6 +23,9 @@ class FCMService {
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
   final SupabaseClient _sb = Supabase.instance.client;
+
+  /// ✅ Method Channel: iOS/Android 네이티브 코드와 통신
+  static const _badgeChannel = MethodChannel('com.nobsalon.nailedu/badge');
 
   String? _currentToken;
   String? get currentToken => _currentToken;
@@ -87,14 +91,13 @@ class FCMService {
     }
   }
 
-  /// 앱 아이콘 배지 제거
+  /// 앱 아이콘 배지 제거 (iOS) / 알림 전체 취소 (Android)
+  /// - iOS: 앱 아이콘의 빨간 숫자 배지를 0으로 설정
+  /// - Android: 모든 알림을 취소하면 배지도 함께 사라짐
   Future<void> clearBadge() async {
     try {
-      final supported = await FlutterAppBadger.isAppBadgeSupported();
-      if (supported) {
-        await FlutterAppBadger.removeBadge();
-        debugPrint('[FCM] Badge cleared');
-      }
+      await _badgeChannel.invokeMethod('clearBadge');
+      debugPrint('[FCM] Badge cleared (${Platform.isIOS ? "iOS" : "Android"})');
     } catch (e) {
       debugPrint('[FCM] Failed to clear badge: $e');
     }

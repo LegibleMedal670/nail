@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:image_gallery_saver_plus/image_gallery_saver_plus.dart';
 
 class ChatImageViewer extends StatefulWidget {
   final List<String> images;      // 지금은 [단일]로 전달
@@ -56,7 +56,11 @@ class _ChatImageViewerState extends State<ChatImageViewer> {
         bytes = await File(src).readAsBytes();
       }
       // 갤러리에 저장
-      await ImageGallerySaver.saveImage(bytes, quality: 90, name: 'chat_${DateTime.now().millisecondsSinceEpoch}');
+      await ImageGallerySaverPlus.saveImage(
+        bytes,
+        quality: 90,
+        name: 'chat_${DateTime.now().millisecondsSinceEpoch}',
+      );
       if (!mounted) return;
 
       // TODO: 갤러리 저장/공유 원하면 아래처럼 확장
