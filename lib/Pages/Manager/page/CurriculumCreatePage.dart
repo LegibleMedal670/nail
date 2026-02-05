@@ -152,10 +152,8 @@ class _CurriculumCreatePageState extends State<CurriculumCreatePage> {
                     const SizedBox(height: 16),
                     ListTile(
                       leading: const Icon(Icons.video_library_outlined),
-                      title: Text(_videoUrl == null ? '영상 업로드(데모)' : '영상 변경(데모)'),
-                      subtitle: Text(_videoUrl == null
-                          ? '스토리지는 나중에 붙입니다'
-                          : '임시 URL을 교체합니다'),
+                      title: Text(_videoUrl == null ? '영상 업로드' : '영상 변경'),
+                      subtitle: Text('영상을 선택합니다'),
                       // 기존: setState로 'uploaded://demo_video.mp4' 설정하던 부분 전체 교체
                       onTap: () async {
                         try {
