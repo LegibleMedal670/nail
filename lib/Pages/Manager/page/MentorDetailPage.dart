@@ -130,8 +130,7 @@ class _MentorDetailBody extends StatelessWidget {
                           _HeaderCard(
                             name: mentor.name,
                             hiredAt: mentor.hiredAt,
-                            menteeCount: overviewMenteeCount ??
-                                (mentor.menteeCount ?? 0),
+                            menteeCount: menteesCount,
                             photoUrl: mentor.photoUrl,
                           ),
                           const SizedBox(height: 10),
