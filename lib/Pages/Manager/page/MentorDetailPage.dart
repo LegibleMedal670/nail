@@ -87,27 +87,27 @@ class _MentorDetailBody extends StatelessWidget {
               elevation: 0,
 
               // 필요하면 다시 켜기
-              // actions: [
-              //   IconButton(
-              //     tooltip: '수정',
-              //     icon: const Icon(Icons.edit_outlined, color: UiTokens.actionIcon),
-              //     onPressed: () async {
-              //       final res = await Navigator.of(context).push<MentorEditResult>(
-              //         MaterialPageRoute(builder: (_) => MentorEditPage(initial: mentor)),
-              //       );
-              //       if (!context.mounted || res == null) return;
-              //
-              //       if (res.deleted) {
-              //         Navigator.of(context).pop(true); // 삭제는 그대로 bool
-              //         return;
-              //       }
-              //       if (res.mentor != null) {
-              //         onMentorChanged(res.mentor!);
-              //       }
-              //       await p.refresh();
-              //     },
-              //   ),
-              // ],
+              actions: [
+                IconButton(
+                  tooltip: '수정',
+                  icon: const Icon(Icons.edit_rounded, color: UiTokens.title),
+                  onPressed: () async {
+                    final res = await Navigator.of(context).push<MentorEditResult>(
+                      MaterialPageRoute(builder: (_) => MentorEditPage(initial: mentor)),
+                    );
+                    if (!context.mounted || res == null) return;
+
+                    if (res.deleted) {
+                      Navigator.of(context).pop(true); // 삭제는 그대로 bool
+                      return;
+                    }
+                    if (res.mentor != null) {
+                      onMentorChanged(res.mentor!);
+                    }
+                    await p.refresh();
+                  },
+                ),
+              ],
             ),
             body: (loading && p.overview == null)
                 ? const Center(child: CircularProgressIndicator())
